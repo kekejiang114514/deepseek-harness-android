@@ -1086,9 +1086,14 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         new AlertDialog.Builder(this)
                 .setTitle("发现新版本 " + r.version)
                 .setMessage(sb.toString())
-                .setPositiveButton("去下载", new DialogInterface.OnClickListener() {
+                .setPositiveButton("下载并安装", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
-                        openUrl(r.hasApk() ? r.apkUrl : r.pageUrl);
+                        if (!r.hasApk()) {
+                            toast("这个版本没有附带安装包，去发布页看看");
+                            openUrl(r.pageUrl);
+                            return;
+                        }
+                        startUpdate(r);
                     }
                 })
                 .setNeutralButton("发布页", new DialogInterface.OnClickListener() {
@@ -1096,6 +1101,108 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 })
                 .setNegativeButton("稍后", null)
                 .show();
+    }
+
+    /** 下载 → 完成后直接弹系统安装界面。 */
+    private void startUpdate(final Updater.Release r) {
+        if (!com.dsh.android.kernel.ApkInstaller.canInstall(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("需要安装权限")
+                    .setMessage("Android 8 起，应用要安装更新需要你允许「安装未知应用」。"
+                            + "点「去设置」打开本应用的开关，回来再点一次更新即可。")
+                    .setPositiveButton("去设置", new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface d, int w) {
+                            try {
+                                Intent i = new Intent(android.provider.Settings
+                                        .ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                        android.net.Uri.parse("package:" + getPackageName()));
+                                startActivity(i);
+                            } catch (Exception e) {
+                                toast("无法打开设置，请手动到 设置 → 应用 → 特殊权限 里允许");
+                            }
+                        }
+                    })
+                    .setNegativeButton("取消", null)
+                    .show();
+            return;
+        }
+
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setTitle("正在下载更新");
+        pd.setMessage("0%");
+        pd.setCancelable(true);
+        pd.show();
+
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    final java.io.File apk = com.dsh.android.kernel.ApkInstaller.download(
+                            SettingsActivity.this, r.apkUrl,
+                            new com.dsh.android.kernel.ApkInstaller.Progress() {
+                                public void onProgress(final long done, final long total) {
+                                    runOnUiThread(new Runnable() {
+                                        public void run() {
+                                            pd.setMessage((done * 100 / Math.max(1, total)) + "%"
+                                                    + "（" + (done / 1024) + "KB / " + (total / 1024) + "KB）");
+                                        }
+                                    });
+                                }
+                            });
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            dismissQuietly(pd);
+                            confirmInstall(apk);
+                        }
+                    });
+                } catch (final Throwable t) {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            dismissQuietly(pd);
+                            new AlertDialog.Builder(SettingsActivity.this)
+                                    .setTitle("下载失败")
+                                    .setMessage(t.getMessage() == null
+                                            ? t.getClass().getSimpleName() : t.getMessage())
+                                    .setPositiveButton("去发布页", new DialogInterface.OnClickListener() {
+                                        public void onClick(DialogInterface d, int w) {
+                                            openUrl(r.pageUrl);
+                                        }
+                                    })
+                                    .setNegativeButton("取消", null)
+                                    .show();
+                        }
+                    });
+                }
+            }
+        }, "apk-download").start();
+    }
+
+    private void confirmInstall(final java.io.File apk) {
+        long mb = Math.max(1, apk.length() / 1048576);
+        new AlertDialog.Builder(this)
+                .setTitle("下载完成")
+                .setMessage("安装包已下载（约 " + mb + "MB）。\n\n"
+                        + "点「立即安装」后系统会弹出安装确认，装完会保留你的设置与对话。")
+                .setPositiveButton("立即安装", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        com.dsh.android.kernel.ApkInstaller.install(
+                                SettingsActivity.this, apk,
+                                new com.dsh.android.kernel.ApkInstaller.Callback() {
+                                    public void onDone(final String err) {
+                                        if (err != null) {
+                                            toast("安装未完成：" + err);
+                                        }
+                                    }
+                                });
+                    }
+                })
+                .setNegativeButton("稍后", null)
+                .show();
+    }
+
+    private void dismissQuietly(android.app.Dialog d) {
+        try {
+            if (d != null && d.isShowing()) d.dismiss();
+        } catch (Throwable ignored) {}
     }
 
     private void openUrl(String url) {

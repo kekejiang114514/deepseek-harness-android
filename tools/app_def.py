@@ -69,8 +69,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 19
-    a.version_name = '1.0 beta 4'
+    a.version_code = 20
+    a.version_name = '1.0 beta 5'
     a.min_sdk = 23
     a.target_sdk = 29
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
@@ -79,6 +79,8 @@ def build_dshandroid_app():
         'android.permission.READ_EXTERNAL_STORAGE',
         'android.permission.WRITE_EXTERNAL_STORAGE',
         'android.permission.POST_NOTIFICATIONS',
+        # 应用内更新：下载完直接用系统安装器装
+        'android.permission.REQUEST_INSTALL_PACKAGES',
     ]
     # 允许在 Android 10 上以旧式存储访问 /sdcard（全局文件模式需要）
     a.extra_app_attrs = [
@@ -141,6 +143,7 @@ def build_dshandroid_app():
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用
     a.resources.append(ResourceDef('xml', 'accessibility_service_config',
                                    'res/xml/accessibility_service_config.xml'))
+
     return a
 
 

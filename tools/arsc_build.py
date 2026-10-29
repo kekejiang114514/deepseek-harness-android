@@ -151,6 +151,7 @@ def build_arsc_multi(package_name, resources, pkg_id=0x7F):
             ents.append((keys.index(n), len(paths) - 1))
         types.append((t, ents))
 
+    # string 类型的资源，池子里放的是字面量而不是文件路径
     global_pool = build_string_pool(paths, utf8=True)
     type_pool = build_string_pool(order, utf8=False)
     key_pool = build_string_pool(keys, utf8=True)

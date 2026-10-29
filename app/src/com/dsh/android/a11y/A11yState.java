@@ -74,6 +74,72 @@ public final class A11yState {
         }
     }
 
+    /**
+     * 逐项自检：把「系统为什么看不到这个服务」的每一环结果都打出来。
+     *
+     * 顺序就是系统的判断顺序：组件在不在 → 有没有 intent-filter →
+     * meta-data 能不能解析成 XML → 无障碍管理器有没有列出它。
+     * 任一步失败，前面的环节都不用再猜。
+     */
+    public static String selfTest(Context ctx) {
+        StringBuilder sb = new StringBuilder();
+        ComponentName cn = new ComponentName(ctx, A11yService.class);
+
+        sb.append("包名：").append(ctx.getPackageName()).append('\n');
+        sb.append("组件：").append(cn.flattenToString()).append('\n');
+
+        // 1. 组件是否在包里
+        try {
+            android.content.pm.ServiceInfo si = ctx.getPackageManager().getServiceInfo(
+                    cn, android.content.pm.PackageManager.GET_META_DATA);
+            sb.append("[1] 组件声明：存在\n");
+            sb.append("    exported=").append(si.exported)
+              .append(" enabled=").append(si.enabled)
+              .append(" permission=").append(si.permission).append('\n');
+
+            // 2. intent-filter
+            android.content.pm.ComponentInfo ci = si;
+            android.content.pm.PackageManager pm = ctx.getPackageManager();
+            android.content.Intent probe = new android.content.Intent(
+                    "android.accessibilityservice.AccessibilityService");
+            java.util.List<android.content.pm.ResolveInfo> hits = pm.queryIntentServices(
+                    probe, android.content.pm.PackageManager.GET_META_DATA);
+            boolean inQuery = false;
+            if (hits != null) {
+                for (int i = 0; i < hits.size(); i++) {
+                    android.content.pm.ServiceInfo x = hits.get(i).serviceInfo;
+                    if (x != null && ctx.getPackageName().equals(x.packageName)) inQuery = true;
+                }
+            }
+            sb.append("[2] intent-filter 查询：").append(inQuery ? "命中" : "未命中").append('\n');
+
+            // 3. meta-data 能否解析成 XML（这一步失败，系统会直接忽略整个服务）
+            if (si.metaData == null) {
+                sb.append("[3] meta-data：缺失\n");
+            } else {
+                Object raw = si.metaData.get("android.accessibilityservice");
+                sb.append("[3] meta-data 值：").append(raw).append('\n');
+                try {
+                    android.content.res.XmlResourceParser xrp =
+                            si.loadXmlMetaData(pm, "android.accessibilityservice");
+                    sb.append("    解析 XML：").append(xrp == null ? "失败（系统会跳过本服务）" : "成功").append('\n');
+                    if (xrp != null) xrp.close();
+                } catch (Throwable t) {
+                    sb.append("    解析 XML 抛异常：").append(t).append('\n');
+                }
+            }
+        } catch (Throwable t) {
+            sb.append("[1] 组件声明：读取失败 — ").append(t).append('\n');
+        }
+
+        // 4. 无障碍管理器是否列出
+        sb.append("[4] 系统无障碍列表：")
+          .append(listedBySystem(ctx) ? "已列出" : "未列出").append('\n');
+        sb.append("[5] 设置里已启用：").append(enabledInSystem(ctx) ? "是" : "否").append('\n');
+        sb.append("[6] 服务已连接：").append(A11yService.isReady() ? "是" : "否").append('\n');
+        return sb.toString();
+    }
+
     /** 「应用信息」页：允许受限设置就在这里的右上角菜单里。 */
     public static Intent appDetailsIntent(Context ctx) {
         Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
