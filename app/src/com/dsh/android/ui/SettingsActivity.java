@@ -340,6 +340,66 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                     }
                 }, null, false));
         aboutCard.addView(divider());
+        aboutCard.addView(row("开发者", null, new Fmt() {
+            public String get() {
+                return com.dsh.android.kernel.About.NAME
+                        + "（" + com.dsh.android.kernel.About.NICK + "）";
+            }
+        }, new View.OnClickListener() {
+            public void onClick(View v) {
+                showAuthor();
+            }
+        }, true));
+        aboutCard.addView(divider());
+        aboutCard.addView(row("项目仓库", null, new Fmt() {
+            public String get() { return com.dsh.android.kernel.About.REPO_NAME; }
+        }, new View.OnClickListener() {
+            public void onClick(View v) {
+                openUrl(com.dsh.android.kernel.About.REPO);
+            }
+        }, true));
+        aboutCard.addView(divider());
+        aboutCard.addView(row("GitHub", null, new Fmt() {
+            public String get() { return "@" + com.dsh.android.kernel.About.NAME; }
+        }, new View.OnClickListener() {
+            public void onClick(View v) {
+                openUrl(com.dsh.android.kernel.About.GITHUB);
+            }
+        }, true));
+        aboutCard.addView(divider());
+        aboutCard.addView(row("X / Twitter", null, new Fmt() {
+            public String get() { return com.dsh.android.kernel.About.TWITTER_HANDLE; }
+        }, new View.OnClickListener() {
+            public void onClick(View v) {
+                openUrl(com.dsh.android.kernel.About.TWITTER);
+            }
+        }, true));
+        aboutCard.addView(divider());
+        aboutCard.addView(row("Bilibili", null, new Fmt() {
+            public String get() { return "673542910"; }
+        }, new View.OnClickListener() {
+            public void onClick(View v) {
+                openUrl(com.dsh.android.kernel.About.BILIBILI);
+            }
+        }, true));
+        aboutCard.addView(divider());
+        aboutCard.addView(row("邮箱", null, new Fmt() {
+            public String get() { return com.dsh.android.kernel.About.EMAIL; }
+        }, new View.OnClickListener() {
+            public void onClick(View v) {
+                try {
+                    startActivity(new Intent(Intent.ACTION_SENDTO,
+                            android.net.Uri.parse("mailto:" + com.dsh.android.kernel.About.EMAIL)));
+                } catch (Exception e) {
+                    android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                            getSystemService(Context.CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("mail",
+                            com.dsh.android.kernel.About.EMAIL));
+                    toast("没有邮件应用，已复制地址");
+                }
+            }
+        }, true));
+        aboutCard.addView(divider());
         aboutCard.addView(row("检查更新", "update_status", new Fmt() {
             public String get() { return updateStatusText(); }
         }, new View.OnClickListener() {
@@ -1203,6 +1263,47 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         try {
             if (d != null && d.isShowing()) d.dismiss();
         } catch (Throwable ignored) {}
+    }
+
+    /** 点「开发者」时的说明。 */
+    private void showAuthor() {
+        String text = "名字：" + com.dsh.android.kernel.About.NAME
+                + "（" + com.dsh.android.kernel.About.NICK + "）\n"
+                + com.dsh.android.kernel.About.TAGLINE + "\n\n"
+                + "GitHub     " + com.dsh.android.kernel.About.GITHUB + "\n"
+                + "X          " + com.dsh.android.kernel.About.TWITTER + "\n"
+                + "Bilibili   " + com.dsh.android.kernel.About.BILIBILI + "\n"
+                + "邮箱       " + com.dsh.android.kernel.About.EMAIL + "\n\n"
+                + com.dsh.android.kernel.About.FOOTER;
+
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(13);
+        tv.setTextColor(Theme.text());
+        tv.setTextIsSelectable(true);
+        tv.setPadding(dp(20), dp(8), dp(20), dp(4));
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+
+        new AlertDialog.Builder(this)
+                .setTitle("关于")
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .setNeutralButton("复制全部", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                                getSystemService(Context.CLIPBOARD_SERVICE);
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("about",
+                                "名字：" + com.dsh.android.kernel.About.NAME
+                                        + "\nGitHub: " + com.dsh.android.kernel.About.GITHUB
+                                        + "\nX: " + com.dsh.android.kernel.About.TWITTER
+                                        + "\nBilibili: " + com.dsh.android.kernel.About.BILIBILI
+                                        + "\nEmail: " + com.dsh.android.kernel.About.EMAIL));
+                        toast("已复制");
+                    }
+                })
+                .show();
     }
 
     private void openUrl(String url) {
