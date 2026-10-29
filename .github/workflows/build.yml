@@ -1,0 +1,36 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 准备依赖
+        run: |
+          mkdir -p deps
+          curl -sSLo deps/r8.jar https://storage.googleapis.com/r8-releases/raw/main/r8.jar
+          curl -sSLo deps/json.jar https://repo1.maven.org/maven2/org/json/json/20231013/json-20231013.jar
+          echo "ANDROID_JAR=$ANDROID_HOME/platforms/android-29/android.jar" >> $GITHUB_ENV
+
+      - name: 单元测试
+        run: sh test/run.sh
+
+      - name: 构建未签名 APK
+        run: SKIP_SIGN=1 sh build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-apk
+          path: out/unsigned.apk

@@ -1,0 +1,17 @@
+# 构建产物
+out/
+*.apk
+
+# 依赖（体积大，按 README 自行下载）
+deps/*.jar
+
+# 签名私钥，绝不入库
+keys/
+*.p12
+*.jks
+*.keystore
+
+# 杂项
+.DS_Store
+*.class
+__pycache__/
