@@ -80,6 +80,8 @@ if [ -n "$STORE_PASS_FILE" ]; then
 else
   KS_PASS=${STORE_PASS:?需要 STORE_PASS 环境变量或 STORE_PASS_FILE}
 fi
+# apksigner 的 env: 只读环境变量，直接赋值给 shell 变量无效（会拿到空密码）
+export KS_PASS
 java -jar "$APKSIGNER_JAR" sign --ks "$KEYSTORE" --ks-pass env:KS_PASS \
   --ks-key-alias "$KS_ALIAS" --key-pass env:KS_PASS \
   --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \

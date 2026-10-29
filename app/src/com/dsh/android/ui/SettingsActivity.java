@@ -25,6 +25,7 @@ import android.widget.Toast;
 
 import com.dsh.android.a11y.A11yService;
 import com.dsh.android.kernel.C;
+import com.dsh.android.kernel.Updater;
 import com.dsh.android.llm.LlmClient;
 
 import org.json.JSONArray;
@@ -224,6 +225,20 @@ public final class SettingsActivity extends Activity {
                         return n == 0 ? "未读取" : "接口读取 · " + n + " 个";
                     }
                 }, null, false));
+        aboutCard.addView(divider());
+        aboutCard.addView(row("检查更新", "update_status", new Fmt() {
+            public String get() { return updateStatusText(); }
+        }, new View.OnClickListener() {
+            public void onClick(View v) { checkUpdate(); }
+        }, true));
+        aboutCard.addView(divider());
+        aboutCard.addView(switchRow("自动检查更新", "每次打开应用时查一次，每天最多一次",
+                Updater.autoEnabled(this), new CompoundCallback() {
+                    public void onChanged(boolean checked) {
+                        Updater.setAutoEnabled(SettingsActivity.this, checked);
+                        refreshValue("update_status", true);
+                    }
+                }));
         body.addView(aboutCard);
 
         sv.addView(body);
@@ -896,6 +911,92 @@ public final class SettingsActivity extends Activity {
     }
 
     private int dp(float v) { return Theme.dp(this, v); }
+
+    // ------------------------------------------------------------ 检查更新
+
+    /** 检查更新行的右侧文案：检查中 → 本次结果 → 上次检查时间。 */
+    private String updateStatusText() {
+        if (checking) return "检查中…";
+        if (lastResult != null) return lastResult;
+        String err = Updater.lastError(this);
+        if (err != null && err.length() > 0) return "上次失败";
+        String tag = Updater.lastTag(this);
+        if (tag != null && tag.length() > 0) return "已是最新 " + tag;
+        return Updater.lastCheckedText(this);
+    }
+
+    private void checkUpdate() {
+        if (checking) return;
+        checking = true;
+        lastResult = null;
+        refreshValue("update_status", true);
+
+        Updater.checkAsync(this, new Updater.Callback() {
+            public void onResult(Updater.Release r, String error) {
+                checking = false;
+                if (error != null) {
+                    lastResult = "检查失败";
+                    refreshValue("update_status", true);
+                    toast("检查更新失败：" + error);
+                    return;
+                }
+                if (r == null) {
+                    lastResult = "已是最新";
+                    refreshValue("update_status", true);
+                    toast("当前已是最新版本 " + C.VERSION);
+                    return;
+                }
+                lastResult = "有新版本 " + r.version;
+                refreshValue("update_status", true);
+                showUpdateDialog(r);
+            }
+        });
+    }
+
+    /** 有新版本时的对话框：直接给下载入口，不让用户自己去找。 */
+    private void showUpdateDialog(final Updater.Release r) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("当前 ").append(C.VERSION).append("  →  最新 ").append(r.version);
+        if (r.apkSize > 0) sb.append("\n安装包 ").append(r.sizeText());
+
+        String notes = r.notes == null ? "" : r.notes.trim();
+        if (notes.length() > 0) {
+            // 发布说明可能很长，截前几行，完整内容去发布页看
+            String[] lines = notes.split("\n");
+            StringBuilder cut = new StringBuilder();
+            for (int i = 0; i < lines.length && i < 8; i++) cut.append(lines[i]).append("\n");
+            if (lines.length > 8) cut.append("…");
+            sb.append("\n\n").append(cut.toString().trim());
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("发现新版本 " + r.version)
+                .setMessage(sb.toString())
+                .setPositiveButton("去下载", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        openUrl(r.hasApk() ? r.apkUrl : r.pageUrl);
+                    }
+                })
+                .setNeutralButton("发布页", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { openUrl(r.pageUrl); }
+                })
+                .setNegativeButton("稍后", null)
+                .show();
+    }
+
+    private void openUrl(String url) {
+        if (url == null || url.length() == 0) return;
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+        } catch (Exception e) {
+            toast("没有可用的浏览器");
+        }
+    }
+
+    /** 检查中标志：避免连点触发多次请求。 */
+    private boolean checking = false;
+    /** 本次运行期间的检查结果文案。 */
+    private String lastResult = null;
 
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
 }

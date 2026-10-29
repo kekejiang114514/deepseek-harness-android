@@ -1,8 +1,8 @@
 #!/bin/sh
 # 跑纯 JVM 单元测试（不需要设备，也不需要 android.jar）。
 #
-# 说明：被测的两个类（HistoryCompactor / AskLog）刻意只依赖 org.json，
-# 不碰任何 Android API，所以能直接在桌面 JDK 上跑。
+# 说明：被测的类（HistoryCompactor / AskLog / Version）刻意只依赖 org.json
+# 或纯 JDK，不碰任何 Android API，所以能直接在桌面 JDK 上跑。
 set -e
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -28,9 +28,12 @@ echo "[1/2] 编译"
 javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/com/dsh/android/llm/HistoryCompactor.java" \
     "$ROOT/app/src/com/dsh/android/ui/AskLog.java" \
+    "$ROOT/app/src/com/dsh/android/kernel/Version.java" \
     "$HERE/CompactTest.java" \
-    "$HERE/AskLogTest.java"
+    "$HERE/AskLogTest.java" \
+    "$HERE/VersionTest.java"
 
 echo "[2/2] 运行"
 java -cp "$OUT:$JSON_JAR" CompactTest
 java -cp "$OUT:$JSON_JAR" AskLogTest
+java -cp "$OUT:$JSON_JAR" VersionTest

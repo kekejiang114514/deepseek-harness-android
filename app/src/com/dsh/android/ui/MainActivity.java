@@ -1,7 +1,9 @@
 package com.dsh.android.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
@@ -22,6 +24,7 @@ import com.dsh.android.a11y.A11yService;
 import com.dsh.android.kernel.C;
 import com.dsh.android.kernel.EventBus;
 import com.dsh.android.kernel.SessionStore;
+import com.dsh.android.kernel.Updater;
 import com.dsh.android.llm.AgentLoop;
 import com.dsh.android.llm.HistoryCompactor;
 import com.dsh.android.llm.LlmClient;
@@ -104,6 +107,73 @@ public final class MainActivity extends Activity {
         reloadClient();
         renderHistory();
         reportLastCrash();
+        maybeCheckUpdate();
+    }
+
+    /**
+     * 启动时查一次更新。
+     *
+     * <p>只有「开着自动检查」且距上次检查超过一天才联网——未鉴权的 GitHub API
+     * 有 60 次/小时限流，每次切回应用都查既没必要也容易被限流。
+     *
+     * <p>同一版本用户点过「稍后」就不再弹，只能去设置页手动检查。
+     */
+    private void maybeCheckUpdate() {
+        if (!Updater.autoEnabled(this)) return;
+        if (!Updater.autoDue(this)) return;
+
+        Updater.checkAsync(this, new Updater.Callback() {
+            public void onResult(final Updater.Release r, String error) {
+                if (r == null) return;                              // 已是最新，安静
+                if (Updater.isSkipped(MainActivity.this, r.tag)) return;
+                runOnUiThread(new Runnable() {
+                    public void run() { showUpdateNotice(r); }
+                });
+            }
+        });
+    }
+
+    /** 有新版本时的提示：给下载入口，不逼用户自己去找。 */
+    private void showUpdateNotice(final Updater.Release r) {
+        if (isFinishing()) return;
+        StringBuilder sb = new StringBuilder();
+        sb.append("当前 ").append(C.VERSION).append(" → ").append(r.version);
+        String notes = r.notes == null ? "" : r.notes.trim();
+        if (notes.length() > 0) {
+            String[] lines = notes.split("\n");
+            StringBuilder cut = new StringBuilder();
+            for (int i = 0; i < lines.length && i < 6; i++) cut.append(lines[i]).append("\n");
+            if (lines.length > 6) cut.append("…");
+            sb.append("\n\n").append(cut.toString().trim());
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("发现新版本 " + r.version)
+                .setMessage(sb.toString())
+                .setPositiveButton("去下载", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        openExternal(r.hasApk() ? r.apkUrl : r.pageUrl);
+                    }
+                })
+                .setNeutralButton("发布页", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { openExternal(r.pageUrl); }
+                })
+                .setNegativeButton("稍后", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        // 记住这一版被跳过，下次启动不再弹同一个版本
+                        Updater.skipVersion(MainActivity.this, r.tag);
+                    }
+                })
+                .show();
+    }
+
+    private void openExternal(String url) {
+        if (url == null || url.length() == 0) return;
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+        } catch (Exception e) {
+            addNotice("没有可用的浏览器打开下载页");
+        }
     }
 
     @Override
