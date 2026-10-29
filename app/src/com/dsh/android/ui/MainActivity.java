@@ -28,9 +28,6 @@ import com.dsh.android.kernel.Updater;
 import com.dsh.android.llm.AgentLoop;
 import com.dsh.android.llm.HistoryCompactor;
 import com.dsh.android.llm.LlmClient;
-import com.dsh.android.plugins.A11yPlugin;
-import com.dsh.android.plugins.FilePlugin;
-import com.dsh.android.plugins.WebPlugin;
 import com.dsh.android.plugins.PluginManager;
 import com.dsh.android.tools.ToolRuntime;
 
@@ -98,10 +95,21 @@ public final class MainActivity extends Activity {
                 });
             }
         });
+        // 屏幕工具发现无障碍没开时，回到 UI 线程弹一次「去开启」引导
+        A11yGuide.install(new A11yGuide.Host() {
+            public void showA11yPrompt() {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (!isFinishing()) A11yGuide.showDialog(MainActivity.this, true);
+                    }
+                });
+            }
+        });
         plugins = new PluginManager(this, bus, tools);
-        plugins.load(new A11yPlugin(bus));
-        plugins.load(new FilePlugin(bus));
-        plugins.load(new WebPlugin(bus));
+        // 内置插件 + 用户 plugin.json 插件一起装配（目录可能还没有，reload 会建出来）
+        plugins.reload();
+        // 设置页要操作同一份注册表，否则切换开关影响不到真正跑模型的那套工具
+        com.dsh.android.plugins.PluginHub.install(plugins);
 
         buildUi();
         reloadClient();
@@ -193,6 +201,9 @@ public final class MainActivity extends Activity {
         }
         Theme.init(this);
         reloadClient();
+        // 用户可能在设置页改了插件开关，或直接改了 plugin.json：
+        // 空闲时重扫一次，保证模型下一轮看到的工具是最新的（生成中不动，避免抽掉正在等的工具）
+        if (!running && plugins != null) plugins.reload();
         if (titleView != null) titleView.setText(currentTitle());
     }
 

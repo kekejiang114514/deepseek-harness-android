@@ -60,7 +60,54 @@ AI 遇到需要拍板的情况（多个方案、缺你的偏好）会调 `ui.ask
 
 开启后 AI 能读屏幕内容、点按钮、滑动、输入文字。
 
-设置页有「系统无障碍设置」直达入口，返回时自动刷新连接状态。
+**必须由你在系统里手动开启一次**——Android 不允许应用自行申请无障碍权限，这是系统设计，不是本应用的限制。开启方式：设置页「开启屏幕操作」→ 直奔本应用的无障碍页面 → 打开开关。开关是灰的时候，说明这是 Android 13+ 对侧载应用的「受限设置」限制，点该页右上角 ⋮ →「允许受限设置」。
+
+模型在服务没开时尝试屏幕操作，应用会弹一次带「去开启」按钮的引导，并把原因告诉模型，避免它反复重试。
+
+### 插件
+
+放一个 `plugin.json` 就能接任意 HTTP 接口，不用改代码、不用重新编译。
+
+插件目录（设置页「插件目录」可复制路径）：
+
+```
+/sdcard/DShAndroid/plugins/<插件名>/plugin.json
+```
+
+最小清单：
+
+```json
+{
+  "id": "weather",
+  "name": "天气",
+  "version": "1.0.0",
+  "baseUrl": "https://api.example.com",
+  "headers": { "Authorization": "Bearer ${TOKEN}" },
+  "secrets": { "TOKEN": "你的密钥" },
+  "tools": [{
+    "name": "weather.now",
+    "description": "查询城市当前天气",
+    "parameters": {
+      "type": "object",
+      "properties": { "city": { "type": "string" } },
+      "required": ["city"]
+    },
+    "request": {
+      "method": "GET",
+      "url": "/v1/now?city={city}",
+      "resultPath": "data.temperature"
+    }
+  }]
+}
+```
+
+- 占位符：`{参数}` 做 URL 编码，`{参数|raw}` 原样，`{参数|json}` JSON 转义（放在 body 里写 `"text":"{参数|json}"`）
+- 密钥：`${NAME}` 从 `secrets` 里取，header 和 url 都能用
+- `resultPath` 支持 `a.b` 与 `list[0].name`，用来只把需要的字段交给模型
+- POST/PUT/PATCH 可写 `body`，`contentType` 支持 `json` / `form` / 任意 MIME
+- 响应最多读 512KB，交给模型前截到 2 万字符
+
+设置页有「查看插件格式示例」，可以直接把示例写进插件目录，改改就是自己的。
 
 ---
 

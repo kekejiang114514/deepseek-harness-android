@@ -47,9 +47,31 @@ public class VersionTest {
         ok(!Version.isNewer("", "1.0"), "空 tag 视为不新");
         ok(!Version.isNewer(null, "1.0"), "null tag 视为不新");
 
-        System.out.println("t4 真实场景");
+        System.out.println("t4 预发布阶段");
+        ok(Version.compare("1.0 beta 1", "1.0 beta 1") == 0, "同一 beta 相等");
+        ok(Version.compare("v1.0-beta1", "1.0 beta 1") == 0, "tag 与展示名等价");
+        ok(Version.compare("1.0 beta 2", "1.0 beta 1") > 0, "beta 2 > beta 1");
+        ok(Version.compare("1.0", "1.0 beta 1") > 0, "正式版 > beta");
+        ok(!Version.isNewer("v1.0-beta1", "1.0"), "本地已是正式版，beta 不算更新");
+        ok(Version.isNewer("v1.0", "1.0 beta 1"), "beta 用户能看到正式版");
+        ok(Version.isNewer("v1.1-beta1", "1.0 beta 1"), "更高版本的 beta 也算更新");
+        ok(Version.compare("1.0 rc 1", "1.0 beta 9") > 0, "rc > beta");
+        ok(Version.compare("1.0 alpha 1", "1.0 beta 1") < 0, "alpha < beta");
+        ok(Version.isPrerelease("1.0 beta 1"), "1.0 beta 1 是预发布");
+        ok(Version.isPrerelease("v1.0-rc1"), "rc 是预发布");
+        ok(!Version.isPrerelease("v1.0"), "v1.0 不是预发布");
+        ok(!Version.isPrerelease("2.0.1+build7"), "构建元数据不算预发布");
+        ok(Version.compare("1.0 beta 1", "0.9") > 0, "1.0 beta 1 比 0.9 新");
+
+        System.out.println("t5 真实场景");
         ok(Version.isNewer("v0.9", "0.7.0"), "0.7.0 用户能看到 v0.9");
         ok(Version.isNewer("v1.0", "0.9"), "0.9 用户能看到 v1.0");
+        ok(Version.isNewer("v1.0-beta1", "0.9"), "0.9 用户能看到 1.0 beta 1");
+
+        System.out.println("t6 展示名与 0.9 用户视角");
+        ok(Version.isNewer("v1.0-beta1", "0.9"), "0.9 用户能看到 1.0 beta 1");
+        ok(Version.isNewer("v1.0", "1.0-beta1"), "beta 用户能看到同号正式版");
+        ok(!Version.isNewer("v1.0-beta1", "1.0-beta1"), "同一 beta 不重复提示");
 
         System.out.println();
         System.out.println("==== " + pass + " passed, " + fail + " failed ====");

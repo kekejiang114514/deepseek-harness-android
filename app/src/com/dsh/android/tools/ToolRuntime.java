@@ -183,24 +183,74 @@ public final class ToolRuntime {
         }));
     }
 
-    public void registerFromPlugin(String pluginId, JSONArray declarations) {
-        List<String> names = new ArrayList<String>();
+    /**
+     * 注册插件声明的工具（走内置执行器，靠 type 字段分发）。
+     * 返回冲突信息：非空表示整批都没注册，调用方应把这个插件标记为加载失败。
+     * 之所以整批回滚，是因为半个插件在线上比没有插件更难排查。
+     */
+    public List<String> registerFromPlugin(String pluginId, JSONArray declarations) {
+        List<JSONObject> valid = new ArrayList<JSONObject>();
+        List<String> conflicts = new ArrayList<String>();
         for (int i = 0; i < declarations.length(); i++) {
             JSONObject d = declarations.optJSONObject(i);
             if (d == null) continue;
+            String name = d.optString("name", "");
+            if (name.length() == 0) {
+                conflicts.add("第 " + (i + 1) + " 个工具缺少 name");
+                continue;
+            }
+            String owner = ownerOf(name);
+            if (owner != null && !owner.equals(pluginId)) {
+                conflicts.add(name + "（已被 " + owner + " 占用）");
+                continue;
+            }
+            valid.add(d);
+        }
+        if (!conflicts.isEmpty()) return conflicts;
+
+        List<String> names = new ArrayList<String>();
+        for (int i = 0; i < valid.size(); i++) {
+            JSONObject d = valid.get(i);
             String name = d.optString("name");
             String type = d.optString("type", "a11y");
             String desc = d.optString("description", name);
             JSONObject params = d.optJSONObject("parameters");
             if (params == null) params = new JSONObject();
 
-            ToolExecutor exec = buildExecutor(type);
-            if (exec == null) continue;
-
-            registry.put(name, new ToolDef(name, desc, params, exec));
+            registry.put(name, new ToolDef(name, desc, params, buildExecutor(type)));
             names.add(name);
         }
         pluginTools.put(pluginId, names);
+        return conflicts;
+    }
+
+    /** 直接注册一个已有执行器的工具（声明式 HTTP 插件用）。返回 false 表示重名被拒。 */
+    public boolean registerTool(String pluginId, String name, String description,
+                                JSONObject params, ToolExecutor exec) {
+        String owner = ownerOf(name);
+        if (owner != null && !owner.equals(pluginId)) return false;
+        registry.put(name, new ToolDef(name, description,
+                params == null ? new JSONObject() : params, exec));
+        List<String> names = pluginTools.get(pluginId);
+        if (names == null) {
+            names = new ArrayList<String>();
+            pluginTools.put(pluginId, names);
+        }
+        if (!names.contains(name)) names.add(name);
+        return true;
+    }
+
+    /** 这个工具名当前属于哪个插件（内置工具返回 null）。 */
+    public String ownerOf(String toolName) {
+        for (Map.Entry<String, List<String>> e : pluginTools.entrySet()) {
+            if (e.getValue().contains(toolName)) return e.getKey();
+        }
+        return null;
+    }
+
+    /** 已注册的工具总数（界面展示用）。 */
+    public int toolCount() {
+        return registry.size();
     }
 
     public void unregisterPlugin(String pluginId) {
@@ -344,7 +394,22 @@ public final class ToolRuntime {
             return "{\"ok\":false,\"error\":\"无障碍操作已在设置中关闭\"}";
         }
         if (!A11yService.isReady()) {
-            return "{\"ok\":false,\"error\":\"无障碍服务未开启，请在系统设置中启用\"}";
+            // 无障碍不能由应用自行授权：借这次调用弹出一次引导（内部有冷却），
+            // 同时把原因写清楚，避免模型以为是自己参数错了反复重试。
+            com.dsh.android.ui.A11yGuide.requestPrompt();
+            try {
+                JSONObject o = new JSONObject();
+                o.put("ok", false);
+                o.put("need_a11y", true);
+                o.put("error", "无障碍服务还没开启，屏幕操作暂时不可用");
+                o.put("hint", "这不是调用参数的问题。Android 规定无障碍服务必须由用户在系统设置里手动打开，"
+                        + "应用无法自行申请。请让用户在设置页点「去开启」，或手动进入"
+                        + " 设置 → 无障碍 → 已下载的服务 → DShAndroid 无障碍 打开开关。"
+                        + "在用户开启之前不要反复重试屏幕工具，改用其它方式回答。");
+                return o.toString();
+            } catch (Exception e) {
+                return "{\"ok\":false,\"need_a11y\":true,\"error\":\"无障碍服务未开启\"}";
+            }
         }
         A11yService svc = A11yService.get();
 

@@ -27,6 +27,14 @@ import com.dsh.android.a11y.A11yService;
 import com.dsh.android.kernel.C;
 import com.dsh.android.kernel.Updater;
 import com.dsh.android.llm.LlmClient;
+import com.dsh.android.kernel.EventBus;
+import com.dsh.android.plugins.PluginHub;
+import com.dsh.android.plugins.PluginManager;
+import com.dsh.android.plugins.PluginSample;
+import com.dsh.android.plugins.PluginStore;
+import com.dsh.android.plugins.PluginSpec;
+import com.dsh.android.plugins.PluginToolSpec;
+import com.dsh.android.tools.ToolRuntime;
 
 import org.json.JSONArray;
 
@@ -41,7 +49,7 @@ import java.util.List;
  * 2. 填完 Key（或改接口地址）立即自动拉取，不需要额外点「验证」。
  * 3. 任何选项改动都只更新对应那一行的文字 + 局部动画，不 recreate() 整页。
  */
-public final class SettingsActivity extends Activity {
+public final class SettingsActivity extends Activity implements PluginSection.Host {
 
     private static final String K_MODELS_CACHE = "models_cache";
 
@@ -54,6 +62,15 @@ public final class SettingsActivity extends Activity {
     private LinearLayout modelHost;
     private boolean fetching = false;
     private String fetchError = null;
+
+    private PluginSection pluginSection;
+
+    /** 无障碍未开启时的说明位置（跟随连接状态重建）。 */
+    private LinearLayout a11yHintHost;
+
+    /** 插件区：内容随扫描结果动态重建。 */
+    private PluginManager pluginMgr;
+    private LinearLayout pluginHost;
 
     /** 已绑定到某个配置项的显示行，改值后只刷新这些行。 */
     private final List<BoundRow> bound = new ArrayList<BoundRow>();
@@ -81,6 +98,8 @@ public final class SettingsActivity extends Activity {
 
         Theme.init(this);
         sp = getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
+        pluginMgr = PluginHub.get();
+        pluginSection = new PluginSection(this, this);
         setContentView(build());
 
         // 已有 Key 但列表为空（比如旧版本升级上来）：进页面静默读一次
@@ -93,6 +112,18 @@ public final class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshValue("__a11y", false);
+        refreshA11yHint();
+    }
+
+    /** 无障碍没开时在开关行下面常驻一段说明，开了就收起来。 */
+    private void refreshA11yHint() {
+        if (a11yHintHost == null) return;
+        a11yHintHost.removeAllViews();
+        if (A11yService.isReady()) return;
+        a11yHintHost.addView(divider());
+        a11yHintHost.addView(hintRow("屏幕操作依赖系统的无障碍服务，Android 规定只能由你手动开启一次，应用无法自行授权。"
+                + "点上面那一行会直接跳到本应用的开关页；若开关发灰点不动，"
+                + "点该页右上角 ⋮ →「允许受限设置」后再打开。"));
     }
 
     // ------------------------------------------------------------ 布局
@@ -174,22 +205,52 @@ public final class SettingsActivity extends Activity {
                     }
                 }));
         toolCard.addView(divider());
-        toolCard.addView(row("系统无障碍设置", "__a11y",
+        toolCard.addView(row("开启屏幕操作", "__a11y",
                 new Fmt() {
                     public String get() {
-                        return A11yService.isReady() ? "已连接" : "未连接 · 点击开启";
+                        return A11yService.isReady() ? "已连接 · 点击管理" : "未开启 · 点此开启";
                     }
                 },
                 new View.OnClickListener() {
                     public void onClick(View v) {
-                        try {
-                            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-                        } catch (Exception e) {
-                            toast("无法打开系统设置");
+                        if (!A11yGuide.openSettings(SettingsActivity.this)) {
+                            toast("无法打开系统设置，请手动进入 设置 → 无障碍");
                         }
                     }
                 }, true));
+        a11yHintHost = new LinearLayout(this);
+        a11yHintHost.setOrientation(LinearLayout.VERTICAL);
+        toolCard.addView(a11yHintHost);
         body.addView(toolCard);
+
+        // ---- 插件 ----
+        body.addView(sectionLabel("插件"));
+        LinearLayout pluginCard = card();
+        pluginCard.addView(hintRow("把 plugin.json 放进下面这个目录，工具就会出现在对话里。"
+                + "一个插件一个文件夹，或者直接放单个 .json 文件都可以。"));
+        pluginCard.addView(divider());
+        pluginCard.addView(actionRow("插件目录 · 点击复制路径", new View.OnClickListener() {
+            public void onClick(View v) {
+                String p = pluginMgr().store().primaryPath();
+                android.content.ClipboardManager cm =
+                        (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("path", p));
+                toast("已复制：" + p);
+            }
+        }));
+        pluginCard.addView(divider());
+        pluginCard.addView(actionRow("重新扫描插件", new View.OnClickListener() {
+            public void onClick(View v) { rescanPlugins(); }
+        }));
+        pluginCard.addView(divider());
+        pluginCard.addView(actionRow("查看插件格式示例", new View.OnClickListener() {
+            public void onClick(View v) { showPluginSample(); }
+        }));
+        pluginHost = new LinearLayout(this);
+        pluginHost.setOrientation(LinearLayout.VERTICAL);
+        pluginCard.addView(pluginHost);
+        body.addView(pluginCard);
+        pluginSection.rebuild(false);
 
         // ---- 外观 ----
         body.addView(sectionLabel("外观"));
@@ -910,7 +971,7 @@ public final class SettingsActivity extends Activity {
         return k.substring(0, 4) + "\u2022\u2022\u2022\u2022" + k.substring(k.length() - 4);
     }
 
-    private int dp(float v) { return Theme.dp(this, v); }
+    public int dp(float v) { return Theme.dp(this, v); }
 
     // ------------------------------------------------------------ 检查更新
 
@@ -998,5 +1059,41 @@ public final class SettingsActivity extends Activity {
     /** 本次运行期间的检查结果文案。 */
     private String lastResult = null;
 
-    private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
+    public void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
+
+    // ------------------------------------------------------------ 插件区
+
+    /** 拿插件管理器：正常情况下主界面已装好，异常情况自己兜一个。 */
+    public PluginManager pluginMgr() {
+        if (pluginMgr == null) {
+            pluginMgr = PluginHub.get();
+            if (pluginMgr == null) {
+                // 极端情况（直接从设置页冷启动等）：自己建一套，至少能看能改
+                pluginMgr = new PluginManager(this, new EventBus(), new ToolRuntime(this));
+                pluginMgr.reload();
+            }
+        }
+        return pluginMgr;
+    }
+
+    public LinearLayout pluginHost() { return pluginHost; }
+
+    public void rebuildPlugins(boolean animate) {
+        if (pluginSection != null) pluginSection.rebuild(animate);
+    }
+
+    private void rescanPlugins() {
+        PluginManager.Reload r = pluginMgr().rescan();
+        rebuildPlugins(false);
+        StringBuilder sb = new StringBuilder();
+        sb.append("已加载 ").append(r.enabledCount).append(" 个插件 · ")
+          .append(r.toolCount).append(" 个工具");
+        if (r.newCount > 0) sb.append("（新发现 ").append(r.newCount).append(" 个）");
+        if (!r.errors.isEmpty()) sb.append(" · ").append(r.errors.size()).append(" 个有问题");
+        toast(sb.toString());
+    }
+
+    private void showPluginSample() {
+        pluginSection.showSample();
+    }
 }

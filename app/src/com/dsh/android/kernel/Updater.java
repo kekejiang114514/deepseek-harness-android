@@ -23,8 +23,13 @@ public final class Updater {
 
     /** 仓库地址，写死在这里，设置页只展示结果。 */
     public static final String REPO = "kekejiang114514/deepseek-harness-android";
-    private static final String API_LATEST =
-            "https://api.github.com/repos/" + REPO + "/releases/latest";
+    /**
+     * 用「列出版本」而不是 /releases/latest：latest 会跳过预发布，
+     * 一旦 1.0-beta1 标成 prerelease，latest 会退回 0.9，装了 0.9 的人就看不到 beta。
+     * 拿列表自己挑最高版本，beta 和正式版都能正确提示。
+     */
+    private static final String API_LIST =
+            "https://api.github.com/repos/" + REPO + "/releases?per_page=30";
 
     /** 自动检查的节流：一天一次，避免每次冷启动都打一次接口。 */
     private static final long AUTO_INTERVAL_MS = 24L * 60 * 60 * 1000;
@@ -41,8 +46,9 @@ public final class Updater {
 
     /** 一个版本的信息。 */
     public static class Release {
-        public String tag = "";        // v0.10
-        public String version = "";    // 0.10（去掉前缀，便于比较）
+        public String tag = "";        // v1.0-beta1（比较用原样 tag，预发布阶段不能丢）
+        public String version = "";    // 1.0 beta1（展示用）
+        public boolean prerelease = false;
         public String notes = "";       // 更新说明（Markdown 原文）
         public String pageUrl = "";    // 发布页
         public String apkUrl = "";     // 直链 APK，可能为空
@@ -73,7 +79,7 @@ public final class Updater {
                     Release latest = fetch();
                     if (latest == null) {
                         err = "没有找到发布记录";
-                    } else if (isNewer(latest.version, C.VERSION)) {
+                    } else if (isNewer(latest.tag, C.VERSION)) {
                         r = latest;
                     }
                     saveLast(ctx, err == null ? (r == null ? "" : r.tag) : "", err);
@@ -90,11 +96,11 @@ public final class Updater {
         }, "update-check").start();
     }
 
-    /** 同步拉取 latest release（在后台线程调用）。 */
+    /** 同步拉取版本列表并挑出最高的一个（在后台线程调用）。 */
     public static Release fetch() throws Exception {
         HttpURLConnection c = null;
         try {
-            c = (HttpURLConnection) new URL(API_LATEST).openConnection();
+            c = (HttpURLConnection) new URL(API_LIST).openConnection();
             c.setConnectTimeout(TIMEOUT_MS);
             c.setReadTimeout(TIMEOUT_MS);
             c.setRequestProperty("Accept", "application/vnd.github+json");
@@ -112,17 +118,27 @@ public final class Updater {
             }
             if (code != 200) throw new Exception("HTTP " + code);
 
-            return parse(read(c.getInputStream()));
+            JSONArray arr = new JSONArray(read(c.getInputStream()));
+            Release best = null;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                if (o.optBoolean("draft", false)) continue;
+                Release r = parseOne(o);
+                if (r.tag.length() == 0) continue;
+                if (best == null || compare(r.tag, best.tag) > 0) best = r;
+            }
+            return best;
         } finally {
             if (c != null) c.disconnect();
         }
     }
 
-    private static Release parse(String json) throws Exception {
-        JSONObject o = new JSONObject(json);
+    private static Release parseOne(JSONObject o) {
         Release r = new Release();
         r.tag = o.optString("tag_name", "");
-        r.version = normalize(r.tag);
+        r.version = pretty(r.tag);
+        r.prerelease = o.optBoolean("prerelease", false);
         r.notes = o.optString("body", "");
         r.pageUrl = o.optString("html_url", "");
 
@@ -134,7 +150,7 @@ public final class Updater {
                 String name = a.optString("name", "");
                 String url = a.optString("browser_download_url", "");
                 if (name.toLowerCase().endsWith(".apk") && url.length() > 0) {
-                    // 多个 APK 时优先选名字里带 arm 的？——目前只发一个，取第一个
+                    // 目前只发一个包，取第一个 APK
                     r.apkUrl = url;
                     r.apkSize = a.optLong("size", 0);
                     break;
@@ -142,6 +158,13 @@ public final class Updater {
             }
         }
         return r;
+    }
+
+    /** 展示用版本名：v1.0-beta1 → 1.0 beta1 */
+    public static String pretty(String tag) {
+        String s = tag == null ? "" : tag.trim();
+        if (s.startsWith("v") || s.startsWith("V")) s = s.substring(1);
+        return s.replace('-', ' ').trim();
     }
 
     private static String read(InputStream in) throws Exception {

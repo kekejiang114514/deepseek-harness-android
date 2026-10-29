@@ -29,11 +29,17 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/com/dsh/android/llm/HistoryCompactor.java" \
     "$ROOT/app/src/com/dsh/android/ui/AskLog.java" \
     "$ROOT/app/src/com/dsh/android/kernel/Version.java" \
+    "$ROOT/app/src/com/dsh/android/plugins/Template.java" \
+    "$ROOT/app/src/com/dsh/android/plugins/JsonPath.java" \
+    "$ROOT/app/src/com/dsh/android/plugins/PluginToolSpec.java" \
+    "$ROOT/app/src/com/dsh/android/plugins/PluginSpec.java" \
     "$HERE/CompactTest.java" \
     "$HERE/AskLogTest.java" \
-    "$HERE/VersionTest.java"
+    "$HERE/VersionTest.java" \
+    "$HERE/PluginTest.java"
 
 echo "[2/2] 运行"
 java -cp "$OUT:$JSON_JAR" CompactTest
 java -cp "$OUT:$JSON_JAR" AskLogTest
 java -cp "$OUT:$JSON_JAR" VersionTest
+java -cp "$OUT:$JSON_JAR" PluginTest
