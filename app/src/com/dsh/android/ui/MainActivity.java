@@ -55,7 +55,6 @@ public final class MainActivity extends Activity {
     private TextView sendBtn;
     private TextView titleView;
     private LinearLayout attachBar;
-    private TextView attachLabel;
     private View scrim;
     private LinearLayout drawer;
     private LinearLayout drawerList;
@@ -322,29 +321,11 @@ public final class MainActivity extends Activity {
         sendLp.setMargins(dp(6), 0, dp(2), 0);
         composer.addView(sendBtn, sendLp);
 
-        // 已选附件预览
+        // 已选附件：一排可横向滑动的文件卡片
         attachBar = new LinearLayout(this);
-        attachBar.setOrientation(LinearLayout.HORIZONTAL);
-        attachBar.setGravity(Gravity.CENTER_VERTICAL);
+        attachBar.setOrientation(LinearLayout.VERTICAL);
         attachBar.setPadding(dp(4), dp(6), dp(4), 0);
         attachBar.setVisibility(View.GONE);
-        attachLabel = new TextView(this);
-        attachLabel.setTextSize(12);
-        attachLabel.setTextColor(Theme.text2());
-        // 多文件时文件名会挤在一行里看不全，放宽到两行
-        attachLabel.setMaxLines(2);
-        attachLabel.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        attachBar.addView(attachLabel, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView attachClear = new TextView(this);
-        attachClear.setText("\u2715");
-        attachClear.setTextSize(14);
-        attachClear.setTextColor(Theme.text3());
-        attachClear.setPadding(dp(10), dp(2), dp(6), dp(2));
-        attachClear.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { clearAttachment(); }
-        });
-        attachBar.addView(attachClear);
         composerWrap.addView(attachBar);
 
         composerWrap.addView(composer, new LinearLayout.LayoutParams(
@@ -649,25 +630,86 @@ public final class MainActivity extends Activity {
 
     /** 用户消息：右对齐浅色气泡，R20，最大宽度 82%。 */
     private void addUserBubble(String text) {
+        addUserBubble(text, null);
+    }
+
+    /** 用户消息：附件卡片在上，正文在下。 */
+    private void addUserBubble(String text, java.util.List<Attach> files) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.END);
         row.setPadding(0, dp(8), 0, dp(4));
 
-        TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextSize(15);
-        tv.setTextColor(Theme.text());
-        tv.setLineSpacing(dp(3), 1f);
-        tv.setPadding(dp(14), dp(10), dp(14), dp(10));
-        tv.setBackground(Theme.round(Theme.surface2(), Theme.R_XL, this));
-        enableCopyText(tv, text);
-
         int maxW = (int) (getResources().getDisplayMetrics().widthPixels * 0.82f);
-        row.addView(tv, new LinearLayout.LayoutParams(
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+
+        if (files != null) {
+            for (int i = 0; i < files.size(); i++) {
+                Attach a = files.get(i);
+                LinearLayout card = attachMessageCard(a);
+                LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                clp.setMargins(0, 0, 0, dp(4));
+                col.addView(card, clp);
+            }
+        }
+
+        if (text != null && text.length() > 0) {
+            TextView tv = new TextView(this);
+            tv.setText(text);
+            tv.setTextSize(15);
+            tv.setTextColor(Theme.text());
+            tv.setLineSpacing(dp(3), 1f);
+            tv.setPadding(dp(14), dp(10), dp(14), dp(10));
+            tv.setBackground(Theme.round(Theme.surface2(), Theme.R_XL, this));
+            enableCopyText(tv, text);
+            tv.setMaxWidth(maxW);
+            col.addView(tv);
+        }
+
+        row.addView(col, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        tv.setMaxWidth(maxW);
+        col.setMinimumWidth(Math.min(maxW, dp(160)));
         messages.addView(row);
+    }
+
+    /** 消息里的附件卡片：比输入区的大一些，带完整信息。 */
+    private LinearLayout attachMessageCard(final Attach a) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setBackground(Theme.round(Theme.surface(), Theme.R_LG, this));
+        card.setPadding(dp(10), dp(9), dp(12), dp(9));
+
+        card.addView(typeBadge(a));
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        TextView name = new TextView(this);
+        name.setText(a.name);
+        name.setTextSize(13);
+        name.setTextColor(Theme.text());
+        name.setSingleLine(true);
+        name.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        texts.addView(name);
+        TextView meta = new TextView(this);
+        meta.setText(humanSize(a.bytes) + " · " + typeLabel(a.name)
+                + (a.content.startsWith("[二进制文件") ? " · 二进制" : " · 文本 " + a.content.length() + " 字"));
+        meta.setTextSize(11);
+        meta.setTextColor(Theme.caption());
+        meta.setPadding(0, dp(2), 0, 0);
+        texts.addView(meta);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tlp.setMargins(dp(8), 0, 0, 0);
+        card.addView(texts, tlp);
+
+        card.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showAttachPreview(a); }
+        });
+        return card;
     }
 
     /** AI 消息：左对齐，按 Markdown 渲染（粗体 / 列表 / 表格 / 代码块）。 */
@@ -919,15 +961,12 @@ public final class MainActivity extends Activity {
         if (messages.getChildCount() == 1) messages.removeAllViews();
 
         final String text = withAttachment(typed);
-        String shown = typed.length() > 0 ? typed : "";
-        String atts = attachSummary();
-        if (atts.length() > 0) {
-            shown = (shown.length() > 0 ? shown + "\n" : "") + atts;
-        }
+        // 先快照，后面清空列表还要用来画卡片
+        final java.util.List<Attach> sent = new java.util.ArrayList<Attach>(attaches);
 
         input.setText("");
         clearAttachment();
-        addUserBubble(shown);
+        addUserBubble(typed, sent);
         scrollBottom();
 
         // 会话标题：首条消息作为标题
@@ -1162,56 +1201,154 @@ public final class MainActivity extends Activity {
 
     private void showAttachment() {
         if (attachBar == null) return;
+        attachBar.removeAllViews();
         if (attaches.isEmpty()) {
             attachBar.setVisibility(View.GONE);
             return;
         }
+        attachBar.setVisibility(View.VISIBLE);
 
-        String label;
-        if (attaches.size() == 1) {
-            Attach a = attaches.get(0);
-            label = "\uD83D\uDCCE " + a.name + " \u00b7 " + humanSize(a.bytes);
-        } else {
-            StringBuilder names = new StringBuilder();
-            for (int i = 0; i < attaches.size(); i++) {
-                if (i > 0) names.append("、");
-                names.append(attaches.get(i).name);
-            }
-            label = "\uD83D\uDCCE " + attaches.size() + " 个文件 \u00b7 "
-                    + humanSize(totalBytes()) + "\u3000" + names;
-        }
-        attachLabel.setText(label);
-
-        if (attachBar.getVisibility() != View.VISIBLE) {
-            attachBar.setVisibility(View.VISIBLE);
-            attachBar.setAlpha(0f);
-            attachBar.animate().alpha(1f).setDuration(140).start();
-        }
-        // 选完文件通常紧接着要写字：把焦点交给输入框并弹键盘。
-        // 注意不能用 getWindow().setSoftInputMode(STATE_VISIBLE) —— 它是整体替换，
-        // 会把 manifest 里的 ADJUST_RESIZE 丢掉，键盘就会盖住输入框。
-        if (input != null) {
-            input.requestFocus();
-            input.postDelayed(new Runnable() {
+        android.widget.HorizontalScrollView hsv = new android.widget.HorizontalScrollView(this);
+        hsv.setHorizontalScrollBarEnabled(false);
+        LinearLayout chips = new LinearLayout(this);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < attaches.size(); i++) {
+            final Attach a = attaches.get(i);
+            View chip = attachChip(a, new Runnable() {
                 public void run() {
-                    android.view.inputmethod.InputMethodManager imm =
-                            (android.view.inputmethod.InputMethodManager)
-                                    getSystemService(Context.INPUT_METHOD_SERVICE);
-                    if (imm != null) {
-                        if (!imm.showSoftInput(input, 0)) {
-                            imm.toggleSoftInput(
-                                    android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT, 0);
-                        }
-                    }
+                    attaches.remove(a);
+                    showAttachment();
                 }
-            }, 120);
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, 0, dp(6), 0);
+            chips.addView(chip, lp);
         }
+        hsv.addView(chips);
+        attachBar.addView(hsv, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView hint = new TextView(this);
+        hint.setText(attaches.size() + " 个文件 · 点卡片可预览，✕ 移除");
+        hint.setTextSize(11);
+        hint.setTextColor(Theme.caption());
+        hint.setPadding(dp(6), dp(5), 0, 0);
+        attachBar.addView(hint);
     }
 
-    private int totalBytes() {
-        int n = 0;
-        for (int i = 0; i < attaches.size(); i++) n += attaches.get(i).bytes;
-        return n;
+    /** 输入区里的一个小卡片：类型徽标 + 文件名 + 大小 + 移除。 */
+    private View attachChip(final Attach a, final Runnable onRemove) {
+        LinearLayout chip = new LinearLayout(this);
+        chip.setOrientation(LinearLayout.HORIZONTAL);
+        chip.setGravity(Gravity.CENTER_VERTICAL);
+        chip.setBackground(Theme.round(Theme.surface2(), Theme.R_LG, this));
+        chip.setPadding(dp(10), dp(7), dp(6), dp(7));
+
+        chip.addView(typeBadge(a));
+
+        TextView name = new TextView(this);
+        name.setText(a.name);
+        name.setTextSize(12);
+        name.setTextColor(Theme.text());
+        name.setSingleLine(true);
+        name.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        name.setMaxWidth(dp(130));
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        nlp.setMargins(dp(7), 0, dp(6), 0);
+        chip.addView(name, nlp);
+
+        TextView size = new TextView(this);
+        size.setText(humanSize(a.bytes));
+        size.setTextSize(11);
+        size.setTextColor(Theme.caption());
+        chip.addView(size);
+
+        TextView close = new TextView(this);
+        close.setText("\u2715");
+        close.setTextSize(13);
+        close.setTextColor(Theme.text3());
+        close.setPadding(dp(9), dp(2), dp(3), dp(2));
+        close.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                if (onRemove != null) onRemove.run();
+            }
+        });
+        chip.addView(close);
+
+        chip.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showAttachPreview(a); }
+        });
+        return chip;
+    }
+
+    /** 文件类型徽标：取扩展名，太长就取首字母。 */
+    private View typeBadge(Attach a) {
+        TextView badge = new TextView(this);
+        badge.setText(typeLabel(a.name));
+        badge.setTextSize(9);
+        badge.setTypeface(null, android.graphics.Typeface.BOLD);
+        badge.setTextColor(Theme.onPrimary());
+        badge.setGravity(Gravity.CENTER);
+        badge.setBackground(Theme.round(Theme.primary(), Theme.R_SM, this));
+        badge.setPadding(dp(5), dp(3), dp(5), dp(3));
+        badge.setMinWidth(dp(26));
+        return badge;
+    }
+
+    private static String typeLabel(String name) {
+        int dot = name == null ? -1 : name.lastIndexOf('.');
+        if (dot < 0 || dot + 1 >= (name == null ? 0 : name.length())) return "FILE";
+        String ext = name.substring(dot + 1).toUpperCase();
+        if (ext.length() > 4) ext = ext.substring(0, 4);
+        return ext;
+    }
+
+    /** 点卡片看内容：文件信息 + 前若干行预览。 */
+    private void showAttachPreview(final Attach a) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("大小 ").append(humanSize(a.bytes))
+          .append(" · 文本 ").append(a.content.length()).append(" 字");
+        if (a.content.startsWith("[二进制文件")) {
+            sb.append("\n\n这是二进制文件，内容不会内联发送，模型只会知道它的存在。");
+        } else {
+            sb.append("\n\n");
+            String body = a.content;
+            int lines = 0;
+            int cut = 0;
+            while (cut < body.length() && lines < 60) {
+                if (body.charAt(cut) == '\n') lines++;
+                cut++;
+            }
+            sb.append(body, 0, cut);
+            if (cut < body.length()) sb.append("\n…（预览只显示前 60 行）");
+        }
+
+        TextView tv = new TextView(this);
+        tv.setText(sb.toString());
+        tv.setTextSize(12);
+        tv.setTextColor(Theme.text());
+        tv.setTextIsSelectable(true);
+        tv.setPadding(dp(20), dp(8), dp(20), dp(4));
+        if (!a.content.startsWith("[二进制文件")) {
+            tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        }
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+
+        new AlertDialog.Builder(this)
+                .setTitle(a.name)
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .setNegativeButton("移除", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        attaches.remove(a);
+                        showAttachment();
+                    }
+                })
+                .show();
     }
 
     private void clearAttachment() {
@@ -1239,7 +1376,6 @@ public final class MainActivity extends Activity {
         return sb.toString().trim();
     }
 
-    /** 用户气泡里显示的附件摘要（不展开内容）。 */
     private String attachSummary() {
         if (attaches.isEmpty()) return "";
         if (attaches.size() == 1) return "\uD83D\uDCCE " + attaches.get(0).name;

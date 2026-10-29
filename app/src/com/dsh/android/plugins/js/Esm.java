@@ -121,19 +121,39 @@ public final class Esm {
         return line.replaceFirst("export\\s+", "");
     }
 
-    /** 源码里是否引用了 Node 专有模块（这些在 Android 上必然跑不了）。 */
+    /**
+     * 源码里是否引用了 Android 上做不到的模块（子进程、原始套接字等）。
+     * fs/path/os/util/url/crypto 有桥接实现，不算在内。
+     */
     public static String firstUnsupportedImport(String source) {
         if (source == null) return null;
-        String[] banned = {"node:fs", "node:path", "node:os", "node:child_process",
-                "node:net", "node:http", "node:crypto", "fs", "child_process", "net"};
         String[] lines = source.split("\n");
         for (String raw : lines) {
             String t = raw.trim();
-            if (!t.startsWith("import ") && !t.startsWith("require(")) continue;
-            for (String b : banned) {
-                if (t.contains("'" + b + "'") || t.contains("\"" + b + "\"")) return b;
+            String mod = null;
+            int q1 = t.indexOf('\'');
+            int q2 = t.lastIndexOf('\'');
+            if (q1 >= 0 && q2 > q1 && (t.startsWith("import ") || t.startsWith("require("))) {
+                mod = t.substring(q1 + 1, q2);
+            } else {
+                int d1 = t.indexOf('"');
+                int d2 = t.lastIndexOf('"');
+                if (d1 >= 0 && d2 > d1 && (t.startsWith("import ") || t.startsWith("require("))) {
+                    mod = t.substring(d1 + 1, d2);
+                }
+            }
+            if (mod == null) continue;
+            if (mod.startsWith("node:")) mod = mod.substring(5);
+            for (String b : BANNED) {
+                if (b.equals(mod)) return mod;
             }
         }
         return null;
     }
+
+    /** Android 上做不到的模块。 */
+    private static final String[] BANNED = {
+            "child_process", "net", "dgram", "worker_threads",
+            "cluster", "vm", "http", "https", "tls", "dns"
+    };
 }

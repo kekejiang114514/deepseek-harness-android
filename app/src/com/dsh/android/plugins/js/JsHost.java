@@ -128,10 +128,13 @@ public final class JsHost {
                     w.getSettings().setAllowFileAccess(false);
                     w.getSettings().setAllowContentAccess(false);
                     w.getSettings().setDomStorageEnabled(false);
+                    w.addJavascriptInterface(
+                            new JsFsBridge(new java.io.File(c.getFilesDir(), "plugin-data")),
+                            "DshFs");
                     w.setWebViewClient(new WebViewClient() {
                         @Override
                         public void onPageFinished(WebView view, String url) {
-                            view.evaluateJavascript(Boot.JS, null);
+                            view.evaluateJavascript(Boot.load(c), null);
                             Runnable cb;
                             synchronized (LOCK) {
                                 booted = true;

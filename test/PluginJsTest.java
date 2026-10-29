@@ -87,9 +87,11 @@ public class PluginJsTest {
         eq(Esm.transform("import './side-effect'"), ";", "副作用导入删除");
 
         System.out.println("t3 不支持的依赖能提前发现");
-        eq(Esm.firstUnsupportedImport("import fs from 'fs'\n"), "fs", "识别 Node fs");
+        ok(Esm.firstUnsupportedImport("import fs from 'fs'\n") == null, "fs 现在由桥接提供，不再拦截");
+        ok(Esm.firstUnsupportedImport("import path from 'node:path'") == null, "path 允许");
         eq(Esm.firstUnsupportedImport("import { spawn } from 'node:child_process'"),
-                "node:child_process", "识别 node:child_process");
+                "child_process", "child_process 仍被拦截（带 node: 前缀也能认）");
+        eq(Esm.firstUnsupportedImport("import net from 'net'"), "net", "net 被拦截");
         ok(Esm.firstUnsupportedImport(GREET) == null, "正常插件不误报");
 
         System.out.println("t4 参数 schema 转换");

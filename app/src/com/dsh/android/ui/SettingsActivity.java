@@ -138,6 +138,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                     }
                 }
             }));
+            a11yHintHost.addView(actionRow("尝试用 root 直接开启", new View.OnClickListener() {
+                public void onClick(View v) { tryRootEnable(); }
+            }));
         } else if (st == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED) {
             a11yHintHost.addView(hintRow("系统里已经打开了这个服务，但当前还没连接上。"
                     + "通常再等一下就好；一直不连的话，把本应用从最近任务里划掉重开一次。"));
@@ -153,6 +156,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("adb", cmd));
                     toast("已复制，连电脑执行即可开启");
                 }
+            }));
+            a11yHintHost.addView(actionRow("尝试用 root 直接开启", new View.OnClickListener() {
+                public void onClick(View v) { tryRootEnable(); }
             }));
         }
     }
@@ -1107,6 +1113,30 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     private String lastResult = null;
 
     public void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
+
+    /** 在后台线程尝试用 root 开启，回来刷新界面。 */
+    private void tryRootEnable() {
+        toast("正在尝试…");
+        final Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            public void run() {
+                String err;
+                if (!com.dsh.android.a11y.A11yAdmin.hasRoot()) {
+                    err = "设备没有 root，这条路走不通。请用系统设置或 ADB 打开。";
+                } else {
+                    err = com.dsh.android.a11y.A11yAdmin.enableWithRoot(app);
+                }
+                final String fe = err;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        refreshValue("__a11y", true);
+                        refreshA11yHint();
+                        toast(fe == null ? "已尝试开启，请回到应用看看状态" : fe);
+                    }
+                });
+            }
+        }, "a11y-root").start();
+    }
 
     // ------------------------------------------------------------ 插件区
 

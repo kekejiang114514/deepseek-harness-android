@@ -66,7 +66,8 @@ python3 "$TOOLS/pack_apk.py" "$OUT/unsigned.apk" \
   z:classes.dex="$OUT/dex/classes.dex" \
   s:resources.arsc="$OUT/resources.arsc" \
   s:res/mipmap/ic_launcher.png="$APP/res/mipmap/ic_launcher.png" \
-  z:res/xml/accessibility_service_config.xml="$OUT/res/xml/accessibility_service_config.xml"
+  z:res/xml/accessibility_service_config.xml="$OUT/res/xml/accessibility_service_config.xml" \
+  z:assets/dsh_boot.js="$APP/assets/dsh_boot.js"
 
 if [ -n "$SKIP_SIGN" ]; then
   echo "跳过签名 -> $OUT/unsigned.apk"

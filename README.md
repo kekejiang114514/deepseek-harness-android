@@ -56,6 +56,9 @@ AI 遇到需要拍板的情况（多个方案、缺你的偏好）会调 `ui.ask
 
 一次可选最多 8 个文件（单个 2 MB，总文本 12 万字符）。重复选同一个文件会去重合并。
 
+选完文件后在输入框上方显示为一排**文件卡片**（类型徽标 · 文件名 · 大小 · ✕ 移除），
+点卡片可以看文件信息和前 60 行内容；发送后消息气泡里同样以卡片呈现附件。
+
 ### 无障碍控制
 
 开启后 AI 能读屏幕内容、点按钮、滑动、输入文字。
@@ -152,9 +155,13 @@ export function apply(ctx) {
 
 **能跑**：`export function apply(ctx)` + `ctx.tools.register(...)`，含 async 工具、`fetch` 请求、TS 的类型标注（`ctx: Context`、`as Foo`、`interface` 会被剥掉）。
 
+**Node 模块**（由 JS 侧 shim + Java 桥提供，`request` 风格照旧）：
+- `fs`（同步与 Promise 两套 API）—— 路径被限制在该插件自己的数据目录里
+- `path` / `os` / `process`（`process.cwd()` 指向插件数据目录）/ `util` / `url` / `crypto`（UUID、randomBytes）
+
 **跑不了**（设置页会直接显示原因，而不是静默失效）：
 - `ctx.on` / `ctx.plugin` / `ctx.service` / `ctx.effect` —— 需要 Cordis 内核
-- `fs`、`child_process`、`net` 等 Node 专有模块
+- `child_process`、`net`、`dgram`、`worker_threads`、`http(s)` 服务端等 —— Android 上没有对应能力
 - 前端 UI 插件（`packages/client/ui-*` 那类）
 - 依赖其他插件提供 service 的组合式插件
 
