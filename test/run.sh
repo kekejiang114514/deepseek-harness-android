@@ -37,11 +37,13 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/com/dsh/android/plugins/js/Ts.java" \
     "$ROOT/app/src/com/dsh/android/plugins/js/Esm.java" \
     "$ROOT/app/src/com/dsh/android/plugins/js/Schema.java" \
+    "$ROOT/app/src/com/dsh/android/market/Tgz.java" \
     "$HERE/CompactTest.java" \
     "$HERE/AskLogTest.java" \
     "$HERE/VersionTest.java" \
     "$HERE/PluginTest.java" \
-    "$HERE/PluginJsTest.java"
+    "$HERE/PluginJsTest.java" \
+    "$HERE/TgzTest.java"
 
 echo "[2/2] 运行"
 java -cp "$OUT:$JSON_JAR" CompactTest
@@ -49,3 +51,4 @@ java -cp "$OUT:$JSON_JAR" AskLogTest
 java -cp "$OUT:$JSON_JAR" VersionTest
 java -cp "$OUT:$JSON_JAR" PluginTest
 java -cp "$OUT:$JSON_JAR" PluginJsTest
+java -cp "$OUT:$JSON_JAR" TgzTest

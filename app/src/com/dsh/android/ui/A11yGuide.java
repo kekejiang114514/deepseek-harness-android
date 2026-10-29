@@ -97,8 +97,9 @@ public final class A11yGuide {
                 + "1. 点下面「去开启」，会直接跳到本应用的无障碍页面\n"
                 + "2. 打开「DShAndroid 无障碍」开关，系统弹窗里点「允许」\n"
                 + "3. 回到这里，状态会自动变成「已连接」\n\n"
-                + "如果开关是灰的、点不动：这是 Android 13 起对侧载安装应用的「受限设置」限制，"
-                + "点该页面右上角 ⋮ → 选「允许受限设置」，再回来打开开关。");
+                + "如果无障碍列表里根本没有「DShAndroid 无障碍」这一项，或者开关是灰的点不动："
+                + "这是 Android 13 起对侧载安装应用的「受限设置」限制。先点下面「应用信息」，"
+                + "在该页面右上角 ⋮ 里选「允许受限设置」，再回到无障碍列表打开开关。");
         int pad = dp(a, 20);
         body.setPadding(pad, dp(a, 4), pad, 0);
 
@@ -118,14 +119,17 @@ public final class A11yGuide {
                     }
                 })
                 .setNegativeButton("稍后", null)
-                .setNeutralButton("复制 ADB 命令", new DialogInterface.OnClickListener() {
+                .setNeutralButton("应用信息", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
-                        android.content.ClipboardManager cm = (android.content.ClipboardManager)
-                                a.getSystemService(Context.CLIPBOARD_SERVICE);
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText(
-                                "adb", com.dsh.android.a11y.A11yState.adbCommand(a)));
-                        android.widget.Toast.makeText(a, "已复制，连电脑执行即可开启",
-                                android.widget.Toast.LENGTH_SHORT).show();
+                        try {
+                            a.startActivity(com.dsh.android.a11y.A11yState.appDetailsIntent(a));
+                            android.widget.Toast.makeText(a,
+                                    "点右上角 ⋮ → 允许受限设置，然后回到无障碍里开启",
+                                    android.widget.Toast.LENGTH_LONG).show();
+                        } catch (Throwable t) {
+                            android.widget.Toast.makeText(a, "无法打开应用信息页",
+                                    android.widget.Toast.LENGTH_LONG).show();
+                        }
                     }
                 })
                 .show();

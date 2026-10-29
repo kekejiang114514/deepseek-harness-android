@@ -1,10 +1,14 @@
 package com.dsh.android.a11y;
 
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.provider.Settings;
+import android.view.accessibility.AccessibilityManager;
 
-import com.dsh.android.a11y.A11yService;
+import java.util.List;
 
 /**
  * 查询「无障碍服务在系统里到底开没开」。
@@ -19,6 +23,14 @@ import com.dsh.android.a11y.A11yService;
 public final class A11yState {
 
     public static final int UNKNOWN = 0;
+    /**
+     * 系统根本没有列出本应用的无障碍服务。
+     *
+     * <p>最常见的原因是 Android 13 起对「侧载安装」的应用默认施加的受限设置：
+     * 无障碍开关会连同整个服务条目一起被隐藏，用户在无障碍列表里根本找不到它，
+     * 也就无从授权。解法是到「应用信息 → 右上角 ⋮ → 允许受限设置」。
+     */
+    public static final int NOT_LISTED = 4;
     /** 系统里没开这个服务。 */
     public static final int OFF = 1;
     /** 系统里开着，但本进程还没连上。 */
@@ -30,7 +42,43 @@ public final class A11yState {
 
     public static int of(Context ctx) {
         if (A11yService.isReady()) return READY;
-        return enabledInSystem(ctx) ? ON_NOT_CONNECTED : OFF;
+        if (enabledInSystem(ctx)) return ON_NOT_CONNECTED;
+        // 已启用列表里没有，再看系统是不是压根没列出这个服务
+        return listedBySystem(ctx) ? OFF : NOT_LISTED;
+    }
+
+    /**
+     * 系统是否把本应用的无障碍服务列了出来。
+     *
+     * <p>这一判断是「受限设置」唯一可行的检测方式：被限制的应用，其服务不会出现在
+     * {@link AccessibilityManager#getInstalledAccessibilityServiceList()} 里，
+     * 而安装包自身是完好的（manifest 与配置 XML 都正确）。
+     */
+    public static boolean listedBySystem(Context ctx) {
+        try {
+            AccessibilityManager am = (AccessibilityManager)
+                    ctx.getSystemService(Context.ACCESSIBILITY_SERVICE);
+            if (am == null) return true;     // 判断不了时按「已列出」处理，别误报
+            List<AccessibilityServiceInfo> list = am.getInstalledAccessibilityServiceList();
+            if (list == null) return true;
+            String pkg = ctx.getPackageName();
+            for (int i = 0; i < list.size(); i++) {
+                AccessibilityServiceInfo info = list.get(i);
+                if (info == null || info.getResolveInfo() == null
+                        || info.getResolveInfo().serviceInfo == null) continue;
+                if (pkg.equals(info.getResolveInfo().serviceInfo.packageName)) return true;
+            }
+            return false;
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    /** 「应用信息」页：允许受限设置就在这里的右上角菜单里。 */
+    public static Intent appDetailsIntent(Context ctx) {
+        Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        i.setData(Uri.parse("package:" + ctx.getPackageName()));
+        return i;
     }
 
     /** 系统设置里是否勾选了本服务。 */
@@ -51,6 +99,7 @@ public final class A11yState {
         switch (of(ctx)) {
             case READY: return "已连接";
             case ON_NOT_CONNECTED: return "系统已开启 · 尚未连接";
+            case NOT_LISTED: return "系统未列出此服务 · 点此处理";
             default: return "未开启 · 点此开启";
         }
     }

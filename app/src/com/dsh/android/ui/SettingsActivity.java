@@ -123,7 +123,22 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (st == com.dsh.android.a11y.A11yState.READY) return;
 
         a11yHintHost.addView(divider());
-        if (st == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED) {
+        if (st == com.dsh.android.a11y.A11yState.NOT_LISTED) {
+            a11yHintHost.addView(hintRow("系统的无障碍列表里没有本应用的服务。"
+                    + "这几乎都是 Android 13 起对「非应用商店安装」的应用施加的受限设置——"
+                    + "开关和服务条目会被一起隐藏，所以你找不到可以打开的地方。\n"
+                    + "解法：点下面的按钮进「应用信息」，点右上角 ⋮，选「允许受限设置」，"
+                    + "再回来就能在无障碍列表里看到它了。"));
+            a11yHintHost.addView(actionRow("打开应用信息（解除受限设置）", new View.OnClickListener() {
+                public void onClick(View v) {
+                    try {
+                        startActivity(com.dsh.android.a11y.A11yState.appDetailsIntent(SettingsActivity.this));
+                    } catch (Exception e) {
+                        toast("无法打开应用信息页");
+                    }
+                }
+            }));
+        } else if (st == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED) {
             a11yHintHost.addView(hintRow("系统里已经打开了这个服务，但当前还没连接上。"
                     + "通常再等一下就好；一直不连的话，把本应用从最近任务里划掉重开一次。"));
         } else {
@@ -229,6 +244,12 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 },
                 new View.OnClickListener() {
                     public void onClick(View v) {
+                        int st = com.dsh.android.a11y.A11yState.of(SettingsActivity.this);
+                        if (st == com.dsh.android.a11y.A11yState.NOT_LISTED) {
+                            // 服务没被系统列出：无障碍页里根本没有这个开关，先去解除受限设置
+                            A11yGuide.showDialog(SettingsActivity.this, false);
+                            return;
+                        }
                         if (!A11yGuide.openSettings(SettingsActivity.this)) {
                             toast("无法打开系统设置，请手动进入 设置 → 无障碍");
                         }
@@ -257,6 +278,16 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         pluginCard.addView(divider());
         pluginCard.addView(actionRow("重新扫描插件", new View.OnClickListener() {
             public void onClick(View v) { rescanPlugins(); }
+        }));
+        pluginCard.addView(divider());
+        pluginCard.addView(actionRow("打开插件市场", new View.OnClickListener() {
+            public void onClick(View v) {
+                try {
+                    startActivity(new Intent(SettingsActivity.this, MarketActivity.class));
+                } catch (Exception e) {
+                    toast("无法打开插件市场");
+                }
+            }
         }));
         pluginCard.addView(divider());
         pluginCard.addView(actionRow("查看插件格式示例", new View.OnClickListener() {

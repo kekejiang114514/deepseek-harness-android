@@ -69,8 +69,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 17
-    a.version_name = '1.0 beta 2'
+    a.version_code = 18
+    a.version_name = '1.0 beta 3'
     a.min_sdk = 23
     a.target_sdk = 29
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
@@ -83,6 +83,8 @@ def build_dshandroid_app():
     # 允许在 Android 10 上以旧式存储访问 /sdcard（全局文件模式需要）
     a.extra_app_attrs = [
         ('requestLegacyExternalStorage', TYPE_BOOL, True),
+        # 插件市场要解析约 3MB 的索引 JSON，给大一点的堆更稳
+        ('largeHeap', TYPE_BOOL, True),
     ]
     # 主界面
     a.components.append(ComponentDef(
@@ -102,6 +104,15 @@ def build_dshandroid_app():
     # 设置页（独立菜单，仿 Minis 的设置入口）
     a.components.append(ComponentDef(
         'activity', '.ui.SettingsActivity', False,
+        attrs=[
+            ('theme', TYPE_REF, 0x0103012c),
+            ('windowSoftInputMode', TYPE_INT_HEX, 0x10),
+            ('configChanges', TYPE_INT_HEX, 0x06A0),
+        ],
+    ))
+    # 插件市场：从 dshmarket 索引一键装插件
+    a.components.append(ComponentDef(
+        'activity', '.ui.MarketActivity', False,
         attrs=[
             ('theme', TYPE_REF, 0x0103012c),
             ('windowSoftInputMode', TYPE_INT_HEX, 0x10),
