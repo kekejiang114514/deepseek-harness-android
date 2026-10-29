@@ -1,4 +1,7 @@
+import com.dsh.android.kernel.ReleasePicker;
 import com.dsh.android.kernel.Version;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /** 版本号比较的纯 JVM 测试（不依赖 Android）。 */
 public class VersionTest {
@@ -14,6 +17,20 @@ public class VersionTest {
             fail++;
             System.out.println("  FAIL  " + msg);
         }
+    }
+
+    static JSONObject rel(String tag, boolean pre) {
+        return rel(tag, pre, false);
+    }
+
+    static JSONObject rel(String tag, boolean pre, boolean draft) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("tag_name", tag);
+            o.put("prerelease", pre);
+            o.put("draft", draft);
+        } catch (Exception ignored) {}
+        return o;
     }
 
     static void eq(String got, String want, String msg) {
@@ -72,6 +89,27 @@ public class VersionTest {
         ok(Version.isNewer("v1.0-beta1", "0.9"), "0.9 用户能看到 1.0 beta 1");
         ok(Version.isNewer("v1.0", "1.0-beta1"), "beta 用户能看到同号正式版");
         ok(!Version.isNewer("v1.0-beta1", "1.0-beta1"), "同一 beta 不重复提示");
+
+        System.out.println("t7 从发布列表挑最高版本");
+        JSONArray rels = new JSONArray();
+        rels.put(rel("v0.9", false));
+        rels.put(rel("v1.0-beta1", true));
+        ok("v1.0-beta1".equals(ReleasePicker.best(rels).optString("tag_name")),
+                "0.9 与 1.0-beta1 并存时选 beta（latest 接口会选错）");
+        rels.put(rel("v1.0", false));
+        ok("v1.0".equals(ReleasePicker.best(rels).optString("tag_name")),
+                "有了正式版选正式版");
+        rels.put(rel("v1.1-draft", false, true));
+        ok("v1.0".equals(ReleasePicker.best(rels).optString("tag_name")),
+                "草稿不参与挑选");
+        JSONArray onlyDraft = new JSONArray();
+        onlyDraft.put(rel("v9.9", false, true));
+        ok(ReleasePicker.bestIndex(onlyDraft) < 0, "全是草稿时返回 -1");
+        ok(ReleasePicker.bestIndex(new JSONArray()) < 0, "空列表返回 -1");
+        JSONArray noise = new JSONArray();
+        noise.put(rel("", false));
+        noise.put(rel("nightly-abc", false));
+        ok(ReleasePicker.bestIndex(noise) < 0, "没有版本号的 tag 被跳过");
 
         System.out.println();
         System.out.println("==== " + pass + " passed, " + fail + " failed ====");

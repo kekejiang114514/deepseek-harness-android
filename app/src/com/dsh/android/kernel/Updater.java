@@ -119,16 +119,8 @@ public final class Updater {
             if (code != 200) throw new Exception("HTTP " + code);
 
             JSONArray arr = new JSONArray(read(c.getInputStream()));
-            Release best = null;
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject o = arr.optJSONObject(i);
-                if (o == null) continue;
-                if (o.optBoolean("draft", false)) continue;
-                Release r = parseOne(o);
-                if (r.tag.length() == 0) continue;
-                if (best == null || compare(r.tag, best.tag) > 0) best = r;
-            }
-            return best;
+            JSONObject best = ReleasePicker.best(arr);
+            return best == null ? null : parseOne(best);
         } finally {
             if (c != null) c.disconnect();
         }

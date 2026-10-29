@@ -29,6 +29,7 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/com/dsh/android/llm/HistoryCompactor.java" \
     "$ROOT/app/src/com/dsh/android/ui/AskLog.java" \
     "$ROOT/app/src/com/dsh/android/kernel/Version.java" \
+    "$ROOT/app/src/com/dsh/android/kernel/ReleasePicker.java" \
     "$ROOT/app/src/com/dsh/android/plugins/Template.java" \
     "$ROOT/app/src/com/dsh/android/plugins/JsonPath.java" \
     "$ROOT/app/src/com/dsh/android/plugins/PluginToolSpec.java" \
