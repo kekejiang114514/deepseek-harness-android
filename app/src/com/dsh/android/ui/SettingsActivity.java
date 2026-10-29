@@ -119,11 +119,27 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     private void refreshA11yHint() {
         if (a11yHintHost == null) return;
         a11yHintHost.removeAllViews();
-        if (A11yService.isReady()) return;
+        int st = com.dsh.android.a11y.A11yState.of(this);
+        if (st == com.dsh.android.a11y.A11yState.READY) return;
+
         a11yHintHost.addView(divider());
-        a11yHintHost.addView(hintRow("屏幕操作依赖系统的无障碍服务，Android 规定只能由你手动开启一次，应用无法自行授权。"
-                + "点上面那一行会直接跳到本应用的开关页；若开关发灰点不动，"
-                + "点该页右上角 ⋮ →「允许受限设置」后再打开。"));
+        if (st == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED) {
+            a11yHintHost.addView(hintRow("系统里已经打开了这个服务，但当前还没连接上。"
+                    + "通常再等一下就好；一直不连的话，把本应用从最近任务里划掉重开一次。"));
+        } else {
+            a11yHintHost.addView(hintRow("屏幕操作依赖系统的无障碍服务，Android 规定只能由你手动开启一次，"
+                    + "应用无法自行授权。点上面那一行会直接跳到本应用的开关页；若开关发灰点不动，"
+                    + "点该页右上角 ⋮ →「允许受限设置」后再打开。"));
+            a11yHintHost.addView(actionRow("复制 ADB 开启命令", new View.OnClickListener() {
+                public void onClick(View v) {
+                    String cmd = com.dsh.android.a11y.A11yState.adbCommand(SettingsActivity.this);
+                    android.content.ClipboardManager cm =
+                            (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("adb", cmd));
+                    toast("已复制，连电脑执行即可开启");
+                }
+            }));
+        }
     }
 
     // ------------------------------------------------------------ 布局
@@ -208,7 +224,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         toolCard.addView(row("开启屏幕操作", "__a11y",
                 new Fmt() {
                     public String get() {
-                        return A11yService.isReady() ? "已连接 · 点击管理" : "未开启 · 点此开启";
+                        return com.dsh.android.a11y.A11yState.describe(SettingsActivity.this);
                     }
                 },
                 new View.OnClickListener() {

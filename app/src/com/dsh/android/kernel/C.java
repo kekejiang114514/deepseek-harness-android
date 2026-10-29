@@ -3,7 +3,7 @@ package com.dsh.android.kernel;
 /** 全局常量与配置。 */
 public final class C {
     public static final String APP_NAME = "DShAndroid";
-    public static final String VERSION = "1.0 beta 1";
+    public static final String VERSION = "1.0 beta 2";
 
     // DeepSeek 默认端点
     public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";

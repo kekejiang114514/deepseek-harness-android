@@ -78,24 +78,29 @@ public class VersionTest {
         ok(Version.isPrerelease("v1.0-rc1"), "rc 是预发布");
         ok(!Version.isPrerelease("v1.0"), "v1.0 不是预发布");
         ok(!Version.isPrerelease("2.0.1+build7"), "构建元数据不算预发布");
-        ok(Version.compare("1.0 beta 1", "0.9") > 0, "1.0 beta 1 比 0.9 新");
+        ok(Version.compare("1.0 beta 1", "0.1") > 0, "1.0 beta 1 比 0.1 新");
+        ok(Version.compare("1.0 beta 2", "1.0 beta 1") > 0, "beta 2 比 beta 1 新");
 
-        System.out.println("t5 真实场景");
-        ok(Version.isNewer("v0.9", "0.7.0"), "0.7.0 用户能看到 v0.9");
-        ok(Version.isNewer("v1.0", "0.9"), "0.9 用户能看到 v1.0");
-        ok(Version.isNewer("v1.0-beta1", "0.9"), "0.9 用户能看到 1.0 beta 1");
+        System.out.println("t5 真实场景（当前编号体系：0.1 -> 1.0 beta 1 -> 1.0 beta 2）");
+        ok(Version.isNewer("v1.0-beta1", "0.1"), "0.1 用户能看到 1.0 beta 1");
+        ok(Version.isNewer("v1.0-beta2", "1.0 beta 1"), "beta1 用户能看到 beta2");
+        ok(!Version.isNewer("v1.0-beta2", "1.0 beta 2"), "同版本不提示");
+        ok(Version.isNewer("v1.0-beta1", "0.9"), "旧的 0.9 安装仍能升到 beta1");
 
-        System.out.println("t6 展示名与 0.9 用户视角");
-        ok(Version.isNewer("v1.0-beta1", "0.9"), "0.9 用户能看到 1.0 beta 1");
+        System.out.println("t6 正式版与 beta 的关系");
         ok(Version.isNewer("v1.0", "1.0-beta1"), "beta 用户能看到同号正式版");
         ok(!Version.isNewer("v1.0-beta1", "1.0-beta1"), "同一 beta 不重复提示");
+        ok(Version.isNewer("v1.0", "1.0-beta2"), "beta2 用户能看到正式版");
 
         System.out.println("t7 从发布列表挑最高版本");
         JSONArray rels = new JSONArray();
-        rels.put(rel("v0.9", false));
+        rels.put(rel("v0.1", false));
         rels.put(rel("v1.0-beta1", true));
         ok("v1.0-beta1".equals(ReleasePicker.best(rels).optString("tag_name")),
-                "0.9 与 1.0-beta1 并存时选 beta（latest 接口会选错）");
+                "0.1 与 1.0-beta1 并存时选 beta（latest 接口会选错）");
+        rels.put(rel("v1.0-beta2", true));
+        ok("v1.0-beta2".equals(ReleasePicker.best(rels).optString("tag_name")),
+                "beta2 比 beta1 高");
         rels.put(rel("v1.0", false));
         ok("v1.0".equals(ReleasePicker.best(rels).optString("tag_name")),
                 "有了正式版选正式版");

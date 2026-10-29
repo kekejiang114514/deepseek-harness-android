@@ -110,6 +110,16 @@ public final class MainActivity extends Activity {
         plugins.reload();
         // 设置页要操作同一份注册表，否则切换开关影响不到真正跑模型的那套工具
         com.dsh.android.plugins.PluginHub.install(plugins);
+        // JS 插件要等 WebView 就绪才能装载，好了之后重扫一次
+        bus.on("plugins.js.ready", new EventBus.Listener() {
+            public void onEvent(String name, Object data) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (plugins != null && !running) plugins.reload();
+                    }
+                });
+            }
+        });
 
         buildUi();
         reloadClient();

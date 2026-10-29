@@ -92,7 +92,8 @@ final class PluginSection {
         col.setBackground(pressable());
 
         TextView title = new TextView(a);
-        title.setText(info.name + "  v" + info.version + (info.builtin ? "  · 内置" : ""));
+        String badge = info.builtin ? "  · 内置" : ("js".equals(info.kind) ? "  · JS" : "");
+        title.setText(info.name + "  v" + info.version + badge);
         title.setTextSize(15);
         title.setTextColor(Theme.text());
         col.addView(title);
@@ -124,6 +125,10 @@ final class PluginSection {
 
     private static String subtitle(PluginManager.Info info) {
         if (info.error != null) return "加载失败：" + info.error;
+        if (info.pending) return "等待 JS 运行时就绪…";
+        if ("js".equals(info.kind) && info.toolCount == 0) {
+            return "没有注册任何工具（只支持 ctx.tools.register 的插件）";
+        }
         StringBuilder sb = new StringBuilder();
         sb.append(info.toolCount).append(" 个工具");
         if (!info.builtin && info.author != null && info.author.length() > 0) {
@@ -155,6 +160,10 @@ final class PluginSection {
         }
         if (info.builtin) {
             sb.append("\n来源：内置");
+        } else if ("js".equals(info.kind)) {
+            sb.append("\n来源：DSH JS 插件（实验性）");
+            sb.append("\n支持：export function apply(ctx) + ctx.tools.register");
+            sb.append("\n不支持：ctx.on / ctx.plugin / ctx.service、Node 模块");
         } else if (info.source != null) {
             sb.append("\n来源：").append(info.source.getAbsolutePath());
         }

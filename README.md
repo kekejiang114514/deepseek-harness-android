@@ -66,6 +66,15 @@ AI 遇到需要拍板的情况（多个方案、缺你的偏好）会调 `ui.ask
 
 ### 插件
 
+两类插件，共用同一个目录 `/sdcard/DShAndroid/plugins/`，靠入口文件区分：
+
+| 入口文件 | 类型 | 能干什么 |
+|---|---|---|
+| `plugin.json` | 声明式 HTTP | 一个文件接任意 HTTP 接口 |
+| `package.json` 或 `plugin.js` | DSH JS 插件 | 跑 DSH 风格的 `apply(ctx)` 代码 |
+
+#### 声明式 HTTP 插件
+
 放一个 `plugin.json` 就能接任意 HTTP 接口，不用改代码、不用重新编译。
 
 插件目录（设置页「插件目录」可复制路径）：
@@ -108,6 +117,37 @@ AI 遇到需要拍板的情况（多个方案、缺你的偏好）会调 `ui.ask
 - 响应最多读 512KB，交给模型前截到 2 万字符
 
 设置页有「查看插件格式示例」，可以直接把示例写进插件目录，改改就是自己的。
+
+#### DSH JS 插件（实验性）
+
+把 DeepSeek Harness 的插件目录丢进来就能跑，形如：
+
+```js
+import { defineTool } from '@deepseek-ai/dsh-tools'
+
+export const name = 'greet-tool'
+
+export function apply(ctx) {
+  ctx.tools.register(defineTool({
+    name: 'greet',
+    description: 'Greet someone by name.',
+    parameters: { name: { type: 'string', required: true } },
+    async execute(args) {
+      return `Hello, ${args.name}!`
+    },
+  }))
+}
+```
+
+执行在系统 WebView 里（原生支持 async/await 与 `fetch`），不需要 Node，也不增加安装包体积。
+
+**能跑**：`export function apply(ctx)` + `ctx.tools.register(...)`，含 async 工具、`fetch` 请求、TS 的类型标注（`ctx: Context`、`as Foo`、`interface` 会被剥掉）。
+
+**跑不了**（设置页会直接显示原因，而不是静默失效）：
+- `ctx.on` / `ctx.plugin` / `ctx.service` / `ctx.effect` —— 需要 Cordis 内核
+- `fs`、`child_process`、`net` 等 Node 专有模块
+- 前端 UI 插件（`packages/client/ui-*` 那类）
+- 依赖其他插件提供 service 的组合式插件
 
 ---
 

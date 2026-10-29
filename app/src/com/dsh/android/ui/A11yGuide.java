@@ -118,6 +118,16 @@ public final class A11yGuide {
                     }
                 })
                 .setNegativeButton("稍后", null)
+                .setNeutralButton("复制 ADB 命令", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                                a.getSystemService(Context.CLIPBOARD_SERVICE);
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText(
+                                "adb", com.dsh.android.a11y.A11yState.adbCommand(a)));
+                        android.widget.Toast.makeText(a, "已复制，连电脑执行即可开启",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
                 .show();
     }
 

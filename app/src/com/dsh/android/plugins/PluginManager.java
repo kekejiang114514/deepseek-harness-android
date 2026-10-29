@@ -3,6 +3,12 @@ package com.dsh.android.plugins;
 import android.content.Context;
 
 import com.dsh.android.kernel.EventBus;
+import com.dsh.android.plugins.js.Esm;
+import com.dsh.android.plugins.js.JsHost;
+import com.dsh.android.plugins.js.JsPluginStore;
+import com.dsh.android.plugins.js.Schema;
+import com.dsh.android.plugins.js.Ts;
+import com.dsh.android.tools.ToolExecutor;
 import com.dsh.android.tools.ToolRuntime;
 
 import java.io.File;
@@ -30,6 +36,10 @@ public final class PluginManager {
         public String description;
         public String author;
         public boolean builtin;
+        /** builtin / http / js */
+        public String kind = "http";
+        /** JS 运行时还没就绪，稍后会自动重试。 */
+        public boolean pending;
         public boolean enabled;
         public int toolCount;
         /** 加载/解析失败原因，null 表示正常。 */
@@ -99,6 +109,7 @@ public final class PluginManager {
             info.description = m.description;
             info.author = m.author;
             info.builtin = true;
+            info.kind = "builtin";
             info.enabled = store.isEnabled(m.id);
             for (int i = 0; i < m.declarations.length(); i++) {
                 org.json.JSONObject d = m.declarations.optJSONObject(i);
@@ -134,6 +145,7 @@ public final class PluginManager {
             info.description = spec.description;
             info.author = spec.author;
             info.builtin = false;
+            info.kind = "http";
             info.enabled = store.isEnabled(spec.id);
             info.source = spec.source;
             for (PluginToolSpec t : spec.tools) info.toolNames.add(t.name);
@@ -168,8 +180,108 @@ public final class PluginManager {
             bus.emit("plugin.loaded", spec.id);
         }
 
+        loadJsPlugins(stat);
+
         bus.emit("plugins.reloaded", stat);
         return stat;
+    }
+
+    /** DSH 风格的 JS 插件：靠系统 WebView 执行，支持 async/await。 */
+    private void loadJsPlugins(Reload stat) {
+        JsPluginStore jsStore = new JsPluginStore(ctx);
+        java.util.List<JsPluginStore.JsPlugin> list;
+        try {
+            list = jsStore.scan();
+        } catch (Throwable t) {
+            stat.errors.add("扫描 JS 插件失败：" + t.getClass().getSimpleName());
+            return;
+        }
+        if (list.isEmpty()) return;
+
+        // WebView 初始化是异步的；没好之前先把插件列出来标为「等待」，就绪后靠事件触发重载
+        final boolean jsReady = JsHost.available();
+        if (!jsReady) {
+            JsHost.ensureAsync(ctx, new Runnable() {
+                public void run() {
+                    bus.emit("plugins.js.ready", null);
+                }
+            });
+        }
+        for (int i = 0; i < list.size(); i++) {
+            final JsPluginStore.JsPlugin jp = list.get(i);
+            final String id = "js." + jp.id;
+
+            Info info = new Info();
+            info.id = id;
+            info.name = jp.name;
+            info.version = jp.version;
+            info.description = jp.description;
+            info.author = "";
+            info.builtin = false;
+            info.kind = "js";
+            info.source = jp.entry;
+            info.enabled = store.isEnabled(id);
+            all.put(id, info);
+
+            if (jp.error != null) {
+                info.error = jp.error;
+                stat.errors.add(info.name + "：" + jp.error);
+                continue;
+            }
+            if (store.isNew(id)) {
+                stat.newCount++;
+                store.markSeen(id);
+            }
+            if (!info.enabled) continue;
+
+            if (!jsReady) {
+                info.pending = true;
+                continue;
+            }
+
+            String err = null;
+            try {
+                String src = JsPluginStore.sourceOf(jp);
+                String transformed = Esm.transform(Ts.strip(src));
+                err = JsHost.load(id, transformed);
+                if (err == null) {
+                    org.json.JSONArray tools = JsHost.describe(id);
+                    for (int k = 0; k < tools.length(); k++) {
+                        org.json.JSONObject t = tools.optJSONObject(k);
+                        if (t == null) continue;
+                        final String toolName = t.optString("name", "");
+                        if (toolName.length() == 0) continue;
+                        org.json.JSONObject schema = Schema.toJsonSchema(t.optJSONObject("parameters"));
+                        final String pid = id;
+                        tools_runtime_register(pid, toolName, t.optString("description", toolName),
+                                schema, new ToolExecutor() {
+                                    public String execute(org.json.JSONObject args) throws Exception {
+                                        return JsHost.call(pid, toolName, args, 30000);
+                                    }
+                                });
+                        info.toolNames.add(toolName);
+                    }
+                    info.toolCount = info.toolNames.size();
+                }
+            } catch (Throwable t) {
+                err = t.getClass().getSimpleName() + "：" + t.getMessage();
+            }
+            if (err != null) {
+                info.error = err;
+                info.toolCount = 0;
+                tools.unregisterPlugin(id);
+                JsHost.unload(id);
+                stat.errors.add(info.name + "：" + err);
+                continue;
+            }
+            stat.enabledCount++;
+            stat.toolCount += info.toolCount;
+        }
+    }
+
+    private void tools_runtime_register(String pluginId, String name, String desc,
+                                        org.json.JSONObject schema, ToolExecutor exec) {
+        tools.registerTool(pluginId, name, desc, schema, exec);
     }
 
     /** 开关一个插件；返回 null 表示成功。 */
