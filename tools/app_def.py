@@ -69,8 +69,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 24
-    a.version_name = '1.0 beta 9'
+    a.version_code = 25
+    a.version_name = '1.0 beta 10'
     a.min_sdk = 23
     a.target_sdk = 29
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
@@ -153,9 +153,9 @@ def build_dshandroid_app():
     # 缺了这份配置，服务能开启但 dump 拿不到节点、手势也被系统拒绝。
     a.components.append(ComponentDef(
         'service', '.a11y.A11yService', True,
+        # 最小化声明：只保留 permission，与标准工具构建的服务结构保持一致
         attrs=[
             ('permission', TYPE_STR, 'android.permission.BIND_ACCESSIBILITY_SERVICE'),
-            ('label', TYPE_STR, 'DShAndroid 无障碍'),
         ],
         children=[
             ('intent-filter', [], [

@@ -48,10 +48,16 @@ def resolve_app(spec):
 
 
 def elem_from_component(c):
-    """把 ComponentDef 转成 axml 的 Elem（含子元素树）。"""
-    attrs = [an('name', TYPE_STR, c.name), an('exported', TYPE_BOOL, c.exported)]
+    """把 ComponentDef 转成 axml 的 Elem（含子元素树）。
+
+    属性顺序：name → 自定义属性 → exported。
+    与手写清单的习惯一致（aapt 会保持 XML 里的书写顺序），
+    也避免 exported 夹在中间干扰阅读与排障。
+    """
+    attrs = [an('name', TYPE_STR, c.name)]
     for name, vtype, value in c.attrs:
         attrs.append(an(name, vtype, value))
+    attrs.append(an('exported', TYPE_BOOL, c.exported))
     children = [_elem_from_tuple(t) for t in c.children]
     return E(c.kind, attrs=attrs, children=children)
 

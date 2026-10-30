@@ -167,6 +167,26 @@ public final class A11yState {
               .append(" flags=0x").append(Integer.toHexString(s2.flags)).append('\n');
         } catch (Throwable ignored) {}
 
+        // 3.6 包里所有 service 的 permission/label（看是不是只有这个服务读不到）
+        try {
+            android.content.pm.PackageInfo pi = ctx.getPackageManager()
+                    .getPackageInfo(ctx.getPackageName(), android.content.pm.PackageManager.GET_SERVICES);
+            sb.append("[3.6] 包内 service 数：")
+              .append(pi.services == null ? 0 : pi.services.length).append('\n');
+            if (pi.services != null) {
+                for (int i = 0; i < pi.services.length; i++) {
+                    android.content.pm.ServiceInfo s = pi.services[i];
+                    sb.append("      ").append(s.name)
+                      .append(" permission=").append(s.permission)
+                      .append(" label=").append(s.nonLocalizedLabel).append('\n');
+                }
+            }
+            sb.append("[3.7] application label=").append(pi.applicationInfo.nonLocalizedLabel)
+              .append(" iconRes=").append(pi.applicationInfo.icon).append('\n');
+        } catch (Throwable t) {
+            sb.append("[3.6] 读取失败：").append(t.getClass().getSimpleName()).append('\n');
+        }
+
         // 4. 无障碍管理器是否列出
         sb.append("[4] 系统无障碍列表：")
           .append(listedBySystem(ctx) ? "已列出" : "未列出").append('\n');
