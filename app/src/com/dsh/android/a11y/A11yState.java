@@ -106,6 +106,11 @@ public final class A11yState {
             boolean utf8 = contains(raw, perm.getBytes("UTF-8"));
             sb.append("清单里含权限声明：").append(utf16 || utf8 ? "是" : "否")
               .append("（utf16=").append(utf16).append(" utf8=").append(utf8).append("）\n");
+
+            // 自己按 AOSP 的规则解一遍清单，看 <service> 上到底挂了哪些属性、
+            // 每个属性算出来的资源 ID 是多少。系统读不到属性，问题一定在这里能看出来。
+            sb.append(com.dsh.android.kernel.AxmlDump.dumpService(
+                    apk, "com.dsh.android.a11y.A11yService"));
         } catch (Throwable t) {
             sb.append("读取安装包失败：").append(t.getClass().getSimpleName()).append('\n');
         }
@@ -153,6 +158,14 @@ public final class A11yState {
         } catch (Throwable t) {
             sb.append("[1] 组件声明：读取失败 — ").append(t).append('\n');
         }
+
+        // 3.5 属性细节：label 是否也被读丢（判断是不是所有属性都没匹配上）
+        try {
+            android.content.pm.ServiceInfo s2 = ctx.getPackageManager().getServiceInfo(cn, 0);
+            sb.append("[3.5] label=").append(s2.nonLocalizedLabel)
+              .append(" process=").append(s2.processName)
+              .append(" flags=0x").append(Integer.toHexString(s2.flags)).append('\n');
+        } catch (Throwable ignored) {}
 
         // 4. 无障碍管理器是否列出
         sb.append("[4] 系统无障碍列表：")
