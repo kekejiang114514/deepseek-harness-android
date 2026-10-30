@@ -70,7 +70,7 @@ def build_dshandroid_app():
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
     a.version_code = 31
-    a.version_name = '1.1'
+    a.version_name = '1.0'
     a.min_sdk = 23
     a.target_sdk = 29
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
