@@ -3,7 +3,7 @@ package com.dsh.android.kernel;
 /** 全局常量与配置。 */
 public final class C {
     public static final String APP_NAME = "DShAndroid";
-    public static final String VERSION = "1.0 beta 12";
+    public static final String VERSION = "1.0 beta 13";
 
     // DeepSeek 默认端点
     public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
@@ -15,11 +15,53 @@ public final class C {
     public static final String KEY_BASE_URL = "base_url";
     public static final String KEY_API_KEY = "api_key";
     public static final String KEY_MODEL = "model";
-    /** 推理等级：替代温度，直接映射到 max_tokens（DeepSeek reasoner 不支持 temperature）。 */
+    /** 推理强度：替代温度，最终映射到 max_tokens（DeepSeek reasoner 不支持 temperature）。 */
     public static final String KEY_REASONING = "reasoning_level";
+
+    /** 六档，从低到高。 */
+    public static final String LEVEL_OFF = "off";
+    public static final String LEVEL_LOW = "low";
+    public static final String LEVEL_MEDIUM = "medium";
+    public static final String LEVEL_HIGH = "high";
+    public static final String LEVEL_XHIGH = "xhigh";
+    public static final String LEVEL_MAX = "max";
+
+    /** 旧版本用的三档，仅用于迁移。 */
     public static final String LEVEL_FAST = "fast";
     public static final String LEVEL_BALANCED = "balanced";
     public static final String LEVEL_DEEP = "deep";
+
+    /** 把已存的等级（可能是旧的三档）统一成六档之一。 */
+    public static String normalizeLevel(String level) {
+        if (level == null) return LEVEL_MEDIUM;
+        if (LEVEL_FAST.equals(level)) return LEVEL_LOW;
+        if (LEVEL_BALANCED.equals(level)) return LEVEL_MEDIUM;
+        if (LEVEL_DEEP.equals(level)) return LEVEL_HIGH;
+        for (String[] row : LEVELS) {
+            if (row[0].equals(level)) return level;
+        }
+        return LEVEL_MEDIUM;
+    }
+
+    /** 六档的 key 与说明。 */
+    public static final String[][] LEVELS = {
+            {LEVEL_OFF, "不推理，直接给答案"},
+            {LEVEL_LOW, "少量思考，响应最快"},
+            {LEVEL_MEDIUM, "日常默认"},
+            {LEVEL_HIGH, "更细致的推理"},
+            {LEVEL_XHIGH, "复杂问题深推理，较慢"},
+            {LEVEL_MAX, "最大强度，耗时明显"},
+    };
+
+    /** 等级 → max_tokens。DeepSeek 接口上限 8192，再高会被拒，所以高档位并列在 8192。 */
+    public static int maxTokensFor(String level) {
+        String l = normalizeLevel(level);
+        if (LEVEL_OFF.equals(l)) return 1024;
+        if (LEVEL_LOW.equals(l)) return 2048;
+        if (LEVEL_MEDIUM.equals(l)) return 4096;
+        if (LEVEL_HIGH.equals(l)) return 6144;
+        return 8192;
+    }
 
     /** 文件作用域：workspace = 只能碰自己的工作区；device = 整个设备。 */
     public static final String KEY_FS_SCOPE = "fs_scope";
