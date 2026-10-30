@@ -497,39 +497,58 @@ public final class MainActivity extends Activity {
         }
 
         box.addView(dividerLine());
-        box.addView(popupLabel("推理"));
 
-        LinearLayout sliderBox = new LinearLayout(this);
-        sliderBox.setOrientation(LinearLayout.VERTICAL);
-        sliderBox.setPadding(dp(12), dp(2), dp(12), dp(8));
+        String curLevel = C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(dp(14), dp(6), dp(14), dp(2));
+
+        TextView headLabel = new TextView(this);
+        headLabel.setText("推理强度");
+        headLabel.setTextSize(11);
+        headLabel.setTextColor(Theme.caption());
+        head.addView(headLabel, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        final TextView headValue = new TextView(this);
+        headValue.setText(com.dsh.android.ui.ReasoningSlider.labelOf(curLevel));
+        headValue.setTextSize(13);
+        headValue.setTypeface(null, Typeface.BOLD);
+        headValue.setTextColor(Theme.text());
+        head.addView(headValue);
+        box.addView(head);
 
         final com.dsh.android.ui.ReasoningSlider slider =
                 new com.dsh.android.ui.ReasoningSlider(this);
-        slider.setLevel(C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM)));
-        sliderBox.addView(slider, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        slider.setLevel(curLevel);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.setMargins(dp(14), dp(4), dp(14), dp(2));
+        slider.setLayoutParams(slp);
 
         final TextView desc = new TextView(this);
         desc.setTextSize(11);
         desc.setTextColor(Theme.text3());
-        desc.setPadding(0, dp(6), 0, 0);
-        String curLevel = C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM));
+        desc.setPadding(dp(14), dp(2), dp(14), dp(8));
         desc.setText(com.dsh.android.ui.ReasoningSlider.descOf(curLevel)
                 + "\u3000输出上限 " + C.maxTokensFor(curLevel) + " tokens");
-        sliderBox.addView(desc);
+        box.addView(slider);
+        box.addView(desc);
 
         slider.setOnChangeListener(new com.dsh.android.ui.ReasoningSlider.OnChange() {
             public void onChanged(int index, String key) {
                 prefs().edit().putString(C.KEY_REASONING, key).apply();
                 reloadClient();
                 refreshModelPill();
+                headValue.setText(com.dsh.android.ui.ReasoningSlider.labelOf(key));
                 desc.setText(com.dsh.android.ui.ReasoningSlider.descOf(key)
                         + "\u3000输出上限 " + C.maxTokensFor(key) + " tokens");
                 desc.setAlpha(0f);
                 desc.animate().alpha(1f).setDuration(180).start();
             }
         });
-        box.addView(sliderBox);
     }
 
     private void applyChoice() {
