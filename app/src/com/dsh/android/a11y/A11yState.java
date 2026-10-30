@@ -87,6 +87,28 @@ public final class A11yState {
 
         sb.append("包名：").append(ctx.getPackageName()).append('\n');
         sb.append("组件：").append(cn.flattenToString()).append('\n');
+        sb.append("应用版本：").append(com.dsh.android.kernel.C.VERSION).append('\n');
+
+        // 直接读已安装 APK 的字节，确认清单里到底有没有那个权限声明。
+        // 这一步是为了把「包不对」和「系统不认」两种情况分开：
+        // 如果这里显示找不到，说明手机上装的包本身就不是构建出来的那个。
+        try {
+            String apkPath = ctx.getPackageCodePath();
+            java.io.File apk = new java.io.File(apkPath);
+            sb.append("安装包：").append(apkPath)
+              .append("（").append(apk.length() / 1024).append("KB）\n");
+            sb.append("安装包时间：").append(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",
+                    java.util.Locale.US).format(new java.util.Date(apk.lastModified()))).append('\n');
+
+            byte[] raw = readEntry(apk, "AndroidManifest.xml");
+            String perm = "android.permission.BIND_ACCESSIBILITY_SERVICE";
+            boolean utf16 = contains(raw, perm.getBytes("UTF-16LE"));
+            boolean utf8 = contains(raw, perm.getBytes("UTF-8"));
+            sb.append("清单里含权限声明：").append(utf16 || utf8 ? "是" : "否")
+              .append("（utf16=").append(utf16).append(" utf8=").append(utf8).append("）\n");
+        } catch (Throwable t) {
+            sb.append("读取安装包失败：").append(t.getClass().getSimpleName()).append('\n');
+        }
 
         // 1. 组件是否在包里
         try {
@@ -138,6 +160,39 @@ public final class A11yState {
         sb.append("[5] 设置里已启用：").append(enabledInSystem(ctx) ? "是" : "否").append('\n');
         sb.append("[6] 服务已连接：").append(A11yService.isReady() ? "是" : "否").append('\n');
         return sb.toString();
+    }
+
+    /** 从 APK zip 里读一个条目（只读，不上传任何东西）。 */
+    private static byte[] readEntry(java.io.File apk, String name) throws Exception {
+        java.util.zip.ZipFile zf = new java.util.zip.ZipFile(apk);
+        try {
+            java.util.zip.ZipEntry e = zf.getEntry(name);
+            if (e == null) throw new Exception("没有 " + name);
+            java.io.InputStream in = zf.getInputStream(e);
+            try {
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+                return bos.toByteArray();
+            } finally {
+                in.close();
+            }
+        } finally {
+            zf.close();
+        }
+    }
+
+    private static boolean contains(byte[] hay, byte[] needle) {
+        if (hay == null || needle == null || needle.length == 0 || hay.length < needle.length) return false;
+        outer:
+        for (int i = 0; i <= hay.length - needle.length; i++) {
+            for (int j = 0; j < needle.length; j++) {
+                if (hay[i + j] != needle[j]) continue outer;
+            }
+            return true;
+        }
+        return false;
     }
 
     /** 「应用信息」页：允许受限设置就在这里的右上角菜单里。 */
