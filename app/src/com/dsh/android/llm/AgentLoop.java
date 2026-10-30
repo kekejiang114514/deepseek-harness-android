@@ -60,7 +60,17 @@ public final class AgentLoop {
 
             JSONArray toolSchemas = tools.schemas();
 
-            for (int step = 0; step < 12; step++) {
+            // 同一工具 + 同一参数、且返回一模一样，说明原地打转。
+            // 命中时在工具结果末尾点明，比让模型自己发现要有效得多。
+            java.util.Map<String, String> seenCalls = new java.util.HashMap<String, String>();
+            // 不是轮数上限，是「原地打转」保险：同一调用连续这么多次返回完全一样的结果，
+            // 说明模型卡住了，再转下去只是烧 token。
+            int stallCount = 0;
+            String lastKey = null;
+
+            // 不设轮数上限：复杂的多步任务（读屏→定位→点击→复查）本来就没法预估步数。
+            // 防止原地打转靠下面的「相同调用 + 相同结果」检测，以及用户随时可点停止。
+            while (true) {
                 if (cancelled) { sink.onError("已停止"); return; }
                 final boolean[] gotToolCall = {false};
                 final StringBuilder textBuf = new StringBuilder();
@@ -89,11 +99,29 @@ public final class AgentLoop {
                         sink.onToolCall(tc.name, tc.args);
                         String result = tools.call(tc.name, tc.args);
                         sink.onToolResult(tc.name, result);
+
+                        String key = tc.name + "\u0000" + tc.args;
+                        String prev = seenCalls.put(key, result);
+                        if (prev != null && prev.equals(result)) {
+                            stallCount = key.equals(lastKey) ? stallCount + 1 : 1;
+                            lastKey = key;
+                            result = result + "\n\n（这与上一次完全相同的调用结果一致，说明没有进展。"
+                                    + "请换参数、换工具，或者直接结束本轮。）";
+                        } else {
+                            stallCount = 0;
+                            lastKey = null;
+                        }
+
                         JSONObject tr = new JSONObject();
                         tr.put("role", "tool");
                         tr.put("tool_call_id", tc.id);
                         tr.put("content", result);
                         history.put(tr);
+                    }
+                    if (stallCount >= 6) {
+                        sink.onError("同一个工具连续 " + stallCount + " 次返回完全相同的结果，"
+                                + "判断为卡住了，已停下。可以换个说法让我重试。");
+                        return;
                     }
                     continue;
                 }
@@ -106,10 +134,19 @@ public final class AgentLoop {
                 }
                 return;
             }
-            sink.onError("达到最大工具调用轮数");
         } catch (Exception e) {
             sink.onError("错误: " + e.getMessage());
         }
+    }
+
+    /** 往历史里插一条给模型的提示（不进界面）。 */
+    private void note(JSONArray history, String text) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("role", "system");
+            o.put("content", text);
+            history.put(o);
+        } catch (Exception ignored) {}
     }
 
     /** 超预算就压缩，并把结果告诉界面。 */
