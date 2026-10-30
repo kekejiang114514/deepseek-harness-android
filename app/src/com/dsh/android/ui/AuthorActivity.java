@@ -36,7 +36,7 @@ public final class AuthorActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Theme.bg());
-        root.addView(Ui.topBar(this, "关于作者"));
+        root.addView(Ui.topBar(this, "关于项目"));
 
         ScrollView sv = new ScrollView(this);
         sv.setFillViewport(true);
@@ -44,42 +44,38 @@ public final class AuthorActivity extends Activity {
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(16), dp(4), dp(16), dp(40));
 
-        // 名字
-        body.addView(Ui.sectionLabel(this, "作者"));
+        // 项目
+        body.addView(Ui.sectionLabel(this, "项目"));
         LinearLayout nameCard = Ui.card(this);
         TextView name = new TextView(this);
         name.setText(About.NAME);
         name.setTextSize(20);
         name.setTextColor(Theme.text());
         name.setTypeface(null, android.graphics.Typeface.BOLD);
-        name.setPadding(dp(16), dp(16), dp(16), dp(2));
+        name.setPadding(dp(16), dp(16), dp(16), dp(6));
         nameCard.addView(name);
-        TextView nick = new TextView(this);
-        nick.setText(About.NICK + " · " + About.TAGLINE);
-        nick.setTextSize(12);
-        nick.setTextColor(Theme.caption());
-        nick.setPadding(dp(16), 0, dp(16), dp(16));
-        nameCard.addView(nick);
+        TextView sub = new TextView(this);
+        sub.setText("MIT 开源 · 纯 Java 构建的 Android DeepSeek 客户端");
+        sub.setTextSize(12);
+        sub.setTextColor(Theme.caption());
+        sub.setPadding(dp(16), 0, dp(16), dp(16));
+        nameCard.addView(sub);
         body.addView(nameCard);
 
         // 链接
         body.addView(Ui.sectionLabel(this, "链接"));
         LinearLayout linkCard = Ui.card(this);
-        linkCard.addView(linkRow("GitHub", "github.com/kekejiang114514", About.GITHUB));
+        linkCard.addView(linkRow("源代码", About.REPO_NAME, About.REPO));
         linkCard.addView(Ui.divider(this));
-        linkCard.addView(linkRow("X / Twitter", About.TWITTER_HANDLE, About.TWITTER));
+        linkCard.addView(linkRow("问题反馈", "提 issue", About.ISSUES));
         linkCard.addView(Ui.divider(this));
-        linkCard.addView(linkRow("Bilibili", About.BILIBILI_LABEL, About.BILIBILI));
-        linkCard.addView(Ui.divider(this));
-        linkCard.addView(linkRow("邮箱", About.EMAIL, "mailto:" + About.EMAIL));
-        linkCard.addView(Ui.divider(this));
-        linkCard.addView(linkRow("项目仓库", About.REPO_NAME, About.REPO));
+        linkCard.addView(linkRow("开源协议", "MIT", About.REPO + "/blob/main/LICENSE"));
         body.addView(linkCard);
 
         body.addView(Ui.hint(this, About.FOOTER));
 
         LinearLayout copyCard = Ui.card(this);
-        copyCard.addView(Ui.action(this, "复制全部链接", new View.OnClickListener() {
+        copyCard.addView(Ui.action(this, "复制项目信息", new View.OnClickListener() {
             public void onClick(View v) { copyAll(); }
         }));
         body.addView(copyCard);
@@ -115,15 +111,12 @@ public final class AuthorActivity extends Activity {
     }
 
     private void copyAll() {
-        String all = "名字：" + About.NAME + "（" + About.NICK + "）\n"
-                + "GitHub: " + About.GITHUB + "\n"
-                + "X: " + About.TWITTER + "\n"
-                + "Bilibili: " + About.BILIBILI + "\n"
-                + "Email: " + About.EMAIL + "\n"
-                + "仓库: " + About.REPO;
+        String all = About.NAME + "\n"
+                + "仓库: " + About.REPO + "\n"
+                + "问题反馈: " + About.ISSUES;
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         cm.setPrimaryClip(ClipData.newPlainText("author", all));
-        Toast.makeText(this, "已复制全部链接", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show();
     }
 
     private void open(String url) {

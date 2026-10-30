@@ -333,7 +333,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             }
         }));
         aboutCard.addView(divider());
-        aboutCard.addView(actionRow("关于作者", new View.OnClickListener() {
+        aboutCard.addView(actionRow("关于项目", new View.OnClickListener() {
             public void onClick(View v) {
                 startActivity(new Intent(SettingsActivity.this, AuthorActivity.class));
             }
@@ -1014,47 +1014,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     // ------------------------------------------------------------ 检查更新
 
     /** 检查更新行的右侧文案：检查中 → 本次结果 → 上次检查时间。 */
-
-    /** 点「开发者」时的说明。 */
-    private void showAuthor() {
-        String text = "名字：" + com.dsh.android.kernel.About.NAME
-                + "（" + com.dsh.android.kernel.About.NICK + "）\n"
-                + com.dsh.android.kernel.About.TAGLINE + "\n\n"
-                + "GitHub     " + com.dsh.android.kernel.About.GITHUB + "\n"
-                + "X          " + com.dsh.android.kernel.About.TWITTER + "\n"
-                + "Bilibili   " + com.dsh.android.kernel.About.BILIBILI + "\n"
-                + "邮箱       " + com.dsh.android.kernel.About.EMAIL + "\n\n"
-                + com.dsh.android.kernel.About.FOOTER;
-
-        TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextSize(13);
-        tv.setTextColor(Theme.text());
-        tv.setTextIsSelectable(true);
-        tv.setPadding(dp(20), dp(8), dp(20), dp(4));
-
-        android.widget.ScrollView sv = new android.widget.ScrollView(this);
-        sv.addView(tv);
-
-        new AlertDialog.Builder(this)
-                .setTitle("关于")
-                .setView(sv)
-                .setPositiveButton("关闭", null)
-                .setNeutralButton("复制全部", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        android.content.ClipboardManager cm = (android.content.ClipboardManager)
-                                getSystemService(Context.CLIPBOARD_SERVICE);
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("about",
-                                "名字：" + com.dsh.android.kernel.About.NAME
-                                        + "\nGitHub: " + com.dsh.android.kernel.About.GITHUB
-                                        + "\nX: " + com.dsh.android.kernel.About.TWITTER
-                                        + "\nBilibili: " + com.dsh.android.kernel.About.BILIBILI
-                                        + "\nEmail: " + com.dsh.android.kernel.About.EMAIL));
-                        toast("已复制");
-                    }
-                })
-                .show();
-    }
 
     private void openUrl(String url) {
         if (url == null || url.length() == 0) return;
