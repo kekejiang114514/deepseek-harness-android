@@ -58,9 +58,24 @@ public final class ReasoningSlider extends View {
 
     private float trackH, knobR, inset, tickR;
 
+    /** 拉满时向右流动的粒子。归一化 x ∈ [0,1]，跨过右端就从左侧重来。 */
+    private static final int PARTICLE_COUNT = 30;
+    private final java.util.ArrayList<Particle> particles = new java.util.ArrayList<Particle>();
+    private long lastFrameNs;
+    private float density = 1f;
+
+    private static final class Particle {
+        float x;
+        float yOff;      // -1..1，垂直位置（相对轨道高度）
+        float speed;     // 每秒前进的归一化距离
+        float radius;    // dp
+        float alpha;
+    }
+
     public ReasoningSlider(Context c) {
         super(c);
         float d = c.getResources().getDisplayMetrics().density;
+        density = d;
         trackH = 26 * d;
         knobR = 15 * d;
         inset = 15 * d;
@@ -151,6 +166,25 @@ public final class ReasoningSlider extends View {
             paint.setShader(null);
         }
 
+        // 拉满时：粒子向右流动（只在填充区域内，被滑块压住的地方自然遮掉）
+        if (bloom > 0.01f) {
+            stepParticles();
+            for (int i = 0; i < particles.size(); i++) {
+                Particle p = particles.get(i);
+                float x = left + (right - left) * p.x;
+                if (x >= fillRight) continue;
+                float y = cy + p.yOff * (trackH * 0.26f);
+                paint.setColor(0xFFFFFFFF);
+                paint.setAlpha((int) (255 * p.alpha * bloom));
+                canvas.drawCircle(x, y, p.radius * density, paint);
+            }
+            paint.setAlpha(255);
+            postInvalidateOnAnimation();
+        } else if (!particles.isEmpty()) {
+            particles.clear();
+            lastFrameNs = 0;
+        }
+
         // 刻度点：均分，压在轨道上
         paint.setColor(0x61FFFFFF);   // 白 38%
         for (int i = 0; i < n; i++) {
@@ -165,6 +199,43 @@ public final class ReasoningSlider extends View {
         paint.setColor(0xFFFFFFFF);
         canvas.drawCircle(knobX, cy, knobR, paint);
         paint.setShadowLayer(0f, 0, 0, 0);
+    }
+
+    // ---------- 粒子 ----------
+
+    private void stepParticles() {
+        long now = System.nanoTime();
+        if (lastFrameNs == 0) lastFrameNs = now;
+        // 掉帧时限制步长，避免粒子一下子跳很远
+        float dt = Math.min(0.05f, (now - lastFrameNs) / 1_000_000_000f);
+        lastFrameNs = now;
+
+        if (particles.isEmpty()) {
+            for (int i = 0; i < PARTICLE_COUNT; i++) particles.add(newParticle(true));
+        }
+        for (int i = 0; i < particles.size(); i++) {
+            Particle p = particles.get(i);
+            p.x += p.speed * dt;
+            if (p.x > 1.02f) {
+                Particle fresh = newParticle(false);
+                p.x = fresh.x;
+                p.yOff = fresh.yOff;
+                p.speed = fresh.speed;
+                p.radius = fresh.radius;
+                p.alpha = fresh.alpha;
+            }
+        }
+    }
+
+    /** scattered=true 时散布在整条轨道上（初始状态），否则从左侧排队进入。 */
+    private Particle newParticle(boolean scattered) {
+        Particle p = new Particle();
+        p.x = scattered ? (float) Math.random() : (float) (-Math.random() * 0.25f);
+        p.yOff = (float) (Math.random() * 2 - 1) * 0.8f;
+        p.speed = 0.16f + (float) Math.random() * 0.22f;
+        p.radius = 0.7f + (float) Math.random() * 0.9f;
+        p.alpha = 0.25f + (float) Math.random() * 0.45f;
+        return p;
     }
 
     // ---------- 交互 ----------
