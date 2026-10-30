@@ -105,22 +105,39 @@ public final class ApkInstaller {
     }
 
     /**
-     * 用系统安装器安装：写会话 → 注册结果监听 → commit。
-     * 回调在主线程；Android 8+ 首次需要用户允许「安装未知应用」。
+     * 交给系统安装器装。
+     *
+     * <p>优先走 {@code ACTION_VIEW + content://}：这是最通用的路径，会直接弹出系统安装界面，
+     * 用户在界面上看到的就是标准的「安装 / 取消」。之前用 PackageInstaller 会话的方式，
+     * 在我们这种手工构建的包里拿到过 status=-1（广播里没有状态），用户只看到一句失败，
+     * 所以改成以 ACTION_VIEW 为主、PackageInstaller 作为兜底。
      */
     public static void install(final Context ctx, final File apk, final Callback cb) {
         final Handler ui = new Handler(Looper.getMainLooper());
         if (!canInstall(ctx)) {
             ui.post(new Runnable() {
                 public void run() {
-                    if (cb != null) {
-                        cb.onDone("需要先允许「安装未知应用」");
-                    }
+                    if (cb != null) cb.onDone("需要先允许「安装未知应用」");
                 }
             });
             return;
         }
 
+        // 1) 标准路径
+        try {
+            android.net.Uri uri = ApkProvider.uriFor(apk.getName());
+            Intent view = new Intent(Intent.ACTION_VIEW);
+            view.setDataAndType(uri, "application/vnd.android.package-archive");
+            view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(view);
+            if (cb != null) cb.onDone(null);
+            return;
+        } catch (Throwable first) {
+            // 落到兜底方案
+        }
+
+        // 2) 兜底：PackageInstaller 会话
         new Thread(new Runnable() {
             public void run() {
                 String err = null;
@@ -147,8 +164,6 @@ public final class ApkInstaller {
                         try { os.close(); } catch (Exception ignored) {}
                         try { in.close(); } catch (Exception ignored) {}
                     }
-
-                    // 先挂监听再 commit，否则可能漏掉很快返回的结果
                     watchResult(ctx, sessionId, cb);
                     commit(ctx, session, sessionId);
                 } catch (Throwable t) {

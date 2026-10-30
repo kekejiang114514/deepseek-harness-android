@@ -69,8 +69,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 21
-    a.version_name = '1.0 beta 6'
+    a.version_code = 22
+    a.version_name = '1.0 beta 7'
     a.min_sdk = 23
     a.target_sdk = 29
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
@@ -119,6 +119,32 @@ def build_dshandroid_app():
             ('theme', TYPE_REF, 0x0103012c),
             ('windowSoftInputMode', TYPE_INT_HEX, 0x10),
             ('configChanges', TYPE_INT_HEX, 0x06A0),
+        ],
+    ))
+    # 关于软件
+    a.components.append(ComponentDef(
+        'activity', '.ui.AboutActivity', False,
+        attrs=[
+            ('theme', TYPE_REF, 0x0103012c),
+            ('windowSoftInputMode', TYPE_INT_HEX, 0x10),
+            ('configChanges', TYPE_INT_HEX, 0x06A0),
+        ],
+    ))
+    # 关于作者
+    a.components.append(ComponentDef(
+        'activity', '.ui.AuthorActivity', False,
+        attrs=[
+            ('theme', TYPE_REF, 0x0103012c),
+            ('windowSoftInputMode', TYPE_INT_HEX, 0x10),
+            ('configChanges', TYPE_INT_HEX, 0x06A0),
+        ],
+    ))
+    # 安装包分发：自实现的 FileProvider（零依赖，只读 cache/apk/）
+    a.components.append(ComponentDef(
+        'provider', '.kernel.ApkProvider', False,
+        attrs=[
+            ('authorities', TYPE_STR, 'com.dsh.android.apk'),
+            ('grantUriPermissions', TYPE_BOOL, True),
         ],
     ))
     # 无障碍服务。

@@ -119,17 +119,36 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     private void refreshA11yHint() {
         if (a11yHintHost == null) return;
         a11yHintHost.removeAllViews();
-        int st = com.dsh.android.a11y.A11yState.of(this);
-        if (st == com.dsh.android.a11y.A11yState.READY) return;
 
-        a11yHintHost.addView(divider());
-        if (st == com.dsh.android.a11y.A11yState.NOT_LISTED) {
-            a11yHintHost.addView(hintRow("系统的无障碍列表里没有本应用的服务。"
-                    + "这几乎都是 Android 13 起对「非应用商店安装」的应用施加的受限设置——"
-                    + "开关和服务条目会被一起隐藏，所以你找不到可以打开的地方。\n"
-                    + "解法：点下面的按钮进「应用信息」，点右上角 ⋮，选「允许受限设置」，"
-                    + "再回来就能在无障碍列表里看到它了。"));
-            a11yHintHost.addView(actionRow("打开应用信息（解除受限设置）", new View.OnClickListener() {
+        int st = com.dsh.android.a11y.A11yState.of(this);
+
+        if (st == com.dsh.android.a11y.A11yState.READY) {
+            a11yHintHost.addView(divider());
+            a11yHintHost.addView(hintRow("无障碍服务已连接，屏幕操作可用。"));
+        } else if (st == com.dsh.android.a11y.A11yState.NOT_LISTED) {
+            a11yHintHost.addView(divider());
+            a11yHintHost.addView(hintRow("系统没有列出本应用的无障碍服务，所以无障碍列表里找不到可以打开的开关。"
+                    + "下面几个入口按顺序试，最后一项会生成一份逐项检查结果。"));
+        } else if (st == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED) {
+            a11yHintHost.addView(divider());
+            a11yHintHost.addView(hintRow("系统里已经打开了这个服务，但当前还没连接上。"
+                    + "通常再等一下就好；一直不连的话，把本应用从最近任务里划掉重开一次。"));
+        } else {
+            a11yHintHost.addView(divider());
+            a11yHintHost.addView(hintRow("屏幕操作依赖系统的无障碍服务，需要你在系统设置里开启一次。"
+                    + "点上面那一行会直接跳到本应用的开关页。"));
+        }
+
+        // 下面这些在所有未连接状态下都提供，顺序＝建议尝试的顺序
+        if (st != com.dsh.android.a11y.A11yState.READY) {
+            a11yHintHost.addView(actionRow("打开无障碍设置", new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (!A11yGuide.openSettings(SettingsActivity.this)) {
+                        toast("无法打开系统设置，请手动进入 设置 → 无障碍");
+                    }
+                }
+            }));
+            a11yHintHost.addView(actionRow("打开应用信息（部分系统需先解除限制）", new View.OnClickListener() {
                 public void onClick(View v) {
                     try {
                         startActivity(com.dsh.android.a11y.A11yState.appDetailsIntent(SettingsActivity.this));
@@ -141,26 +160,19 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             a11yHintHost.addView(actionRow("尝试用 root 直接开启", new View.OnClickListener() {
                 public void onClick(View v) { tryRootEnable(); }
             }));
-        } else if (st == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED) {
-            a11yHintHost.addView(hintRow("系统里已经打开了这个服务，但当前还没连接上。"
-                    + "通常再等一下就好；一直不连的话，把本应用从最近任务里划掉重开一次。"));
-        } else {
-            a11yHintHost.addView(hintRow("屏幕操作依赖系统的无障碍服务，Android 规定只能由你手动开启一次，"
-                    + "应用无法自行授权。点上面那一行会直接跳到本应用的开关页；若开关发灰点不动，"
-                    + "点该页右上角 ⋮ →「允许受限设置」后再打开。"));
-            a11yHintHost.addView(actionRow("复制 ADB 开启命令", new View.OnClickListener() {
-                public void onClick(View v) {
-                    String cmd = com.dsh.android.a11y.A11yState.adbCommand(SettingsActivity.this);
-                    android.content.ClipboardManager cm =
-                            (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                    cm.setPrimaryClip(android.content.ClipData.newPlainText("adb", cmd));
-                    toast("已复制，连电脑执行即可开启");
-                }
-            }));
-            a11yHintHost.addView(actionRow("尝试用 root 直接开启", new View.OnClickListener() {
-                public void onClick(View v) { tryRootEnable(); }
-            }));
         }
+
+        a11yHintHost.addView(actionRow("复制无障碍诊断信息", new View.OnClickListener() {
+            public void onClick(View v) {
+                String d = com.dsh.android.a11y.A11yState.selfTest(SettingsActivity.this)
+                        + "\n----\n"
+                        + com.dsh.android.a11y.A11yAdmin.diagnostics(SettingsActivity.this);
+                android.content.ClipboardManager cm =
+                        (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("a11y", d));
+                toast("已复制，粘贴发给开发者即可定位问题");
+            }
+        }));
     }
 
     // ------------------------------------------------------------ 布局
@@ -330,89 +342,17 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         // ---- 关于 ----
         body.addView(sectionLabel("关于"));
         LinearLayout aboutCard = card();
-        aboutCard.addView(row("版本", null, new Fmt() { public String get() { return C.VERSION; } }, null, false));
-        aboutCard.addView(divider());
-        aboutCard.addView(row("模型来源", null,
-                new Fmt() {
-                    public String get() {
-                        int n = cachedModels().size();
-                        return n == 0 ? "未读取" : "接口读取 · " + n + " 个";
-                    }
-                }, null, false));
-        aboutCard.addView(divider());
-        aboutCard.addView(row("开发者", null, new Fmt() {
-            public String get() {
-                return com.dsh.android.kernel.About.NAME
-                        + "（" + com.dsh.android.kernel.About.NICK + "）";
-            }
-        }, new View.OnClickListener() {
+        aboutCard.addView(actionRow("关于软件", new View.OnClickListener() {
             public void onClick(View v) {
-                showAuthor();
+                startActivity(new Intent(SettingsActivity.this, AboutActivity.class));
             }
-        }, true));
+        }));
         aboutCard.addView(divider());
-        aboutCard.addView(row("项目仓库", null, new Fmt() {
-            public String get() { return com.dsh.android.kernel.About.REPO_NAME; }
-        }, new View.OnClickListener() {
+        aboutCard.addView(actionRow("关于作者", new View.OnClickListener() {
             public void onClick(View v) {
-                openUrl(com.dsh.android.kernel.About.REPO);
+                startActivity(new Intent(SettingsActivity.this, AuthorActivity.class));
             }
-        }, true));
-        aboutCard.addView(divider());
-        aboutCard.addView(row("GitHub", null, new Fmt() {
-            public String get() { return "@" + com.dsh.android.kernel.About.NAME; }
-        }, new View.OnClickListener() {
-            public void onClick(View v) {
-                openUrl(com.dsh.android.kernel.About.GITHUB);
-            }
-        }, true));
-        aboutCard.addView(divider());
-        aboutCard.addView(row("X / Twitter", null, new Fmt() {
-            public String get() { return com.dsh.android.kernel.About.TWITTER_HANDLE; }
-        }, new View.OnClickListener() {
-            public void onClick(View v) {
-                openUrl(com.dsh.android.kernel.About.TWITTER);
-            }
-        }, true));
-        aboutCard.addView(divider());
-        aboutCard.addView(row("Bilibili", null, new Fmt() {
-            public String get() { return "673542910"; }
-        }, new View.OnClickListener() {
-            public void onClick(View v) {
-                openUrl(com.dsh.android.kernel.About.BILIBILI);
-            }
-        }, true));
-        aboutCard.addView(divider());
-        aboutCard.addView(row("邮箱", null, new Fmt() {
-            public String get() { return com.dsh.android.kernel.About.EMAIL; }
-        }, new View.OnClickListener() {
-            public void onClick(View v) {
-                try {
-                    startActivity(new Intent(Intent.ACTION_SENDTO,
-                            android.net.Uri.parse("mailto:" + com.dsh.android.kernel.About.EMAIL)));
-                } catch (Exception e) {
-                    android.content.ClipboardManager cm = (android.content.ClipboardManager)
-                            getSystemService(Context.CLIPBOARD_SERVICE);
-                    cm.setPrimaryClip(android.content.ClipData.newPlainText("mail",
-                            com.dsh.android.kernel.About.EMAIL));
-                    toast("没有邮件应用，已复制地址");
-                }
-            }
-        }, true));
-        aboutCard.addView(divider());
-        aboutCard.addView(row("检查更新", "update_status", new Fmt() {
-            public String get() { return updateStatusText(); }
-        }, new View.OnClickListener() {
-            public void onClick(View v) { checkUpdate(); }
-        }, true));
-        aboutCard.addView(divider());
-        aboutCard.addView(switchRow("自动检查更新", "每次打开应用时查一次，每天最多一次",
-                Updater.autoEnabled(this), new CompoundCallback() {
-                    public void onChanged(boolean checked) {
-                        Updater.setAutoEnabled(SettingsActivity.this, checked);
-                        refreshValue("update_status", true);
-                    }
-                }));
+        }));
         body.addView(aboutCard);
 
         sv.addView(body);
@@ -1089,181 +1029,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     // ------------------------------------------------------------ 检查更新
 
     /** 检查更新行的右侧文案：检查中 → 本次结果 → 上次检查时间。 */
-    private String updateStatusText() {
-        if (checking) return "检查中…";
-        if (lastResult != null) return lastResult;
-        String err = Updater.lastError(this);
-        if (err != null && err.length() > 0) return "上次失败";
-        String tag = Updater.lastTag(this);
-        if (tag != null && tag.length() > 0) return "已是最新 " + tag;
-        return Updater.lastCheckedText(this);
-    }
-
-    private void checkUpdate() {
-        if (checking) return;
-        checking = true;
-        lastResult = null;
-        refreshValue("update_status", true);
-
-        Updater.checkAsync(this, new Updater.Callback() {
-            public void onResult(Updater.Release r, String error) {
-                checking = false;
-                if (error != null) {
-                    lastResult = "检查失败";
-                    refreshValue("update_status", true);
-                    toast("检查更新失败：" + error);
-                    return;
-                }
-                if (r == null) {
-                    lastResult = "已是最新";
-                    refreshValue("update_status", true);
-                    toast("当前已是最新版本 " + C.VERSION);
-                    return;
-                }
-                lastResult = "有新版本 " + r.version;
-                refreshValue("update_status", true);
-                showUpdateDialog(r);
-            }
-        });
-    }
-
-    /** 有新版本时的对话框：直接给下载入口，不让用户自己去找。 */
-    private void showUpdateDialog(final Updater.Release r) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("当前 ").append(C.VERSION).append("  →  最新 ").append(r.version);
-        if (r.apkSize > 0) sb.append("\n安装包 ").append(r.sizeText());
-
-        String notes = r.notes == null ? "" : r.notes.trim();
-        if (notes.length() > 0) {
-            // 发布说明可能很长，截前几行，完整内容去发布页看
-            String[] lines = notes.split("\n");
-            StringBuilder cut = new StringBuilder();
-            for (int i = 0; i < lines.length && i < 8; i++) cut.append(lines[i]).append("\n");
-            if (lines.length > 8) cut.append("…");
-            sb.append("\n\n").append(cut.toString().trim());
-        }
-
-        new AlertDialog.Builder(this)
-                .setTitle("发现新版本 " + r.version)
-                .setMessage(sb.toString())
-                .setPositiveButton("下载并安装", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        if (!r.hasApk()) {
-                            toast("这个版本没有附带安装包，去发布页看看");
-                            openUrl(r.pageUrl);
-                            return;
-                        }
-                        startUpdate(r);
-                    }
-                })
-                .setNeutralButton("发布页", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) { openUrl(r.pageUrl); }
-                })
-                .setNegativeButton("稍后", null)
-                .show();
-    }
-
-    /** 下载 → 完成后直接弹系统安装界面。 */
-    private void startUpdate(final Updater.Release r) {
-        if (!com.dsh.android.kernel.ApkInstaller.canInstall(this)) {
-            new AlertDialog.Builder(this)
-                    .setTitle("需要安装权限")
-                    .setMessage("Android 8 起，应用要安装更新需要你允许「安装未知应用」。"
-                            + "点「去设置」打开本应用的开关，回来再点一次更新即可。")
-                    .setPositiveButton("去设置", new DialogInterface.OnClickListener() {
-                        public void onClick(DialogInterface d, int w) {
-                            try {
-                                Intent i = new Intent(android.provider.Settings
-                                        .ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                        android.net.Uri.parse("package:" + getPackageName()));
-                                startActivity(i);
-                            } catch (Exception e) {
-                                toast("无法打开设置，请手动到 设置 → 应用 → 特殊权限 里允许");
-                            }
-                        }
-                    })
-                    .setNegativeButton("取消", null)
-                    .show();
-            return;
-        }
-
-        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
-        pd.setTitle("正在下载更新");
-        pd.setMessage("0%");
-        pd.setCancelable(true);
-        pd.show();
-
-        new Thread(new Runnable() {
-            public void run() {
-                try {
-                    final java.io.File apk = com.dsh.android.kernel.ApkInstaller.download(
-                            SettingsActivity.this, r.apkUrl,
-                            new com.dsh.android.kernel.ApkInstaller.Progress() {
-                                public void onProgress(final long done, final long total) {
-                                    runOnUiThread(new Runnable() {
-                                        public void run() {
-                                            pd.setMessage((done * 100 / Math.max(1, total)) + "%"
-                                                    + "（" + (done / 1024) + "KB / " + (total / 1024) + "KB）");
-                                        }
-                                    });
-                                }
-                            });
-                    runOnUiThread(new Runnable() {
-                        public void run() {
-                            dismissQuietly(pd);
-                            confirmInstall(apk);
-                        }
-                    });
-                } catch (final Throwable t) {
-                    runOnUiThread(new Runnable() {
-                        public void run() {
-                            dismissQuietly(pd);
-                            new AlertDialog.Builder(SettingsActivity.this)
-                                    .setTitle("下载失败")
-                                    .setMessage(t.getMessage() == null
-                                            ? t.getClass().getSimpleName() : t.getMessage())
-                                    .setPositiveButton("去发布页", new DialogInterface.OnClickListener() {
-                                        public void onClick(DialogInterface d, int w) {
-                                            openUrl(r.pageUrl);
-                                        }
-                                    })
-                                    .setNegativeButton("取消", null)
-                                    .show();
-                        }
-                    });
-                }
-            }
-        }, "apk-download").start();
-    }
-
-    private void confirmInstall(final java.io.File apk) {
-        long mb = Math.max(1, apk.length() / 1048576);
-        new AlertDialog.Builder(this)
-                .setTitle("下载完成")
-                .setMessage("安装包已下载（约 " + mb + "MB）。\n\n"
-                        + "点「立即安装」后系统会弹出安装确认，装完会保留你的设置与对话。")
-                .setPositiveButton("立即安装", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        com.dsh.android.kernel.ApkInstaller.install(
-                                SettingsActivity.this, apk,
-                                new com.dsh.android.kernel.ApkInstaller.Callback() {
-                                    public void onDone(final String err) {
-                                        if (err != null) {
-                                            toast("安装未完成：" + err);
-                                        }
-                                    }
-                                });
-                    }
-                })
-                .setNegativeButton("稍后", null)
-                .show();
-    }
-
-    private void dismissQuietly(android.app.Dialog d) {
-        try {
-            if (d != null && d.isShowing()) d.dismiss();
-        } catch (Throwable ignored) {}
-    }
 
     /** 点「开发者」时的说明。 */
     private void showAuthor() {
