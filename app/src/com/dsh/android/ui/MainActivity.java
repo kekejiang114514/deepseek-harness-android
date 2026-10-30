@@ -125,6 +125,7 @@ public final class MainActivity extends Activity {
         buildUi();
         reloadClient();
         renderHistory();
+        playSplash();
         reportLastCrash();
         maybeCheckUpdate();
     }
@@ -661,6 +662,56 @@ public final class MainActivity extends Activity {
         t.setLineSpacing(dp(2), 1f);
         t.setPadding(dp(14), dp(7), dp(14), dp(7));
         return t;
+    }
+
+    /** 每次进程只放一次开屏，转屏/重建不重播。 */
+    private static boolean splashDone = false;
+
+    /**
+     * 开屏动画：屏幕中间一个应用图标，除此之外什么都没有。
+     *
+     * <p>图标直接从 PackageManager 取（本工程没有 R 类，走资源 ID 反而不方便），
+     * 淡入 + 轻微放大，停一下再整体淡出，然后移除遮罩——期间不拦截点击之外的任何东西。
+     */
+    private void playSplash() {
+        if (splashDone) return;
+        splashDone = true;
+
+        final android.view.ViewGroup content = findViewById(android.R.id.content);
+        if (content == null) return;
+
+        final FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Theme.bg());
+        overlay.setClickable(true);
+
+        android.widget.ImageView icon = new android.widget.ImageView(this);
+        try {
+            icon.setImageDrawable(getPackageManager().getApplicationIcon(getPackageName()));
+        } catch (Throwable ignored) {}
+        int size = dp(96);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size, Gravity.CENTER);
+        overlay.addView(icon, lp);
+
+        icon.setAlpha(0f);
+        icon.setScaleX(0.88f);
+        icon.setScaleY(0.88f);
+
+        content.addView(overlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        icon.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(280).start();
+
+        overlay.postDelayed(new Runnable() {
+            public void run() {
+                overlay.animate().alpha(0f).setDuration(260).withEndAction(new Runnable() {
+                    public void run() {
+                        try {
+                            content.removeView(overlay);
+                        } catch (Throwable ignored) {}
+                    }
+                }).start();
+            }
+        }, 620);
     }
 
     private LinearLayout buildDrawer() {
