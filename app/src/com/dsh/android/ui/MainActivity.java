@@ -54,6 +54,8 @@ public final class MainActivity extends Activity {
     private EditText input;
     private TextView sendBtn;
     private TextView titleView;
+    private TextView modelPill;
+    private android.widget.PopupWindow modelPopup;
     private LinearLayout attachBar;
     private View scrim;
     private LinearLayout drawer;
@@ -214,6 +216,8 @@ public final class MainActivity extends Activity {
         // 空闲时重扫一次，保证模型下一轮看到的工具是最新的（生成中不动，避免抽掉正在等的工具）
         if (!running && plugins != null) plugins.reload();
         if (titleView != null) titleView.setText(currentTitle());
+        // 设置页可能改过模型/等级，回来刷新胶囊上的字
+        refreshModelPill();
     }
 
     private void fadeInContent() {
@@ -234,6 +238,7 @@ public final class MainActivity extends Activity {
 
         // 自绘顶栏：显示当前会话标题（系统 ActionBar 已在 onCreate 里去掉）
         col.addView(buildHeader());
+        col.addView(buildModelBar());
 
         // 消息区
         messageScroll = new ScrollView(this);
@@ -394,6 +399,238 @@ public final class MainActivity extends Activity {
         bar.addView(gear, new LinearLayout.LayoutParams(dp(44), dp(52)));
 
         return bar;
+    }
+
+    /** 标题下方的模型/推理胶囊：一行小字 + 向下三角，点开是气泡菜单。 */
+    private View buildModelBar() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        row.setBackgroundColor(Theme.bg());
+        row.setPadding(0, 0, 0, dp(6));
+
+        modelPill = new TextView(this);
+        modelPill.setTextSize(12);
+        modelPill.setTextColor(Theme.text2());
+        modelPill.setPadding(dp(12), dp(5), dp(11), dp(5));
+        modelPill.setBackground(Theme.round(Theme.panel(), Theme.R_XL, this));
+        modelPill.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showModelPopup(v); }
+        });
+        row.addView(modelPill);
+        refreshModelPill();
+        return row;
+    }
+
+    private SharedPreferences prefs() {
+        return getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
+    }
+
+    private String currentModel() {
+        String m = prefs().getString(C.KEY_MODEL, "");
+        if (m == null || m.length() == 0) m = C.MODEL_CHAT;
+        return m;
+    }
+
+    private static String levelLabel(String k) {
+        if (C.LEVEL_FAST.equals(k)) return "快速";
+        if (C.LEVEL_DEEP.equals(k)) return "深度";
+        return "标准";
+    }
+
+    private void refreshModelPill() {
+        if (modelPill == null) return;
+        String lvl = prefs().getString(C.KEY_REASONING, C.LEVEL_BALANCED);
+        modelPill.setText(currentModel() + "  ·  " + levelLabel(lvl) + "   \u25BE");
+    }
+
+    /** 气泡式下拉：上面模型列表，下面推理等级。 */
+    private void showModelPopup(View anchor) {
+        if (modelPopup != null && modelPopup.isShowing()) {
+            modelPopup.dismiss();
+            return;
+        }
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackground(Theme.round(Theme.panel(), Theme.R_XL, this));
+        box.setPadding(dp(6), dp(8), dp(6), dp(8));
+        fillPopup(box);
+
+        int width = Math.min(dp(300), getResources().getDisplayMetrics().widthPixels - dp(32));
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.setVerticalScrollBarEnabled(false);
+        sv.addView(box);
+
+        final android.widget.PopupWindow pw = new android.widget.PopupWindow(sv,
+                width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        pw.setBackgroundDrawable(null);
+        pw.setOutsideTouchable(true);
+        pw.setElevation(dp(8));
+        modelPopup = pw;
+        pw.showAsDropDown(anchor, 0, dp(4));
+
+        // 第一次打开且缓存为空：后台拉一次模型列表
+        if (cachedModels().isEmpty() && prefs().getString(C.KEY_API_KEY, "").length() > 0) {
+            fetchModelsIntoPopup();
+        }
+    }
+
+    private void fillPopup(final LinearLayout box) {
+        box.removeAllViews();
+
+        box.addView(popupLabel("模型"));
+        List<String> models = cachedModels();
+        final String cur = currentModel();
+        if (models.isEmpty()) {
+            box.addView(popupHint("还没有读取到模型列表"));
+            box.addView(popupRow("读取模型列表", false, new View.OnClickListener() {
+                public void onClick(View v) { fetchModelsIntoPopup(); }
+            }));
+        } else {
+            for (int i = 0; i < models.size(); i++) {
+                final String m = models.get(i);
+                box.addView(popupRow(m, m.equals(cur), new View.OnClickListener() {
+                    public void onClick(View v) {
+                        prefs().edit().putString(C.KEY_MODEL, m).apply();
+                        applyChoice();
+                    }
+                }));
+            }
+        }
+
+        box.addView(dividerLine());
+        box.addView(popupLabel("推理等级"));
+        String lvl = prefs().getString(C.KEY_REASONING, C.LEVEL_BALANCED);
+        String[][] levels = {
+                {C.LEVEL_FAST, "快速", "回答更短，适合闲聊和简单问题"},
+                {C.LEVEL_BALANCED, "标准", "日常默认"},
+                {C.LEVEL_DEEP, "深度", "输出更长，适合写代码和长推理"},
+        };
+        for (int i = 0; i < levels.length; i++) {
+            final String key = levels[i][0];
+            boolean on = key.equals(lvl);
+            String title = levels[i][1] + (on ? "  \u2713" : "");
+            TextView row = popupRowWithSub(title, levels[i][2], on);
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    prefs().edit().putString(C.KEY_REASONING, key).apply();
+                    applyChoice();
+                }
+            });
+            box.addView(row);
+        }
+    }
+
+    private void applyChoice() {
+        reloadClient();
+        refreshModelPill();
+        if (modelPopup != null) modelPopup.dismiss();
+    }
+
+    private List<String> cachedModels() {
+        List<String> out = new java.util.ArrayList<String>();
+        try {
+            String raw = prefs().getString("models_cache", "");
+            if (raw == null || raw.length() == 0) return out;
+            org.json.JSONArray arr = new org.json.JSONArray(raw);
+            for (int i = 0; i < arr.length(); i++) out.add(arr.optString(i, ""));
+        } catch (Exception ignored) {}
+        return out;
+    }
+
+    private void fetchModelsIntoPopup() {
+        final String base = prefs().getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
+        final String key = prefs().getString(C.KEY_API_KEY, "");
+        if (key.length() == 0) {
+            Toast.makeText(this, "先在设置里填写 API Key", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Toast.makeText(this, "正在读取模型列表…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            public void run() {
+                List<String> got = null;
+                String err = null;
+                try {
+                    got = LlmClient.fetchModels(base, key);
+                } catch (Throwable t) {
+                    err = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+                }
+                final List<String> fg = got;
+                final String fe = err;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (fg != null && !fg.isEmpty()) {
+                            org.json.JSONArray arr = new org.json.JSONArray();
+                            for (int i = 0; i < fg.size(); i++) arr.put(fg.get(i));
+                            prefs().edit().putString("models_cache", arr.toString()).apply();
+                            // 当前模型不在列表里就落到第一个
+                            if (!fg.contains(currentModel())) {
+                                prefs().edit().putString(C.KEY_MODEL, fg.get(0)).apply();
+                                reloadClient();
+                                refreshModelPill();
+                            }
+                            if (modelPopup != null && modelPopup.isShowing()) {
+                                fillPopup((LinearLayout) ((android.widget.ScrollView)
+                                        modelPopup.getContentView()).getChildAt(0));
+                            }
+                        } else {
+                            Toast.makeText(MainActivity.this,
+                                    "读取失败：" + (fe == null ? "空列表" : fe), Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+            }
+        }, "models").start();
+    }
+
+    private TextView popupLabel(String text) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(11);
+        t.setTextColor(Theme.caption());
+        t.setPadding(dp(12), dp(8), dp(12), dp(4));
+        return t;
+    }
+
+    private TextView popupHint(String text) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(12);
+        t.setTextColor(Theme.text3());
+        t.setPadding(dp(12), dp(4), dp(12), dp(6));
+        return t;
+    }
+
+    private View dividerLine() {
+        View v = new View(this);
+        v.setBackgroundColor(Theme.border());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1)));
+        lp.setMargins(dp(10), dp(6), dp(10), dp(4));
+        v.setLayoutParams(lp);
+        return v;
+    }
+
+    private TextView popupRow(String text, boolean selected, View.OnClickListener click) {
+        TextView t = new TextView(this);
+        t.setText(selected ? text + "   \u2713" : text);
+        t.setTextSize(13);
+        t.setTextColor(selected ? Theme.link() : Theme.text());
+        t.setSingleLine(true);
+        t.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        t.setPadding(dp(14), dp(9), dp(14), dp(9));
+        t.setOnClickListener(click);
+        return t;
+    }
+
+    private TextView popupRowWithSub(String title, String sub, boolean selected) {
+        TextView t = new TextView(this);
+        t.setText(title + "\n" + sub);
+        t.setTextSize(13);
+        t.setTextColor(selected ? Theme.link() : Theme.text());
+        t.setLineSpacing(dp(2), 1f);
+        t.setPadding(dp(14), dp(7), dp(14), dp(7));
+        return t;
     }
 
     private LinearLayout buildDrawer() {

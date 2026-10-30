@@ -191,7 +191,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(16), dp(4), dp(16), dp(40));
 
-        // ---- 接口与模型 ----
+        // ---- 接口 ----
+        body.addView(hintRow("模型与推理等级在聊天页标题下方切换；这里只管接口和密钥。"));
+
+        // ---- 接口 ----
         body.addView(sectionLabel("接口"));
         LinearLayout apiCard = card();
 
@@ -215,11 +218,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 }, true));
         apiCard.addView(divider());
 
-        modelHost = new LinearLayout(this);
-        modelHost.setOrientation(LinearLayout.VERTICAL);
-        apiCard.addView(modelHost);
-        rebuildModelHost(false);
-
         if (keyValue().length() > 0) {
             apiCard.addView(divider());
             apiCard.addView(actionRow("重新读取模型列表", new View.OnClickListener() {
@@ -227,19 +225,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             }));
         }
         body.addView(apiCard);
-
-        // ---- 生成参数 ----
-        body.addView(sectionLabel("生成参数"));
-        LinearLayout genCard = card();
-        genCard.addView(segmentRow("推理等级",
-                new HintFn() { public String get() { return "等级越高，回答越深入，耗时也越长"; } },
-                new ValueIO() {
-                    public String get() { return sp.getString(C.KEY_REASONING, C.LEVEL_BALANCED); }
-                    public void set(String k) { sp.edit().putString(C.KEY_REASONING, k).apply(); }
-                },
-                new String[]{C.LEVEL_FAST, C.LEVEL_BALANCED, C.LEVEL_DEEP},
-                new String[]{"快速", "标准", "深度"}, null));
-        body.addView(genCard);
 
         // ---- 工具能力 ----
         body.addView(sectionLabel("工具能力"));
