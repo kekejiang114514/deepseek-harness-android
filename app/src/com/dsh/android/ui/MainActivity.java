@@ -433,9 +433,7 @@ public final class MainActivity extends Activity {
     }
 
     private static String levelLabel(String k) {
-        if (C.LEVEL_FAST.equals(k)) return "快速";
-        if (C.LEVEL_DEEP.equals(k)) return "深度";
-        return "标准";
+        return com.dsh.android.ui.ReasoningSlider.labelOf(C.normalizeLevel(k));
     }
 
     private void refreshModelPill() {
@@ -499,26 +497,39 @@ public final class MainActivity extends Activity {
         }
 
         box.addView(dividerLine());
-        box.addView(popupLabel("推理等级"));
-        String lvl = prefs().getString(C.KEY_REASONING, C.LEVEL_BALANCED);
-        String[][] levels = {
-                {C.LEVEL_FAST, "快速", "回答更短，适合闲聊和简单问题"},
-                {C.LEVEL_BALANCED, "标准", "日常默认"},
-                {C.LEVEL_DEEP, "深度", "输出更长，适合写代码和长推理"},
-        };
-        for (int i = 0; i < levels.length; i++) {
-            final String key = levels[i][0];
-            boolean on = key.equals(lvl);
-            String title = levels[i][1] + (on ? "  \u2713" : "");
-            TextView row = popupRowWithSub(title, levels[i][2], on);
-            row.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    prefs().edit().putString(C.KEY_REASONING, key).apply();
-                    applyChoice();
-                }
-            });
-            box.addView(row);
-        }
+        box.addView(popupLabel("推理"));
+
+        LinearLayout sliderBox = new LinearLayout(this);
+        sliderBox.setOrientation(LinearLayout.VERTICAL);
+        sliderBox.setPadding(dp(12), dp(2), dp(12), dp(8));
+
+        final com.dsh.android.ui.ReasoningSlider slider =
+                new com.dsh.android.ui.ReasoningSlider(this);
+        slider.setLevel(C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM)));
+        sliderBox.addView(slider, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        final TextView desc = new TextView(this);
+        desc.setTextSize(11);
+        desc.setTextColor(Theme.text3());
+        desc.setPadding(0, dp(6), 0, 0);
+        String curLevel = C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM));
+        desc.setText(com.dsh.android.ui.ReasoningSlider.descOf(curLevel)
+                + "\u3000输出上限 " + C.maxTokensFor(curLevel) + " tokens");
+        sliderBox.addView(desc);
+
+        slider.setOnChangeListener(new com.dsh.android.ui.ReasoningSlider.OnChange() {
+            public void onChanged(int index, String key) {
+                prefs().edit().putString(C.KEY_REASONING, key).apply();
+                reloadClient();
+                refreshModelPill();
+                desc.setText(com.dsh.android.ui.ReasoningSlider.descOf(key)
+                        + "\u3000输出上限 " + C.maxTokensFor(key) + " tokens");
+                desc.setAlpha(0f);
+                desc.animate().alpha(1f).setDuration(180).start();
+            }
+        });
+        box.addView(sliderBox);
     }
 
     private void applyChoice() {
@@ -1147,11 +1158,8 @@ public final class MainActivity extends Activity {
         String key = sp.getString(C.KEY_API_KEY, "");
         String model = sp.getString(C.KEY_MODEL, "");
         if (model == null || model.length() == 0) model = C.MODEL_CHAT;
-        String level = sp.getString(C.KEY_REASONING, C.LEVEL_BALANCED);
-        int maxTokens;
-        if (C.LEVEL_FAST.equals(level)) maxTokens = 2048;
-        else if (C.LEVEL_DEEP.equals(level)) maxTokens = 32768;
-        else maxTokens = 8192;
+        String level = C.normalizeLevel(sp.getString(C.KEY_REASONING, C.LEVEL_MEDIUM));
+        int maxTokens = C.maxTokensFor(level);
 
         client = new LlmClient(base, key, model, maxTokens);
         loop = new AgentLoop(client, tools, buildSystemPrompt());

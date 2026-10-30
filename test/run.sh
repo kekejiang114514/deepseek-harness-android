@@ -28,6 +28,7 @@ echo "[1/2] 编译"
 javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/com/dsh/android/llm/HistoryCompactor.java" \
     "$ROOT/app/src/com/dsh/android/ui/AskLog.java" \
+    "$ROOT/app/src/com/dsh/android/kernel/C.java" \
     "$ROOT/app/src/com/dsh/android/kernel/Version.java" \
     "$ROOT/app/src/com/dsh/android/kernel/ReleasePicker.java" \
     "$ROOT/app/src/com/dsh/android/plugins/Template.java" \
@@ -43,7 +44,8 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$HERE/VersionTest.java" \
     "$HERE/PluginTest.java" \
     "$HERE/PluginJsTest.java" \
-    "$HERE/TgzTest.java"
+    "$HERE/TgzTest.java" \
+    "$HERE/LevelTest.java"
 
 echo "[2/2] 运行"
 java -cp "$OUT:$JSON_JAR" CompactTest
@@ -52,3 +54,4 @@ java -cp "$OUT:$JSON_JAR" VersionTest
 java -cp "$OUT:$JSON_JAR" PluginTest
 java -cp "$OUT:$JSON_JAR" PluginJsTest
 java -cp "$OUT:$JSON_JAR" TgzTest
+java -cp "$OUT:$JSON_JAR" LevelTest
