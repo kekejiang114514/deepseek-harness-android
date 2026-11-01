@@ -645,7 +645,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             if (!com.dsh.android.kernel.Lang.isBuiltin(it.code)) continue;
             if (!first) builtin.addView(divider());
             first = false;
-            builtin.addView(langRow(it.code, it.native_,
+            builtin.addView(langRow(it.code, it.display(),
                     it.rtl ? Texts.t(this, "lang_rtl") : "", it.code.equals(sel)));
         }
         body.addView(builtin);
@@ -663,7 +663,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             String sub = installed
                     ? (it.rtl ? Texts.t(this, "lang_rtl") : "")
                     : Texts.t(this, "lang_download");
-            View row = langRow(installed ? it.code : null, it.native_, sub, it.code.equals(sel));
+            View row = langRow(installed ? it.code : null, it.display(), sub, it.code.equals(sel));
             if (!installed) {
                 row.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) {
@@ -680,7 +680,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     /** 下载语言包，成功后立即应用。 */
     private void downloadPack(final com.dsh.android.kernel.Lang.Item it) {
-        Snack.show(this, Texts.t(this, "lang_downloading") + " " + it.native_);
+        Snack.show(this, Texts.t(this, "lang_downloading") + " " + it.display());
         new Thread(new Runnable() {
             public void run() {
                 final String err = com.dsh.android.kernel.LangPack.download(SettingsActivity.this, it.code);
@@ -702,7 +702,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     private String systemLabel(String tag) {
         com.dsh.android.kernel.Lang.Item it = com.dsh.android.kernel.Lang.byCode(tag);
-        return it != null ? it.native_ : tag;
+        return it != null ? it.display() : tag;
     }
 
     /** 一行语言；code 为 null 表示「跟随系统」。 */
