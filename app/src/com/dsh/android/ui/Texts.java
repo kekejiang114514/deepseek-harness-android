@@ -75,6 +75,11 @@ public final class Texts {
             {"lang_follow", new String[]{"跟随系统", "跟隨系統", "Follow system"}},
             {"lang_full", new String[]{"已完整翻译", "已完整翻譯", "Fully translated"}},
             {"lang_partial", new String[]{"其他语言", "其他語言", "Other languages"}},
+            {"lang_builtin", new String[]{"内置语言", "內建語言", "Built-in languages"}},
+            {"lang_packs", new String[]{"语言包（首次使用需下载）", "語言包（首次使用需下載）", "Language packs (downloaded on first use)"}},
+            {"lang_download", new String[]{"点此下载", "點此下載", "Tap to download"}},
+            {"lang_downloading", new String[]{"正在下载语言包", "正在下載語言包", "Downloading language pack"}},
+            {"lang_failed", new String[]{"下载失败", "下載失敗", "Download failed"}},
             {"lang_note", new String[]{
                     "切换后立即生效，界面文案已覆盖全部语言。",
                     "切換後立即生效，介面文案已涵蓋全部語言。",
@@ -124,9 +129,12 @@ public final class Texts {
             if (r == 3) return v[1];                    // 中国台湾
             if (tag.startsWith("en")) return v[2];      // 只有英文才直接用英文稿
 
-            // 其余语言：查生成的翻译表（含日、韩、阿及其他所有语言）
+            // 内置语言（俄日韩）走内置表；其余查已下载的语言包
             String mt = machineText(tag, key);
-            return mt != null && mt.length() > 0 ? mt : v[2];
+            if (mt != null && mt.length() > 0) return mt;
+            String pack = com.dsh.android.kernel.LangPack.translate(c, tag, key);
+            if (pack != null && pack.length() > 0) return pack;
+            return v[2];
         }
         return key;
     }

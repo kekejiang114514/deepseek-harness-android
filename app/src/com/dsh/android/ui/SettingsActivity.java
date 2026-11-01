@@ -637,17 +637,67 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 sel == null || com.dsh.android.kernel.Lang.SYSTEM.equals(sel)));
         body.addView(c);
 
-        // 全部语言平铺，不区分翻译完整度
-        LinearLayout all = card();
+        body.addView(sectionLabel(Texts.t(this, "lang_builtin")));
+        LinearLayout builtin = card();
+        boolean first = true;
         for (int i = 0; i < items.size(); i++) {
             com.dsh.android.kernel.Lang.Item it = items.get(i);
-            all.addView(divider());
-            all.addView(langRow(it.code, it.native_,
+            if (!com.dsh.android.kernel.Lang.isBuiltin(it.code)) continue;
+            if (!first) builtin.addView(divider());
+            first = false;
+            builtin.addView(langRow(it.code, it.native_,
                     it.rtl ? Texts.t(this, "lang_rtl") : "", it.code.equals(sel)));
         }
-        body.addView(all);
+        body.addView(builtin);
+
+        body.addView(sectionLabel(Texts.t(this, "lang_packs")));
+        LinearLayout packs = card();
+        boolean firstPack = true;
+        for (int i = 0; i < items.size(); i++) {
+            final com.dsh.android.kernel.Lang.Item it = items.get(i);
+            if (com.dsh.android.kernel.Lang.isBuiltin(it.code)) continue;
+            if (!firstPack) packs.addView(divider());
+            firstPack = false;
+
+            boolean installed = com.dsh.android.kernel.LangPack.installed(this, it.code);
+            String sub = installed
+                    ? (it.rtl ? Texts.t(this, "lang_rtl") : "")
+                    : Texts.t(this, "lang_download");
+            View row = langRow(installed ? it.code : null, it.native_, sub, it.code.equals(sel));
+            if (!installed) {
+                row.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) {
+                        downloadPack(it);
+                    }
+                });
+            }
+            packs.addView(row);
+        }
+        body.addView(packs);
 
         body.addView(hintRow(Texts.t(this, "lang_note")));
+    }
+
+    /** 下载语言包，成功后立即应用。 */
+    private void downloadPack(final com.dsh.android.kernel.Lang.Item it) {
+        Snack.show(this, Texts.t(this, "lang_downloading") + " " + it.native_);
+        new Thread(new Runnable() {
+            public void run() {
+                final String err = com.dsh.android.kernel.LangPack.download(SettingsActivity.this, it.code);
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (err != null) {
+                            Snack.show(SettingsActivity.this,
+                                    Texts.t(SettingsActivity.this, "lang_failed") + "：" + err);
+                            return;
+                        }
+                        com.dsh.android.kernel.Lang.setSelected(SettingsActivity.this, it.code);
+                        savedPage = page;
+                        recreate();
+                    }
+                });
+            }
+        }, "langpack").start();
     }
 
     private String systemLabel(String tag) {
