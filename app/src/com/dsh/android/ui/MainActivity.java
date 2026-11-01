@@ -1,7 +1,6 @@
 package com.dsh.android.ui;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -605,9 +604,9 @@ public final class MainActivity extends Activity {
             pendingDeviceScope = false;
             if (ok) {
                 prefs().edit().putString(C.KEY_FS_SCOPE, C.SCOPE_DEVICE).apply();
-                Toast.makeText(this, "已切换到全局作用域", Toast.LENGTH_SHORT).show();
+                Snack.show(this, "已切换到全局作用域");
             } else {
-                Toast.makeText(this, "没有存储权限，保持工作区", Toast.LENGTH_LONG).show();
+                Snack.show(this, "没有存储权限，保持工作区");
             }
         }
     }
@@ -694,10 +693,10 @@ public final class MainActivity extends Activity {
         final String base = prefs().getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
         final String key = prefs().getString(C.KEY_API_KEY, "");
         if (key.length() == 0) {
-            Toast.makeText(this, "先在设置里填写 API Key", Toast.LENGTH_SHORT).show();
+            Snack.show(this, "先在设置里填写 API Key");
             return;
         }
-        Toast.makeText(this, "正在读取模型列表…", Toast.LENGTH_SHORT).show();
+        Snack.show(this, "正在读取模型列表…");
         new Thread(new Runnable() {
             public void run() {
                 List<String> got = null;
@@ -726,8 +725,7 @@ public final class MainActivity extends Activity {
                                         modelPopup.getContentView()).getChildAt(0));
                             }
                         } else {
-                            Toast.makeText(MainActivity.this,
-                                    "读取失败：" + (fe == null ? "空列表" : fe), Toast.LENGTH_LONG).show();
+                            Snack.show(MainActivity.this, "读取失败：" + (fe == null ? "空列表" : fe));
                         }
                     }
                 });
@@ -957,7 +955,7 @@ public final class MainActivity extends Activity {
     }
 
     private void confirmDelete(final SessionStore.SessionMeta m) {
-        new android.app.AlertDialog.Builder(this)
+        new AppDialog.Builder(this)
                 .setTitle("删除会话")
                 .setMessage("删除后无法恢复，确定吗？")
                 .setPositiveButton("删除", new android.content.DialogInterface.OnClickListener() {
@@ -1387,7 +1385,7 @@ public final class MainActivity extends Activity {
             loop.cancel();
             // 工具线程可能正卡在「等你选」上，一并放行，否则会干等到超时
             AskBridge.cancelPending("用户已停止");
-            Toast.makeText(this, "正在停止…", Toast.LENGTH_SHORT).show();
+            Snack.show(this, "正在停止…");
             return;
         }
         final String typed = input.getText().toString().trim();
@@ -1500,7 +1498,7 @@ public final class MainActivity extends Activity {
                 it.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
                 startActivityForResult(Intent.createChooser(it, "选择文件"), REQ_PICK_FILE);
             } catch (Exception e2) {
-                Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+                Snack.show(this, "无法打开文件选择器");
             }
         }
     }
@@ -1528,7 +1526,7 @@ public final class MainActivity extends Activity {
         String firstError = null;
         for (int i = 0; i < uris.size(); i++) {
             if (attaches.size() >= MAX_FILES) {
-                Toast.makeText(this, "最多附带 " + MAX_FILES + " 个文件", Toast.LENGTH_SHORT).show();
+                Snack.show(this, "最多附带 " + MAX_FILES + " 个文件");
                 break;
             }
             String err = addAttach(uris.get(i));
@@ -1539,10 +1537,10 @@ public final class MainActivity extends Activity {
         if (added > 0) {
             showAttachment();
             if (added > 1) {
-                Toast.makeText(this, "已添加 " + added + " 个文件", Toast.LENGTH_SHORT).show();
+                Snack.show(this, "已添加 " + added + " 个文件");
             }
         } else if (firstError != null) {
-            Toast.makeText(this, firstError, Toast.LENGTH_SHORT).show();
+            Snack.show(this, firstError);
         }
     }
 
@@ -1782,7 +1780,7 @@ public final class MainActivity extends Activity {
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
         sv.addView(tv);
 
-        new AlertDialog.Builder(this)
+        new AppDialog.Builder(this)
                 .setTitle(a.name)
                 .setView(sv)
                 .setPositiveButton("关闭", null)
@@ -1856,7 +1854,7 @@ public final class MainActivity extends Activity {
                 android.content.ClipboardManager cm =
                         (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 cm.setPrimaryClip(android.content.ClipData.newPlainText("msg", text));
-                Toast.makeText(MainActivity.this, "已复制", Toast.LENGTH_SHORT).show();
+                Snack.show(MainActivity.this, "已复制");
                 return true;
             }
         });
@@ -1874,28 +1872,40 @@ public final class MainActivity extends Activity {
 
     private void showMessageMenu(final View v) {
         final String text = v instanceof AiBlock ? ((AiBlock) v).text() : "";
-        final String[] items = {"复制", "重新生成"};
-        new android.app.AlertDialog.Builder(this)
-                .setItems(items, new android.content.DialogInterface.OnClickListener() {
-                    public void onClick(android.content.DialogInterface d, int which) {
-                        if (which == 0) {
-                            android.content.ClipboardManager cm =
-                                    (android.content.ClipboardManager)
-                                            getSystemService(Context.CLIPBOARD_SERVICE);
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("msg", text));
-                            Toast.makeText(MainActivity.this, "已复制", Toast.LENGTH_SHORT).show();
-                        } else {
-                            regen();
-                        }
-                    }
-                })
-                .show();
+
+        LinearLayout menu = new LinearLayout(this);
+        menu.setOrientation(LinearLayout.VERTICAL);
+        menu.setPadding(dp(4), dp(4), dp(4), dp(4));
+
+        menu.addView(menuItem("复制", new View.OnClickListener() {
+            public void onClick(View x) {
+                android.content.ClipboardManager cm =
+                        (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("msg", text));
+                Snack.show(MainActivity.this, "已复制");
+            }
+        }));
+        menu.addView(menuItem("重新生成", new View.OnClickListener() {
+            public void onClick(View x) { regen(); }
+        }));
+
+        new AppDialog.Builder(this).setView(menu).setCancelable(true).show();
+    }
+
+    private TextView menuItem(String text, View.OnClickListener click) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(15);
+        t.setTextColor(Theme.text());
+        t.setPadding(dp(14), dp(14), dp(14), dp(14));
+        t.setOnClickListener(click);
+        return t;
     }
 
     /** 重新生成最后一条回答：删掉末尾的 assistant 轮次，用上一条用户消息重跑。 */
     private void regen() {
         if (running) {
-            Toast.makeText(this, "正在生成，先停止再重试", Toast.LENGTH_SHORT).show();
+            Snack.show(this, "正在生成，先停止再重试");
             return;
         }
         JSONArray hist = sessions.loadCurrentHistory();
@@ -1908,7 +1918,7 @@ public final class MainActivity extends Activity {
             if ("user".equals(o.optString("role"))) break;
         }
         if (cut < 0) {
-            Toast.makeText(this, "没有可重新生成的回答", Toast.LENGTH_SHORT).show();
+            Snack.show(this, "没有可重新生成的回答");
             return;
         }
         String lastUser = "";
@@ -2142,8 +2152,7 @@ public final class MainActivity extends Activity {
                 row.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) {
                         if (live.isAnswered()) {
-                            Toast.makeText(MainActivity.this, "这个选择已经提交过了",
-                                    Toast.LENGTH_SHORT).show();
+                            Snack.show(MainActivity.this, "这个选择已经提交过了");
                             return;
                         }
                         if (multi) {
@@ -2189,8 +2198,7 @@ public final class MainActivity extends Activity {
                         }
                     }
                     if (sb.length() == 0) {
-                        Toast.makeText(MainActivity.this, "先选至少一项",
-                                Toast.LENGTH_SHORT).show();
+                        Snack.show(MainActivity.this, "先选至少一项");
                         return;
                     }
                     for (int j = 0; j < rows.size(); j++) {

@@ -311,7 +311,7 @@ public final class MarketActivity extends Activity {
                             action.setOnClickListener(new View.OnClickListener() {
                                 public void onClick(View v) { install(it, action); }
                             });
-                            android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(MarketActivity.this);
+                            AppDialog.Builder b = new AppDialog.Builder(MarketActivity.this);
                             b.setTitle("安装失败");
                             b.setMessage(r.error == null ? "未知错误" : r.error);
                             b.setPositiveButton("知道了", null);
@@ -333,5 +333,5 @@ public final class MarketActivity extends Activity {
 
     private int dp(float v) { return Theme.dp(this, v); }
 
-    private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
+    private void toast(String s) { Snack.show(this, s); }
 }

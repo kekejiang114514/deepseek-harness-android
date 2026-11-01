@@ -1,6 +1,5 @@
 package com.dsh.android.ui;
 
-import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.view.View;
 import android.view.ViewGroup;
@@ -110,10 +109,10 @@ final class PluginSection {
         });
         r.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        android.widget.Switch sw = new android.widget.Switch(a);
+        Toggle sw = new Toggle(a);
         sw.setChecked(info.enabled);
-        sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(android.widget.CompoundButton b, boolean checked) {
+        sw.setOnChangeListener(new Toggle.OnChange() {
+            public void onChanged(boolean checked) {
                 String err = host.pluginMgr().setEnabled(info.id, checked);
                 host.rebuildPlugins(true);
                 if (checked && err != null) host.toast("启用失败：" + err);
@@ -201,7 +200,7 @@ final class PluginSection {
         android.widget.ScrollView sv = new android.widget.ScrollView(a);
         sv.addView(body);
 
-        new AlertDialog.Builder(a)
+        new AppDialog.Builder(a)
                 .setTitle(info.name)
                 .setView(sv)
                 .setPositiveButton("知道了", null)
@@ -222,7 +221,7 @@ final class PluginSection {
         android.widget.ScrollView sv = new android.widget.ScrollView(a);
         sv.addView(body);
 
-        new AlertDialog.Builder(a)
+        new AppDialog.Builder(a)
                 .setTitle("插件格式")
                 .setView(sv)
                 .setPositiveButton("写入示例到插件目录", new DialogInterface.OnClickListener() {
