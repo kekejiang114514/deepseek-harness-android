@@ -20,12 +20,20 @@ public final class ReleasePicker {
      * 跳过 draft、跳过没有 tag_name 的条目。
      */
     public static int bestIndex(JSONArray releases) {
+        return bestIndex(releases, true);
+    }
+
+    /**
+     * @param includePrerelease false 时跳过标了 prerelease 的版本（只收正式版）
+     */
+    public static int bestIndex(JSONArray releases, boolean includePrerelease) {
         if (releases == null) return -1;
         int best = -1;
         for (int i = 0; i < releases.length(); i++) {
             JSONObject o = releases.optJSONObject(i);
             if (o == null) continue;
             if (o.optBoolean("draft", false)) continue;
+            if (!includePrerelease && o.optBoolean("prerelease", false)) continue;
             String tag = o.optString("tag_name", "").trim();
             if (tag.length() == 0) continue;
             if (Version.normalize(tag).length() == 0) continue;
@@ -42,6 +50,11 @@ public final class ReleasePicker {
     /** 直接取出选中的那条。 */
     public static JSONObject best(JSONArray releases) {
         int i = bestIndex(releases);
+        return i < 0 ? null : releases.optJSONObject(i);
+    }
+
+    public static JSONObject best(JSONArray releases, boolean includePrerelease) {
+        int i = bestIndex(releases, includePrerelease);
         return i < 0 ? null : releases.optJSONObject(i);
     }
 }

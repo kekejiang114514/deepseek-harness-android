@@ -88,14 +88,18 @@ public final class AboutActivity extends Activity {
         osCard.addView(Ui.hint(this, About.REPO_NAME));
         body.addView(osCard);
 
-        body.addView(Ui.sectionLabel(this, "作者"));
-        LinearLayout auCard = Ui.card(this);
-        auCard.addView(Ui.action(this, "关于作者（" + About.NAME + "）", new View.OnClickListener() {
+        // 关于作者作为关于软件的子页面，放在最下面，用一行小号蓝字做入口
+        TextView authorLink = new TextView(this);
+        authorLink.setText("关于作者");
+        authorLink.setTextSize(12);
+        authorLink.setTextColor(Theme.link());
+        authorLink.setPadding(dp(6), dp(22), dp(6), dp(8));
+        authorLink.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 startActivity(new Intent(AboutActivity.this, AuthorActivity.class));
             }
-        }));
-        body.addView(auCard);
+        });
+        body.addView(authorLink);
 
         sv.addView(body);
         root.addView(sv, new LinearLayout.LayoutParams(

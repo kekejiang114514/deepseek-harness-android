@@ -97,6 +97,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (ab != null) ab.hide();
 
         Theme.init(this);
+        getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Theme.bg()));
         sp = getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
         pluginMgr = PluginHub.get();
         pluginSection = new PluginSection(this, this);
@@ -181,9 +182,11 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     private int page = 0;
     private boolean keyVisible = false;
 
-    private View build() {
-        bound.clear();
+    /** 外壳只建一次，切页时只换内容，避免整窗重建导致闪一下。 */
+    private TextView titleView;
+    private LinearLayout bodyBox;
 
+    private View build() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Theme.bg());
@@ -191,21 +194,28 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
         ScrollView sv = new ScrollView(this);
         sv.setFillViewport(true);
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(16), dp(4), dp(16), dp(40));
-
-        if (page == 0) pageRoot(body);
-        else if (page == 1) pageApi(body);
-        else if (page == 2) pageTools(body);
-        else if (page == 3) pagePlugins(body);
-        else if (page == 4) pageAppearance(body);
-        else pageAbout(body);
-
-        sv.addView(body);
+        bodyBox = new LinearLayout(this);
+        bodyBox.setOrientation(LinearLayout.VERTICAL);
+        bodyBox.setPadding(dp(16), dp(4), dp(16), dp(40));
+        sv.addView(bodyBox);
         root.addView(sv, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        fillBody();
         return root;
+    }
+
+    /** 只重建内容区，标题栏与窗口都不动。 */
+    private void fillBody() {
+        bound.clear();
+        if (bodyBox == null) return;
+        bodyBox.removeAllViews();
+        if (page == 0) pageRoot(bodyBox);
+        else if (page == 1) pageApi(bodyBox);
+        else if (page == 2) pageTools(bodyBox);
+        else if (page == 3) pagePlugins(bodyBox);
+        else if (page == 4) pageAppearance(bodyBox);
+        else pageAbout(bodyBox);
     }
 
     /** 根菜单：五个分组入口。 */
@@ -260,11 +270,11 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     private void gotoPage(int target) {
         page = target;
-        setContentView(build());
-        View fresh = findViewById(android.R.id.content);
-        fresh.setAlpha(0f);
-        fresh.setTranslationX(dp(10));
-        fresh.animate().alpha(1f).translationX(0).setDuration(180).start();
+        if (titleView != null) titleView.setText(pageTitle());
+        fillBody();
+        bodyBox.setAlpha(0f);
+        bodyBox.setTranslationX(dp(10));
+        bodyBox.animate().alpha(1f).translationX(0).setDuration(170).start();
     }
 
     // ------------------------------------------------------------ 接口与密钥
@@ -484,17 +494,19 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         // ---- 关于 ----
         body.addView(sectionLabel("关于"));
         LinearLayout aboutCard = card();
+        aboutCard.addView(switchRow("接收 Beta 版本", "开启后，测试版本也会提示更新",
+                Updater.betaEnabled(this), new CompoundCallback() {
+                    public void onChanged(boolean checked) {
+                        Updater.setBetaEnabled(SettingsActivity.this, checked);
+                    }
+                }));
+        aboutCard.addView(divider());
         aboutCard.addView(actionRow("关于软件", new View.OnClickListener() {
             public void onClick(View v) {
                 startActivity(new Intent(SettingsActivity.this, AboutActivity.class));
             }
         }));
-        aboutCard.addView(divider());
-        aboutCard.addView(actionRow("关于项目", new View.OnClickListener() {
-            public void onClick(View v) {
-                startActivity(new Intent(SettingsActivity.this, AuthorActivity.class));
-            }
-        }));
+
         body.addView(aboutCard);
     }
 
@@ -513,8 +525,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         back.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 if (page != 0) {
-                    page = 0;
-                    setContentView(build());
+                    gotoPage(0);
                 } else {
                     finish();
                 }
@@ -522,12 +533,12 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         });
         bar.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
-        TextView title = new TextView(this);
-        title.setText(pageTitle());
-        title.setTextSize(17);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setTextColor(Theme.text());
-        bar.addView(title);
+        titleView = new TextView(this);
+        titleView.setText(pageTitle());
+        titleView.setTextSize(17);
+        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        titleView.setTextColor(Theme.text());
+        bar.addView(titleView);
         return bar;
     }
 
