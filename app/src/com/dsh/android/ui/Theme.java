@@ -45,9 +45,26 @@ public final class Theme {
             dark = night == android.content.res.Configuration.UI_MODE_NIGHT_YES;
         }
         inited = true;
+        applyDirection(ctx);
     }
 
     public static boolean isDark() { return dark; }
+
+    /**
+     * 按当前语言设置布局方向：阿拉伯语、希伯来语等 RTL 语言会把整个界面镜像。
+     * 对 Activity 直接作用在窗口根视图上，这样所有页面一次性生效。
+     */
+    public static void applyDirection(Context ctx) {
+        try {
+            boolean rtl = com.dsh.android.kernel.Lang.isRtl(ctx);
+            int dir = rtl ? android.view.View.LAYOUT_DIRECTION_RTL
+                    : android.view.View.LAYOUT_DIRECTION_LTR;
+            if (ctx instanceof android.app.Activity) {
+                android.view.Window w = ((android.app.Activity) ctx).getWindow();
+                if (w != null) w.getDecorView().setLayoutDirection(dir);
+            }
+        } catch (Throwable ignored) {}
+    }
 
     public static void setMode(Context ctx, String mode) {
         SharedPreferences.Editor e = ctx.getSharedPreferences("dshandroid", Context.MODE_PRIVATE).edit();
