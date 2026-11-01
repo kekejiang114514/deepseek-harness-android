@@ -131,6 +131,13 @@ public final class Lang {
 
     private Lang() {}
 
+    /** 内置语言（打进安装包），其余为可下载的语言包。 */
+    public static boolean isBuiltin(String code) {
+        if (code == null) return false;
+        return code.startsWith("zh-") || "en".equals(code) || "ru".equals(code)
+                || "ja".equals(code) || "ko".equals(code);
+    }
+
     public static List<Item> all() {
         return new ArrayList<Item>(ITEMS);
     }
