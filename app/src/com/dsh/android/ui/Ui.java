@@ -132,10 +132,10 @@ final class Ui {
         col.addView(s);
         r.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        Switch sw = new Switch(c);
+        Toggle sw = new Toggle(c);
         sw.setChecked(checked);
-        sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(android.widget.CompoundButton b, boolean v) {
+        sw.setOnChangeListener(new Toggle.OnChange() {
+            public void onChanged(boolean v) {
                 cb.onChanged(v);
             }
         });

@@ -1,7 +1,6 @@
 package com.dsh.android.ui;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -525,108 +524,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         UpdateSheet.show(this, r);
     }
 
-    private void downloadAndInstall(final Updater.Release r) {
-        if (!com.dsh.android.kernel.ApkInstaller.canInstall(this)) {
-            new AlertDialog.Builder(this)
-                    .setTitle("需要安装权限")
-                    .setMessage("Android 8 起，应用安装更新需要你允许「安装未知应用」。"
-                            + "点「去设置」打开本应用的开关，回来再点一次更新。")
-                    .setPositiveButton("去设置", new DialogInterface.OnClickListener() {
-                        public void onClick(DialogInterface d, int w) {
-                            try {
-                                startActivity(new Intent(
-                                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                        android.net.Uri.parse("package:" + getPackageName())));
-                            } catch (Exception e) {
-                                toast("请手动到 设置 → 应用 → 特殊权限 里允许");
-                            }
-                        }
-                    })
-                    .setNegativeButton("取消", null)
-                    .show();
-            return;
-        }
-
-        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
-        pd.setTitle("正在下载更新");
-        pd.setMessage("0%");
-        pd.setCancelable(true);
-        pd.show();
-
-        new Thread(new Runnable() {
-            public void run() {
-                try {
-                    final java.io.File apk = com.dsh.android.kernel.ApkInstaller.download(
-                            SettingsActivity.this, r.apkUrl,
-                            new com.dsh.android.kernel.ApkInstaller.Progress() {
-                                public void onProgress(final long done, final long total) {
-                                    runOnUiThread(new Runnable() {
-                                        public void run() {
-                                            pd.setMessage((done * 100 / Math.max(1, total)) + "%"
-                                                    + "（" + (done / 1024) + "KB / " + (total / 1024) + "KB）");
-                                        }
-                                    });
-                                }
-                            });
-                    runOnUiThread(new Runnable() {
-                        public void run() {
-                            dismiss(pd);
-                            confirmInstall(apk);
-                        }
-                    });
-                } catch (final Throwable t) {
-                    runOnUiThread(new Runnable() {
-                        public void run() {
-                            dismiss(pd);
-                            new AlertDialog.Builder(SettingsActivity.this)
-                                    .setTitle("下载失败")
-                                    .setMessage(t.getMessage() == null
-                                            ? t.getClass().getSimpleName() : t.getMessage())
-                                    .setPositiveButton("去发布页", new DialogInterface.OnClickListener() {
-                                        public void onClick(DialogInterface d, int w) { open(r.pageUrl); }
-                                    })
-                                    .setNegativeButton("取消", null)
-                                    .show();
-                        }
-                    });
-                }
-            }
-        }, "apk-download").start();
-    }
-
-    private void confirmInstall(final java.io.File apk) {
-        long mb = Math.max(1, apk.length() / 1048576);
-        new AlertDialog.Builder(this)
-                .setTitle("下载完成")
-                .setMessage("安装包已下载（约 " + mb + "MB）。\n\n"
-                        + "点「立即安装」后系统会弹出安装界面，装完会保留你的设置与对话。")
-                .setPositiveButton("立即安装", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        com.dsh.android.kernel.ApkInstaller.install(
-                                SettingsActivity.this, apk,
-                                new com.dsh.android.kernel.ApkInstaller.Callback() {
-                                    public void onDone(final String err) {
-                                        if (err != null) {
-                                            new AlertDialog.Builder(SettingsActivity.this)
-                                                    .setTitle("无法启动安装")
-                                                    .setMessage(err + "\n\n可以到设置 → 关于作者 里"
-                                                            + "打开应用信息清除权限后重试，"
-                                                            + "或直接从发布页手动下载。")
-                                                    .setPositiveButton("知道了", null)
-                                                    .show();
-                                        }
-                                    }
-                                });
-                    }
-                })
-                .setNegativeButton("稍后", null)
-                .show();
-    }
-
-    private void dismiss(android.app.Dialog d) {
-        try { if (d != null && d.isShowing()) d.dismiss(); } catch (Throwable ignored) {}
-    }
-
     private void open(String url) {
         if (url == null || url.length() == 0) return;
         try {
@@ -923,10 +820,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         col.addView(s);
         r.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        Switch sw = new Switch(this);
+        Toggle sw = new Toggle(this);
         sw.setChecked(checked);
-        sw.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(android.widget.CompoundButton b, boolean isChecked) {
+        sw.setOnChangeListener(new Toggle.OnChange() {
+            public void onChanged(boolean isChecked) {
                 cb.onChanged(isChecked);
             }
         });
@@ -1447,7 +1344,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         et.setSingleLine(true);
         if (numeric) et.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
 
-        new AlertDialog.Builder(this)
+        new AppDialog.Builder(this)
                 .setTitle(label)
                 .setView(et)
                 .setPositiveButton("保存", new DialogInterface.OnClickListener() {
@@ -1510,7 +1407,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     /** 本次运行期间的检查结果文案。 */
     private String lastResult = null;
 
-    public void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
+    public void toast(String s) { Snack.show(this, s); }
 
     /** 在后台线程尝试用 root 开启，回来刷新界面。 */
     private void tryRootEnable() {

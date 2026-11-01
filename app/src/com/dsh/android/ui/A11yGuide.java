@@ -1,7 +1,6 @@
 package com.dsh.android.ui;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -107,14 +106,13 @@ public final class A11yGuide {
         wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.addView(body);
 
-        new AlertDialog.Builder(a)
+        new AppDialog.Builder(a)
                 .setTitle(alreadyTried ? "需要先开启屏幕操作" : "开启屏幕操作")
                 .setView(wrap)
                 .setPositiveButton("去开启", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
                         if (!openSettings(a)) {
-                            android.widget.Toast.makeText(a, "无法打开系统设置，请手动进入 设置 → 无障碍",
-                                    android.widget.Toast.LENGTH_LONG).show();
+                            Snack.show(a, "无法打开系统设置，请手动进入 设置 → 无障碍");
                         }
                     }
                 })
@@ -123,12 +121,9 @@ public final class A11yGuide {
                     public void onClick(DialogInterface d, int w) {
                         try {
                             a.startActivity(com.dsh.android.a11y.A11yState.appDetailsIntent(a));
-                            android.widget.Toast.makeText(a,
-                                    "点右上角 ⋮ → 允许受限设置，然后回到无障碍里开启",
-                                    android.widget.Toast.LENGTH_LONG).show();
+                            Snack.show(a, "点右上角 ⋮ → 允许受限设置，然后回到无障碍里开启");
                         } catch (Throwable t) {
-                            android.widget.Toast.makeText(a, "无法打开应用信息页",
-                                    android.widget.Toast.LENGTH_LONG).show();
+                            Snack.show(a, "无法打开应用信息页");
                         }
                     }
                 })

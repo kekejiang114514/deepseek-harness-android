@@ -201,7 +201,7 @@ public final class UpdateSheet {
 
     private static void confirmInstall(final Activity act, final java.io.File apk) {
         long mb = Math.max(1, apk.length() / 1048576);
-        new android.app.AlertDialog.Builder(act)
+        new AppDialog.Builder(act)
                 .setTitle("下载完成")
                 .setMessage("安装包已下载（约 " + mb + "MB）。点「立即安装」后由系统完成安装，"
                         + "设置与对话都会保留。")
@@ -210,8 +210,7 @@ public final class UpdateSheet {
                         ApkInstaller.install(act, apk, new ApkInstaller.Callback() {
                             public void onDone(final String err) {
                                 if (err != null) {
-                                    Toast.makeText(act, "无法启动安装：" + err,
-                                            Toast.LENGTH_LONG).show();
+                                    Snack.show(act, "无法启动安装：" + err);
                                 }
                             }
                         });
@@ -237,7 +236,7 @@ public final class UpdateSheet {
         try {
             c.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Exception e) {
-            Toast.makeText(c, "没有可用的浏览器", Toast.LENGTH_SHORT).show();
+            Snack.show(c, "没有可用的浏览器");
         }
     }
 
