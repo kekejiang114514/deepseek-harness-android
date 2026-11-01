@@ -1060,7 +1060,7 @@ public final class MainActivity extends Activity {
         box.addView(logo);
 
         TextView h = new TextView(this);
-        h.setText("有什么可以帮你？");
+        h.setText(Texts.t(this, "welcome_title"));
         h.setTextSize(20);
         h.setTypeface(null, Typeface.BOLD);
         h.setTextColor(Theme.text());
@@ -1069,7 +1069,7 @@ public final class MainActivity extends Activity {
         box.addView(h);
 
         TextView sub = new TextView(this);
-        sub.setText("我可以操作你的手机屏幕、读写文件");
+        sub.setText(Texts.t(this, "welcome_sub"));
         sub.setTextSize(13);
         sub.setTextColor(Theme.caption());
         sub.setGravity(Gravity.CENTER);

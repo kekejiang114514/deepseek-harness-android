@@ -112,6 +112,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         Theme.init(this);
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Theme.bg()));
         sp = getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
+        if (savedPage >= 0) {
+            page = savedPage;
+            savedPage = -1;
+        }
         pluginMgr = PluginHub.get();
         pluginSection = new PluginSection(this, this);
         setContentView(build());
@@ -193,6 +197,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     /** 0 = 根菜单，其余为子页。 */
     private int page = 0;
+    private int savedPage = -1;
     private boolean keyVisible = false;
 
     /** 外壳只建一次，切页时只换内容，避免整窗重建导致闪一下。 */
@@ -687,8 +692,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             public void onClick(View v) {
                 com.dsh.android.kernel.Lang.setSelected(SettingsActivity.this,
                         code == null ? com.dsh.android.kernel.Lang.SYSTEM : code);
-                Theme.init(SettingsActivity.this);      // 重新判定深浅色与布局方向
-                setContentView(build());                // 语言、方向都变了，整页重建
+                // 必须 recreate：Locale 与布局方向是在 attachBaseContext 里生效的，
+                // 只 setContentView 不会重新走那条路径，RTL 语言会看不出变化。
+                savedPage = page;
+                recreate();
             }
         });
         return r;
