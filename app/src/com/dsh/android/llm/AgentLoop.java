@@ -95,6 +95,7 @@ public final class AgentLoop {
 
             // 不设轮数上限：复杂的多步任务（读屏→定位→点击→复查）本来就没法预估步数。
             // 防止原地打转靠下面的「相同调用 + 相同结果」检测，以及用户随时可点停止。
+            emit("turn/start", null);
             while (true) {
                 if (cancelled) { sink.onError("已停止"); return; }
                 final boolean[] gotToolCall = {false};
@@ -148,9 +149,11 @@ public final class AgentLoop {
                     for (int i = 0; i < count; i++) {
                         LlmClient.ToolCall tc = r.toolCalls.get(i);
                         sink.onToolCall(tc.name, tc.args);
+                        emitArgs("tool/call", tc.name, tc.args);
                         String result = results[i];
                         if (result == null) result = tools.call(tc.name, tc.args);
                         sink.onToolResult(tc.name, result);
+                        emitResult("tool/result", tc.name, result);
 
                         String key = tc.name + "\u0000" + tc.args;
                         String prev = seenCalls.put(key, result);
@@ -193,6 +196,7 @@ public final class AgentLoop {
                 }
 
                 if (r.content != null && r.content.length() > 0) {
+                    emitContent("message", r.content);
                     JSONObject a = new JSONObject();
                     a.put("role", "assistant");
                     a.put("content", r.content);
@@ -203,6 +207,41 @@ public final class AgentLoop {
         } catch (Exception e) {
             sink.onError("错误: " + e.getMessage());
         }
+    }
+
+    // ------------------------------------------------------------ 插件事件
+
+    /** 把 agent 循环的时机暴露给 JS 插件（ctx.on 订阅）。 */
+    private static void emit(String event, JSONObject payload) {
+        try {
+            com.dsh.android.plugins.js.JsHost.emitAsync(event, payload);
+        } catch (Throwable ignored) {}
+    }
+
+    private static void emitArgs(String event, String name, String args) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("name", name);
+            o.put("args", args == null ? "{}" : args);
+            emit(event, o);
+        } catch (Throwable ignored) {}
+    }
+
+    private static void emitResult(String event, String name, String result) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("name", name);
+            o.put("result", result == null ? "" : result);
+            emit(event, o);
+        } catch (Throwable ignored) {}
+    }
+
+    private static void emitContent(String event, String content) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("content", content);
+            emit(event, o);
+        } catch (Throwable ignored) {}
     }
 
     /** 往历史里插一条给模型的提示（不进界面）。 */
