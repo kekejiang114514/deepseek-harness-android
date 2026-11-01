@@ -262,11 +262,42 @@
     'node:cluster': '多进程'
   };
 
+  // 强制兼容用：未实现的模块返回一个「万能 stub」。
+  // 任何属性、任何调用都返回另一个 stub，不会抛错，插件可以继续加载完。
+  var degraded = {};
+  var handlers = {};    // 事件名 -> [{id, fn}]
+  var services = {};    // 服务名 -> 实现
+  var commands = {};    // "插件id/命令名" -> {plugin, name, desc, fn}
+  function noteDegraded(id, what) {
+    var list = degraded[id] = degraded[id] || [];
+    if (list.indexOf(what) < 0) list.push(what);
+  }
+  function stub(name) {
+    var f = function () { return stub(name); };
+    try {
+      return new Proxy(f, {
+        get: function (t, k) {
+          if (k === 'then') return undefined;          // 别被当成 Promise
+          if (k === '__esModule') return true;
+          if (k === Symbol.toPrimitive) return function () { return ''; };
+          if (k === 'toString') return function () { return ''; };
+          if (k === 'valueOf') return function () { return 0; };
+          if (k === 'default') return stub(name);
+          return stub(name);
+        },
+        apply: function () { return stub(name); },
+        construct: function () { return stub(name); }
+      });
+    } catch (e) {
+      return f;                                       // 老内核没有 Proxy 时退化成函数
+    }
+  }
+
   window.__mod = function (name) {
     var n = String(name || '');
     if (mods[n]) return mods[n];
-    if (banned[n]) throw new Error('本版本不支持该模块：' + n + '（' + banned[n] + '）');
-    throw new Error('未提供的模块：' + n);
+    noteDegraded(window.__currentPlugin || '_default', n);
+    return stub(n);
   };
   window.process = processMod;
   window.defineTool = function (s) { return s; };
@@ -289,10 +320,36 @@
         }
       },
       logger: { info: function () {}, warn: function () {}, error: function () {}, debug: function () {} },
-      on: function () { throw new Error('本版本不支持 ctx.on 事件订阅'); },
-      plugin: function () { throw new Error('本版本不支持 ctx.plugin 子插件'); },
-      service: function () { throw new Error('本版本不支持 ctx.service 自定义服务'); },
-      effect: function () { throw new Error('本版本不支持 ctx.effect'); }
+      // 事件订阅：真正挂了监听，宿主在对应时机 __emit
+      on: function (name, fn) {
+        if (typeof fn !== 'function') return function () {};
+        (handlers[name] = handlers[name] || []).push({ id: id, fn: fn });
+        return function () {
+          var l = handlers[name] || [];
+          for (var i = l.length - 1; i >= 0; i--) if (l[i].fn === fn) l.splice(i, 1);
+        };
+      },
+      // 服务：注册后同进程内所有插件都能 ctx.get 到
+      service: function (name, impl) {
+        services[String(name)] = impl;
+        return impl;
+      },
+      get: function (name) { return services[String(name)] || stub(String(name)); },
+      // 命令：输入框里以 /名字 触发
+      command: function (name, desc, fn) {
+        if (typeof desc === 'function') { fn = desc; desc = ''; }
+        if (typeof fn !== 'function') return function () {};
+        commands[id + '/' + name] = { plugin: id, name: String(name), desc: String(desc || ''), fn: fn };
+        return function () { delete commands[id + '/' + name]; };
+      },
+      set: function () { return function () {}; },
+      effect: function () { return function () {}; },
+      plugin: function () { noteDegraded(id, 'ctx.plugin'); return function () {}; },
+      // 以下是没有等价渲染能力的面板类 API：保留调用入口，插件不会崩
+      slots: stub('ctx.slots'),
+      client: stub('ctx.client'),
+      render: function () { noteDegraded(id, 'ctx.render'); return null; },
+      timer: { setTimeout: setTimeout, setInterval: setInterval, clearTimeout: clearTimeout, clearInterval: clearInterval }
     };
   }
 
@@ -315,13 +372,74 @@
       if (!api || typeof api.apply !== 'function') {
         throw new Error('没有导出 apply 函数（需要 export function apply(ctx)）');
       }
-      var ret = api.apply(ctxFor(id));
+      var ret;
+      var applyError = null;
+      try {
+        ret = api.apply(ctxFor(id));
+      } catch (e) {
+        // 强制兼容：apply 后半段崩了，也保留已经注册成功的工具
+        applyError = String((e && e.message) || e);
+        noteDegraded(id, 'apply: ' + applyError);
+      }
       if (ret && typeof ret.then === 'function') { ret.catch(function () {}); }
-      return JSON.stringify({ ok: true, name: r.name || '', tools: reg[id].length });
+      var tools = (reg[id] || []).length;
+      if (tools === 0 && applyError) throw new Error(applyError);
+      return JSON.stringify({
+        ok: true, name: r.name || '', tools: tools, applyError: applyError
+      });
     } catch (e) {
       window.__errors[id] = String((e && e.message) || e);
       return JSON.stringify({ ok: false, error: window.__errors[id] });
     }
+  };
+
+  /** 宿主触发事件；返回各监听器返回的非空字符串（可直接并入工具结果或提示词）。 */
+  window.__emit = function (eventName, payloadJson) {
+    var list = handlers[eventName] || [];
+    var out = [];
+    var arg = null;
+    try { arg = JSON.parse(payloadJson || 'null'); } catch (e) { arg = payloadJson; }
+    for (var i = 0; i < list.length; i++) {
+      try {
+        var r = list[i].fn(arg);
+        if (typeof r === 'string' && r.length > 0) out.push(r);
+      } catch (e) {
+        noteDegraded(list[i].id, 'handler(' + eventName + '): ' + ((e && e.message) || e));
+      }
+    }
+    return JSON.stringify(out);
+  };
+
+  /** 所有插件注册的命令。 */
+  window.__commands = function () {
+    var out = [];
+    for (var k in commands) {
+      if (Object.prototype.hasOwnProperty.call(commands, k)) {
+        out.push({ plugin: commands[k].plugin, name: commands[k].name, desc: commands[k].desc });
+      }
+    }
+    return JSON.stringify(out);
+  };
+
+  window.__runCommand = function (pluginId, name, argsJson) {
+    var c = commands[pluginId + '/' + name];
+    if (!c) return JSON.stringify({ ok: false, error: '命令不存在' });
+    var arg = null;
+    try { arg = JSON.parse(argsJson || 'null'); } catch (e) { arg = argsJson; }
+    try {
+      var r = c.fn(arg);
+      if (r && typeof r.then === 'function') {
+        return r.then(function (v) { return JSON.stringify({ ok: true, value: v == null ? '' : String(v) }); },
+                      function (e) { return JSON.stringify({ ok: false, error: String((e && e.message) || e) }); });
+      }
+      return JSON.stringify({ ok: true, value: r == null ? '' : String(r) });
+    } catch (e) {
+      return JSON.stringify({ ok: false, error: String((e && e.message) || e) });
+    }
+  };
+
+  window.__degraded = function (id) {
+    return JSON.stringify(degraded[id] || []);
   };
 
   window.__describe = function (id) {

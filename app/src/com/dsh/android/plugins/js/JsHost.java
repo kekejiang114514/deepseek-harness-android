@@ -342,6 +342,77 @@ public final class JsHost {
         return v == null ? error("没有返回结果") : v;
     }
 
+    // ------------------------------------------------------------ 扩展点
+
+    /**
+     * 触发事件（不等待结果）。插件用 ctx.on 挂的监听器会在 WebView 里被调用。
+     * 事件是旁路，不能因为它失败影响主流程，所以完全吞掉异常。
+     */
+    public static void emitAsync(final String event, final JSONObject payload) {
+        if (!available()) return;
+        final String js = "window.__emit(" + JSONObject.quote(event) + ","
+                + JSONObject.quote(payload == null ? "{}" : payload.toString()) + ")";
+        UI.post(new Runnable() {
+            public void run() {
+                WebView w;
+                synchronized (LOCK) { w = web; }
+                if (w == null) return;
+                try {
+                    w.evaluateJavascript(js, null);
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    /** 所有插件注册的命令。 */
+    public static JSONArray commands() {
+        if (!awaitBoot(3000)) return new JSONArray();
+        String raw = unwrap(evalSync("window.__commands()", 3000));
+        if (raw == null) return new JSONArray();
+        try {
+            return new JSONArray(raw);
+        } catch (Exception e) {
+            return new JSONArray();
+        }
+    }
+
+    /** 执行一个命令；支持返回 Promise 的异步命令。 */
+    public static String runCommand(String pluginId, String name, String argsJson) {
+        if (!awaitBoot(BOOT_TIMEOUT)) return "{\"ok\":false,\"error\":\"JS 运行时未就绪\"}";
+        final String token = "r" + TOKENS.getAndIncrement();
+        final Pending p = new Pending();
+        synchronized (PENDING) { PENDING.put(token, p); }
+
+        String js = "Promise.resolve(window.__runCommand("
+                + JSONObject.quote(pluginId) + "," + JSONObject.quote(name) + ","
+                + JSONObject.quote(argsJson == null ? "{}" : argsJson) + "))"
+                + ".then(function(r){DshBridge.done(" + JSONObject.quote(token) + ",r);})"
+                + ".catch(function(e){DshBridge.done(" + JSONObject.quote(token) + ","
+                + "JSON.stringify({ok:false,error:String(e&&e.message||e)}));})";
+        UI.post(new Runnable() {
+            public void run() {
+                WebView w;
+                synchronized (LOCK) { w = web; }
+                if (w == null) return;
+                try {
+                    w.evaluateJavascript(js, null);
+                } catch (Throwable t) {
+                    complete(token, "{\"ok\":false,\"error\":\"执行失败\"}");
+                }
+            }
+        });
+        try {
+            if (!p.latch.await(15000, TimeUnit.MILLISECONDS)) {
+                synchronized (PENDING) { PENDING.remove(token); }
+                return "{\"ok\":false,\"error\":\"命令执行超时\"}";
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "{\"ok\":false,\"error\":\"被中断\"}";
+        }
+        return p.value == null ? "{\"ok\":false,\"error\":\"没有返回\"}" : p.value;
+    }
+
     private static String error(String msg) {
         try {
             JSONObject o = new JSONObject();

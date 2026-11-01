@@ -612,6 +612,67 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** 执行插件命令；返回 false 表示没有匹配的命令（按普通消息发出去）。 */
+    private boolean runPluginCommand(String text) {
+        String body = text.substring(1).trim();
+        if (body.length() == 0) return false;
+        int sp = body.indexOf(' ');
+        final String name = sp < 0 ? body : body.substring(0, sp);
+        final String rest = sp < 0 ? "" : body.substring(sp + 1).trim();
+
+        org.json.JSONArray cmds;
+        try {
+            cmds = com.dsh.android.plugins.js.JsHost.commands();
+        } catch (Throwable t) {
+            return false;
+        }
+        String plugin = null;
+        for (int i = 0; i < cmds.length(); i++) {
+            org.json.JSONObject c = cmds.optJSONObject(i);
+            if (c != null && name.equals(c.optString("name"))) {
+                plugin = c.optString("plugin");
+                break;
+            }
+        }
+        if (plugin == null) return false;
+
+        messages.addView(makeSystemLine("/" + name));
+        final String pid = plugin;
+        new Thread(new Runnable() {
+            public void run() {
+                final String res = com.dsh.android.plugins.js.JsHost.runCommand(
+                        pid, name, "{\"text\":" + org.json.JSONObject.quote(rest) + "}");
+                String out;
+                try {
+                    org.json.JSONObject o = new org.json.JSONObject(res);
+                    out = o.optBoolean("ok") ? o.optString("value", "") : ("命令失败：" + o.optString("error"));
+                } catch (Exception e) {
+                    out = res;
+                }
+                final String show = out.length() == 0 ? "（命令没有输出）" : out;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        addAssistantBubble(show);
+                        scrollBottom();
+                    }
+                });
+            }
+        }, "plugin-cmd").start();
+        return true;
+    }
+
+    /** 居中的系统提示行，用于标记命令执行。 */
+    private View makeSystemLine(String text) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(11);
+        t.setTextColor(Theme.caption());
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, dp(8), 0, dp(2));
+        messages.addView(t);
+        return t;
+    }
+
     private void applyChoice() {
         reloadClient();
         refreshModelPill();
@@ -1332,6 +1393,14 @@ public final class MainActivity extends Activity {
         final String typed = input.getText().toString().trim();
         // 允许「只发附件」：有附件时文本可以为空
         if (typed.length() == 0 && attaches.isEmpty()) return;
+
+        // 插件命令：以 / 开头，交给注册了该名字的插件处理
+        if (typed.startsWith("/") && attaches.isEmpty()) {
+            if (runPluginCommand(typed)) {
+                input.setText("");
+                return;
+            }
+        }
 
         if (messages.getChildCount() == 1) messages.removeAllViews();
 
