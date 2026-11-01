@@ -520,37 +520,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         });
     }
 
+    /** 更新提示统一走公共卡片。 */
     private void showUpdate(final Updater.Release r) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("当前 ").append(C.VERSION).append("  →  最新 ").append(r.version);
-        if (r.apkSize > 0) sb.append("\n安装包 ").append(r.sizeText());
-        String notes = r.notes == null ? "" : r.notes.trim();
-        if (notes.length() > 0) {
-            String[] lines = notes.split("\n");
-            StringBuilder cut = new StringBuilder();
-            for (int i = 0; i < lines.length && i < 8; i++) cut.append(lines[i]).append("\n");
-            if (lines.length > 8) cut.append("…");
-            sb.append("\n\n").append(cut.toString().trim());
-        }
-
-        new AlertDialog.Builder(this)
-                .setTitle("发现新版本 " + r.version)
-                .setMessage(sb.toString())
-                .setPositiveButton("下载并安装", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        if (!r.hasApk()) {
-                            toast("这个版本没有附带安装包");
-                            open(r.pageUrl);
-                            return;
-                        }
-                        downloadAndInstall(r);
-                    }
-                })
-                .setNeutralButton("发布页", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) { open(r.pageUrl); }
-                })
-                .setNegativeButton("稍后", null)
-                .show();
+        UpdateSheet.show(this, r);
     }
 
     private void downloadAndInstall(final Updater.Release r) {
@@ -751,10 +723,37 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
         body.addView(sectionLabel("第三方组件"));
         LinearLayout d = card();
-        d.addView(hintRow("org.json —— JSON 解析，Android 平台自带接口的桌面测试实现，公共领域"));
+        d.addView(hintRow("org.json —— JSON 解析，仅用于桌面单元测试"));
         d.addView(divider());
         d.addView(hintRow("Android SDK 与系统 WebView —— 由设备系统提供，随系统许可"));
         body.addView(d);
+
+        body.addView(sectionLabel("参考与致谢"));
+        LinearLayout r = card();
+        r.addView(hintRow("以下项目只参考了设计与算法思路，本仓库不包含它们的源代码。"));
+        r.addView(divider());
+        TextView a1 = attribution(
+                "DeepSeek Harness（MIT）",
+                "Agent 循环的并发工具调度上限、请求失败重试、上下文溢出后的压缩重试，"
+                        + "按其公开实现（packages/core/agent-loop）的思路用 Java 重写。");
+        r.addView(a1);
+        r.addView(divider());
+        TextView a2 = attribution(
+                "dsh-effort-switcher",
+                "推理强度滑块的视觉参数（轨道与滑块尺寸、渐变配色、过渡时长）参考该项目；"
+                        + "该项目未附许可证文件。");
+        r.addView(a2);
+        body.addView(r);
+    }
+
+    private TextView attribution(String title, String body) {
+        TextView t = new TextView(this);
+        t.setText(title + "\n" + body);
+        t.setTextSize(12);
+        t.setTextColor(Theme.text2());
+        t.setLineSpacing(dp(3), 1f);
+        t.setPadding(dp(14), dp(12), dp(14), dp(12));
+        return t;
     }
 
     private static final String LICENSE =

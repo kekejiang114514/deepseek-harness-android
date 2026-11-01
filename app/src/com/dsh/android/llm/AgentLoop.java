@@ -37,6 +37,31 @@ public final class AgentLoop {
         this.systemPrompt = systemPrompt;
     }
 
+    /** 只读工具并发执行用。数量不大，固定 4 个线程足够。 */
+    private static final java.util.concurrent.ExecutorService POOL =
+            java.util.concurrent.Executors.newFixedThreadPool(4);
+
+    /**
+     * 这个工具是否只读：只读才能并行，涉及写入/删除/等待用户的必须串行。
+     * 判据是工具名前缀，插件工具默认按不安全处理。
+     */
+    private static boolean isReadOnlyTool(String name) {
+        if (name == null) return false;
+        String n = name.replace("__", ".");
+        if (n.equals("ui.ask")) return false;
+        if (n.startsWith("fs.write") || n.startsWith("fs.delete") || n.startsWith("fs.mkdir")) return false;
+        if (n.startsWith("a11y.click") || n.startsWith("a11y.tap") || n.startsWith("a11y.swipe")
+                || n.startsWith("a11y.longpress") || n.startsWith("a11y.longclick")
+                || n.startsWith("a11y.doubleclick") || n.startsWith("a11y.settext")
+                || n.startsWith("a11y.cleartext") || n.startsWith("a11y.scroll")
+                || n.startsWith("a11y.enter") || n.startsWith("a11y.back")
+                || n.startsWith("a11y.home") || n.startsWith("a11y.recents")) return false;
+        if (n.startsWith("app.open") || n.startsWith("notify")) return false;
+        if (n.startsWith("fs.") || n.startsWith("web.") || n.startsWith("a11y.dump")
+                || n.startsWith("a11y.findtext")) return true;
+        return false;
+    }
+
     /** 请求中断当前回合。 */
     public void cancel() { cancelled = true; }
 
@@ -95,9 +120,36 @@ public final class AgentLoop {
 
                 if (r.hasToolCalls()) {
                     appendAssistantToolCalls(history, r);
-                    for (LlmClient.ToolCall tc : r.toolCalls) {
+
+                    // 同一步里模型可能一次要调多个工具。只读的那几个可以并发跑，
+                    // 但结果必须按模型给出的顺序回写，否则 tool_call_id 会对不上。
+                    final int count = r.toolCalls.size();
+                    final String[] results = new String[count];
+                    if (count > 1) {
+                        java.util.List<java.util.concurrent.Future<?>> futures =
+                                new java.util.ArrayList<java.util.concurrent.Future<?>>();
+                        for (int i = 0; i < count; i++) {
+                            final int idx = i;
+                            final LlmClient.ToolCall c = r.toolCalls.get(i);
+                            if (!isReadOnlyTool(c.name)) continue;
+                            futures.add(POOL.submit(new Runnable() {
+                                public void run() {
+                                    results[idx] = tools.call(c.name, c.args);
+                                }
+                            }));
+                        }
+                        for (int i = 0; i < futures.size(); i++) {
+                            try {
+                                futures.get(i).get();
+                            } catch (Exception ignored) {}
+                        }
+                    }
+
+                    for (int i = 0; i < count; i++) {
+                        LlmClient.ToolCall tc = r.toolCalls.get(i);
                         sink.onToolCall(tc.name, tc.args);
-                        String result = tools.call(tc.name, tc.args);
+                        String result = results[i];
+                        if (result == null) result = tools.call(tc.name, tc.args);
                         sink.onToolResult(tc.name, result);
 
                         String key = tc.name + "\u0000" + tc.args;
@@ -124,6 +176,20 @@ public final class AgentLoop {
                         return;
                     }
                     continue;
+                }
+
+                if (cancelled) {
+                    // 用户点了停止：已经流出来的文字不能丢，落进历史再说
+                    String partial = textBuf.length() > 0 ? textBuf.toString()
+                            : (r.content == null ? "" : r.content);
+                    if (partial.length() > 0) {
+                        JSONObject a = new JSONObject();
+                        a.put("role", "assistant");
+                        a.put("content", partial);
+                        history.put(a);
+                    }
+                    sink.onError("已停止");
+                    return;
                 }
 
                 if (r.content != null && r.content.length() > 0) {
@@ -163,17 +229,47 @@ public final class AgentLoop {
     private LlmClient.Result requestWithRetry(JSONArray history, JSONArray toolSchemas,
                                               Sink sink, LlmClient.StreamSink streamSink)
             throws Exception {
-        try {
-            return client.chatStream(history, toolSchemas, streamSink);
-        } catch (Exception e) {
-            String msg = e.getMessage() == null ? "" : e.getMessage();
-            if (!isContextOverflow(msg)) throw e;
+        int attempt = 0;
+        while (true) {
+            try {
+                return client.chatStream(history, toolSchemas, streamSink);
+            } catch (Exception e) {
+                String msg = e.getMessage() == null ? "" : e.getMessage();
 
-            HistoryCompactor.Report rep = HistoryCompactor.fit(history, 1, CTX_EMERGENCY);
-            if (!rep.changed) throw e;
-            sink.onCompact(rep);
-            return client.chatStream(history, toolSchemas, streamSink);
+                // 上下文超长：压到极限再试一次，与 DSH 的 request-error 处理同思路
+                if (isContextOverflow(msg)) {
+                    HistoryCompactor.Report rep = HistoryCompactor.fit(history, 1, CTX_EMERGENCY);
+                    if (!rep.changed) throw e;
+                    sink.onCompact(rep);
+                    return client.chatStream(history, toolSchemas, streamSink);
+                }
+
+                // 网络/限流类错误：指数退避重试，最多三次
+                if (isRetryable(msg) && attempt < 2) {
+                    long wait = 800L << attempt;    // 800ms → 1600ms
+                    attempt++;
+                    try {
+                        Thread.sleep(wait);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw e;
+                    }
+                    continue;
+                }
+                throw e;
+            }
         }
+    }
+
+    /** 网络抖动、限流、服务端 5xx 这类可以退了再试。 */
+    private static boolean isRetryable(String msg) {
+        String m = msg == null ? "" : msg.toLowerCase();
+        if (m.contains("timeout") || m.contains("timed out")) return true;
+        if (m.contains("connection") || m.contains("reset by peer")) return true;
+        if (m.contains("429") || m.contains("too many requests") || m.contains("rate limit")) return true;
+        if (m.contains("502") || m.contains("503") || m.contains("504")) return true;
+        if (m.contains("temporarily") || m.contains("overloaded")) return true;
+        return false;
     }
 
     /**

@@ -167,24 +167,7 @@ public final class MainActivity extends Activity {
             sb.append("\n\n").append(cut.toString().trim());
         }
 
-        new AlertDialog.Builder(this)
-                .setTitle("发现新版本 " + r.version)
-                .setMessage(sb.toString())
-                .setPositiveButton("去下载", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        openExternal(r.hasApk() ? r.apkUrl : r.pageUrl);
-                    }
-                })
-                .setNeutralButton("发布页", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) { openExternal(r.pageUrl); }
-                })
-                .setNegativeButton("稍后", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        // 记住这一版被跳过，下次启动不再弹同一个版本
-                        Updater.skipVersion(MainActivity.this, r.tag);
-                    }
-                })
-                .show();
+        com.dsh.android.ui.UpdateSheet.show(this, r);
     }
 
     private void openExternal(String url) {
