@@ -538,6 +538,47 @@ public final class MainActivity extends Activity {
         box.addView(slider);
         box.addView(desc);
 
+        box.addView(dividerLine());
+
+        LinearLayout scopeHead = new LinearLayout(this);
+        scopeHead.setOrientation(LinearLayout.HORIZONTAL);
+        scopeHead.setGravity(Gravity.CENTER_VERTICAL);
+        scopeHead.setPadding(dp(14), dp(6), dp(14), dp(2));
+        TextView scopeLabel = new TextView(this);
+        scopeLabel.setText("文件作用域");
+        scopeLabel.setTextSize(11);
+        scopeLabel.setTextColor(Theme.caption());
+        scopeHead.addView(scopeLabel, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        final TextView scopeValue = new TextView(this);
+        scopeValue.setTextSize(13);
+        scopeValue.setTypeface(null, Typeface.BOLD);
+        scopeValue.setTextColor(Theme.text());
+        scopeHead.addView(scopeValue);
+        box.addView(scopeHead);
+
+        final boolean device = prefs().getString(C.KEY_FS_SCOPE, C.SCOPE_WORKSPACE)
+                .equals(C.SCOPE_DEVICE);
+        scopeValue.setText(device ? "全局" : "工作区");
+
+        box.addView(popupRow("工作区　应用私有目录，最安全", !device, new View.OnClickListener() {
+            public void onClick(View v) {
+                prefs().edit().putString(C.KEY_FS_SCOPE, C.SCOPE_WORKSPACE).apply();
+                applyChoice();
+            }
+        }));
+        box.addView(popupRow("全局　可读写整个存储（需授权）", device, new View.OnClickListener() {
+            public void onClick(View v) {
+                if (!hasStorage()) {
+                    if (modelPopup != null) modelPopup.dismiss();
+                    requestStorageThenScope();
+                    return;
+                }
+                prefs().edit().putString(C.KEY_FS_SCOPE, C.SCOPE_DEVICE).apply();
+                applyChoice();
+            }
+        }));
+
         slider.setOnChangeListener(new com.dsh.android.ui.ReasoningSlider.OnChange() {
             public void onChanged(int index, String key) {
                 prefs().edit().putString(C.KEY_REASONING, key).apply();
@@ -550,6 +591,42 @@ public final class MainActivity extends Activity {
                 desc.animate().alpha(1f).setDuration(180).start();
             }
         });
+    }
+
+    private static final int REQ_SCOPE_STORAGE = 1002;
+    private boolean pendingDeviceScope = false;
+
+    private boolean hasStorage() {
+        if (android.os.Build.VERSION.SDK_INT < 23) return true;
+        return checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED
+            && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void requestStorageThenScope() {
+        if (android.os.Build.VERSION.SDK_INT < 23) return;
+        pendingDeviceScope = true;
+        requestPermissions(new String[]{
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+        }, REQ_SCOPE_STORAGE);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(req, perms, res);
+        if (req != REQ_SCOPE_STORAGE) return;
+        boolean ok = res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        if (pendingDeviceScope) {
+            pendingDeviceScope = false;
+            if (ok) {
+                prefs().edit().putString(C.KEY_FS_SCOPE, C.SCOPE_DEVICE).apply();
+                Toast.makeText(this, "已切换到全局作用域", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "没有存储权限，保持工作区", Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
     private void applyChoice() {

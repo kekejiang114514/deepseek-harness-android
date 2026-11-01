@@ -177,6 +177,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     // ------------------------------------------------------------ 布局
 
+    /** 0 = 根菜单，其余为子页。 */
+    private int page = 0;
+    private boolean keyVisible = false;
+
     private View build() {
         bound.clear();
 
@@ -191,46 +195,186 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(16), dp(4), dp(16), dp(40));
 
-        // ---- 接口 ----
-        body.addView(hintRow("模型与推理等级在聊天页标题下方切换；这里只管接口和密钥。"));
+        if (page == 0) pageRoot(body);
+        else if (page == 1) pageApi(body);
+        else if (page == 2) pageTools(body);
+        else if (page == 3) pagePlugins(body);
+        else if (page == 4) pageAppearance(body);
+        else pageAbout(body);
 
-        // ---- 接口 ----
+        sv.addView(body);
+        root.addView(sv, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        return root;
+    }
+
+    /** 根菜单：五个分组入口。 */
+    private void pageRoot(LinearLayout body) {
+        body.addView(sectionLabel("设置"));
+        LinearLayout c = card();
+        c.addView(menuRow("接口与密钥", "接口地址、API Key、模型", 1));
+        c.addView(divider());
+        c.addView(menuRow("工具能力", "屏幕操作", 2));
+        c.addView(divider());
+        c.addView(menuRow("插件", "本地插件、插件市场", 3));
+        c.addView(divider());
+        c.addView(menuRow("外观", "主题", 4));
+        c.addView(divider());
+        c.addView(menuRow("关于", "版本、更新、开源协议", 5));
+        body.addView(c);
+    }
+
+    private View menuRow(final String title, String sub, final int target) {
+        LinearLayout r = new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(16), dp(14), dp(16), dp(14));
+        r.setBackground(pressable());
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView t = new TextView(this);
+        t.setText(title);
+        t.setTextSize(15);
+        t.setTextColor(Theme.text());
+        col.addView(t);
+        TextView s = new TextView(this);
+        s.setText(sub);
+        s.setTextSize(12);
+        s.setTextColor(Theme.caption());
+        s.setPadding(0, dp(3), 0, 0);
+        col.addView(s);
+        r.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView arrow = new TextView(this);
+        arrow.setText("\u203A");
+        arrow.setTextSize(18);
+        arrow.setTextColor(Theme.text3());
+        r.addView(arrow);
+
+        r.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { gotoPage(target); }
+        });
+        return r;
+    }
+
+    private void gotoPage(int target) {
+        page = target;
+        setContentView(build());
+        View fresh = findViewById(android.R.id.content);
+        fresh.setAlpha(0f);
+        fresh.setTranslationX(dp(10));
+        fresh.animate().alpha(1f).translationX(0).setDuration(180).start();
+    }
+
+    // ------------------------------------------------------------ 接口与密钥
+
+    private void pageApi(LinearLayout body) {
         body.addView(sectionLabel("接口"));
         LinearLayout apiCard = card();
 
-        apiCard.addView(row("接口地址", C.KEY_BASE_URL,
-                new Fmt() {
-                    public String get() {
-                        String v = sp.getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
-                        return v == null ? "" : v;
-                    }
-                },
-                new View.OnClickListener() {
-                    public void onClick(View v) { editText("接口地址", C.KEY_BASE_URL, C.DEFAULT_BASE_URL, false); }
-                }, true));
-        apiCard.addView(divider());
-        apiCard.addView(row("API Key", C.KEY_API_KEY,
-                new Fmt() {
-                    public String get() { return maskKey(keyValue()); }
-                },
-                new View.OnClickListener() {
-                    public void onClick(View v) { editText("API Key", C.KEY_API_KEY, "sk-...", false); }
-                }, true));
-        apiCard.addView(divider());
+        apiCard.addView(fieldLabel("接口地址"));
+        final EditText etBase = fieldInput(sp.getString(C.KEY_BASE_URL, ""), false, C.DEFAULT_BASE_URL);
+        apiCard.addView(etBase);
 
-        if (keyValue().length() > 0) {
-            apiCard.addView(divider());
-            apiCard.addView(actionRow("重新读取模型列表", new View.OnClickListener() {
-                public void onClick(View v) { fetchModels(true); }
-            }));
-        }
+        apiCard.addView(divider());
+        apiCard.addView(fieldLabel("API Key"));
+        final EditText etKey = fieldInput(sp.getString(C.KEY_API_KEY, ""), true, "sk-...");
+        apiCard.addView(etKey);
+
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER_VERTICAL);
+        btnRow.setPadding(dp(14), 0, dp(14), dp(12));
+
+        final TextView toggle = new TextView(this);
+        toggle.setText(keyVisible ? "隐藏" : "显示");
+        toggle.setTextSize(12);
+        toggle.setTextColor(Theme.link());
+        toggle.setPadding(dp(2), dp(8), dp(14), dp(8));
+        toggle.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                keyVisible = !keyVisible;
+                etKey.setInputType(InputType.TYPE_CLASS_TEXT
+                        | (keyVisible ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                                      : InputType.TYPE_TEXT_VARIATION_PASSWORD));
+                toggle.setText(keyVisible ? "隐藏" : "显示");
+            }
+        });
+        btnRow.addView(toggle, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView save = new TextView(this);
+        save.setText("保存");
+        save.setTextSize(13);
+        save.setTextColor(Theme.onPrimary());
+        save.setPadding(dp(22), dp(8), dp(22), dp(8));
+        save.setBackground(Theme.round(Theme.primary(), Theme.R_LG, this));
+        save.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                String base = etBase.getText().toString().trim();
+                String key = etKey.getText().toString().trim();
+                sp.edit().putString(C.KEY_BASE_URL,
+                        base.length() == 0 ? C.DEFAULT_BASE_URL : base).apply();
+                sp.edit().putString(C.KEY_API_KEY, key).apply();
+                toast("已保存");
+                if (key.length() > 0) fetchModels(false);
+            }
+        });
+        btnRow.addView(save);
+        apiCard.addView(btnRow);
         body.addView(apiCard);
 
+        body.addView(sectionLabel("模型"));
+        LinearLayout modelCard = card();
+        modelHost = new LinearLayout(this);
+        modelHost.setOrientation(LinearLayout.VERTICAL);
+        modelCard.addView(modelHost);
+        modelCard.addView(divider());
+        modelCard.addView(actionRow("重新读取模型列表", new View.OnClickListener() {
+            public void onClick(View v) { fetchModels(true); }
+        }));
+        body.addView(modelCard);
+        rebuildModelHost(false);
+
+        body.addView(hintRow("模型与推理强度在聊天页标题下方切换。"));
+    }
+
+    private TextView fieldLabel(String text) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(11);
+        t.setTextColor(Theme.caption());
+        t.setPadding(dp(14), dp(12), dp(14), dp(2));
+        return t;
+    }
+
+    private EditText fieldInput(String value, boolean secret, String hint) {
+        EditText et = new EditText(this);
+        et.setText(value);
+        et.setHint(hint);
+        et.setTextSize(14);
+        et.setSingleLine(true);
+        et.setTextColor(Theme.text());
+        et.setHintTextColor(Theme.caption());
+        et.setPadding(dp(14), dp(11), dp(14), dp(11));
+        et.setBackground(Theme.round(Theme.surface2(), Theme.R_LG, this));
+        et.setInputType(InputType.TYPE_CLASS_TEXT
+                | (secret ? InputType.TYPE_TEXT_VARIATION_PASSWORD
+                          : InputType.TYPE_TEXT_VARIATION_URI));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(14), dp(4), dp(14), dp(6));
+        et.setLayoutParams(lp);
+        return et;
+    }
+
+    // ------------------------------------------------------------ 工具能力
+
+    private void pageTools(LinearLayout body) {
         // ---- 工具能力 ----
         body.addView(sectionLabel("工具能力"));
         LinearLayout toolCard = card();
-        toolCard.addView(scopeRow());
-        toolCard.addView(divider());
         toolCard.addView(switchRow("屏幕操作（无障碍）", "允许 Agent 读取和操作屏幕",
                 sp.getBoolean(C.KEY_A11Y_ENABLED, true),
                 new CompoundCallback() {
@@ -262,7 +406,11 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         a11yHintHost.setOrientation(LinearLayout.VERTICAL);
         toolCard.addView(a11yHintHost);
         body.addView(toolCard);
+    }
 
+    // ------------------------------------------------------------ 插件
+
+    private void pagePlugins(LinearLayout body) {
         // ---- 插件 ----
         body.addView(sectionLabel("插件"));
         LinearLayout pluginCard = card();
@@ -301,7 +449,12 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         pluginCard.addView(pluginHost);
         body.addView(pluginCard);
         pluginSection.rebuild(false);
+        pluginSection.rebuild(false);
+    }
 
+    // ------------------------------------------------------------ 外观
+
+    private void pageAppearance(LinearLayout body) {
         // ---- 外观 ----
         body.addView(sectionLabel("外观"));
         LinearLayout uiCard = card();
@@ -316,14 +469,18 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                         // 主题要重绘所有颜色：等这次点击画完再整体淡入淡出重建
                         SettingsActivity.this.findViewById(android.R.id.content)
                                 .post(new Runnable() {
-                                    public void run() { applyThemeFade(); }
+                                    public void run() { applyThemeReveal(); }
                                 });
                     }
                 },
                 new String[]{Theme.MODE_SYSTEM, Theme.MODE_LIGHT, Theme.MODE_DARK},
                 new String[]{"跟随系统", "浅色", "深色"}, null));
         body.addView(uiCard);
+    }
 
+    // ------------------------------------------------------------ 关于
+
+    private void pageAbout(LinearLayout body) {
         // ---- 关于 ----
         body.addView(sectionLabel("关于"));
         LinearLayout aboutCard = card();
@@ -339,11 +496,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             }
         }));
         body.addView(aboutCard);
-
-        sv.addView(body);
-        root.addView(sv, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        return root;
     }
 
     private View topBar() {
@@ -359,17 +511,33 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         back.setTextColor(Theme.text());
         back.setGravity(Gravity.CENTER);
         back.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { finish(); }
+            public void onClick(View v) {
+                if (page != 0) {
+                    page = 0;
+                    setContentView(build());
+                } else {
+                    finish();
+                }
+            }
         });
         bar.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         TextView title = new TextView(this);
-        title.setText("设置");
+        title.setText(pageTitle());
         title.setTextSize(17);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setTextColor(Theme.text());
         bar.addView(title);
         return bar;
+    }
+
+    private String pageTitle() {
+        if (page == 1) return "接口与密钥";
+        if (page == 2) return "工具能力";
+        if (page == 3) return "插件";
+        if (page == 4) return "外观";
+        if (page == 5) return "关于";
+        return "设置";
     }
 
     private TextView sectionLabel(String text) {
@@ -942,16 +1110,54 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     }
 
     /** 换主题需要重绘全部颜色：用淡出→重建→淡入遮盖，避免白闪。 */
-    private void applyThemeFade() {
+    /**
+     * 切换主题时用圆形扩散过渡：先截下当前画面，重建新主题后再把旧画面从左上角
+     * 收成一个圆（半径由整屏收到 0），视觉上新主题就是从那个角呈半圆扩散开的。
+     */
+    private void applyThemeReveal() {
         final View content = findViewById(android.R.id.content);
-        content.animate().alpha(0f).setDuration(120).withEndAction(new Runnable() {
+        int w = content == null ? 0 : content.getWidth();
+        int h = content == null ? 0 : content.getHeight();
+        if (w <= 0 || h <= 0) {
+            setContentView(build());
+            return;
+        }
+
+        android.graphics.Bitmap shot = android.graphics.Bitmap.createBitmap(
+                w, h, android.graphics.Bitmap.Config.ARGB_8888);
+        content.draw(new android.graphics.Canvas(shot));
+
+        Theme.init(this);
+        setContentView(build());
+
+        final android.view.ViewGroup host = findViewById(android.R.id.content);
+        if (host == null) return;
+
+        final android.widget.ImageView overlay = new android.widget.ImageView(this);
+        overlay.setImageBitmap(shot);
+        overlay.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        host.addView(overlay, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        host.post(new Runnable() {
             public void run() {
-                setContentView(build());
-                final View fresh = findViewById(android.R.id.content);
-                fresh.setAlpha(0f);
-                fresh.animate().alpha(1f).setDuration(180).start();
+                int w2 = host.getWidth();
+                int h2 = host.getHeight();
+                float maxR = (float) Math.hypot(w2, h2);
+                android.animation.Animator a = android.view.ViewAnimationUtils
+                        .createCircularReveal(overlay, 0, 0, maxR, 0f);
+                a.setDuration(420);
+                a.setInterpolator(new android.view.animation.DecelerateInterpolator());
+                a.addListener(new android.animation.AnimatorListenerAdapter() {
+                    public void onAnimationEnd(android.animation.Animator anim) {
+                        try {
+                            host.removeView(overlay);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                a.start();
             }
-        }).start();
+        });
     }
 
     private void editText(final String label, final String key,
