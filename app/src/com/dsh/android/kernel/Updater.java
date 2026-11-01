@@ -36,6 +36,8 @@ public final class Updater {
     private static final int TIMEOUT_MS = 12000;
 
     public static final String KEY_AUTO = "update_auto";
+    /** 是否接收 Beta（预发布）版本。默认关闭，只提示正式版。 */
+    public static final String KEY_BETA = "update_beta";
     public static final String KEY_LAST_TS = "update_last_ts";
     public static final String KEY_LAST_TAG = "update_last_tag";
     public static final String KEY_LAST_ERR = "update_last_err";
@@ -76,7 +78,7 @@ public final class Updater {
                 Release r = null;
                 String err = null;
                 try {
-                    Release latest = fetch();
+                    Release latest = fetch(betaEnabled(ctx));
                     if (latest == null) {
                         err = "没有找到发布记录";
                     } else if (isNewer(latest.tag, C.VERSION)) {
@@ -98,6 +100,11 @@ public final class Updater {
 
     /** 同步拉取版本列表并挑出最高的一个（在后台线程调用）。 */
     public static Release fetch() throws Exception {
+        return fetch(true);
+    }
+
+    /** includeBeta=false 时只看正式版本。 */
+    public static Release fetch(boolean includeBeta) throws Exception {
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(API_LIST).openConnection();
@@ -119,7 +126,7 @@ public final class Updater {
             if (code != 200) throw new Exception("HTTP " + code);
 
             JSONArray arr = new JSONArray(read(c.getInputStream()));
-            JSONObject best = ReleasePicker.best(arr);
+            JSONObject best = ReleasePicker.best(arr, includeBeta);
             return best == null ? null : parseOne(best);
         } finally {
             if (c != null) c.disconnect();
@@ -185,6 +192,15 @@ public final class Updater {
     }
 
     // ------------------------------------------------------------ 状态存取
+
+    /** 是否接收 Beta 版本（默认关）。 */
+    public static boolean betaEnabled(Context ctx) {
+        return prefs(ctx).getBoolean(KEY_BETA, false);
+    }
+
+    public static void setBetaEnabled(Context ctx, boolean on) {
+        prefs(ctx).edit().putBoolean(KEY_BETA, on).apply();
+    }
 
     /** 自动检查是否开启（默认开）。 */
     public static boolean autoEnabled(Context ctx) {

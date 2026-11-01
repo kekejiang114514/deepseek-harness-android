@@ -116,6 +116,18 @@ public class VersionTest {
         noise.put(rel("nightly-abc", false));
         ok(ReleasePicker.bestIndex(noise) < 0, "没有版本号的 tag 被跳过");
 
+        System.out.println("t8 只收正式版时的挑选");
+        JSONArray mix = new JSONArray();
+        mix.put(rel("v1.0", false));
+        mix.put(rel("v1.1-beta1", true));
+        ok("v1.0".equals(ReleasePicker.best(mix, false).optString("tag_name")),
+                "关闭 beta 时忽略预发布");
+        ok("v1.1-beta1".equals(ReleasePicker.best(mix, true).optString("tag_name")),
+                "开启 beta 时选更高的预发布");
+        JSONArray onlyBeta = new JSONArray();
+        onlyBeta.put(rel("v1.1-beta1", true));
+        ok(ReleasePicker.best(onlyBeta, false) == null, "只收正式版且只有 beta 时返回 null");
+
         System.out.println();
         System.out.println("==== " + pass + " passed, " + fail + " failed ====");
         if (fail > 0) System.exit(1);
