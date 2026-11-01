@@ -87,7 +87,21 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     // ------------------------------------------------------------ 生命周期
 
+    /**
+     * 在 Activity 挂载前把语言与布局方向写进 Configuration。
+     *
+     * <p>只对具体的 View 调 setLayoutDirection 是不够的：文本方向、系统控件、
+     * 资源里的 localizable 值都来自 Configuration 的 Locale。阿拉伯语等 RTL 语言
+     * 必须在这里换掉 Locale，系统才会把整个界面镜像过来。
+     */
     @Override
+    protected void attachBaseContext(android.content.Context base) {
+        android.content.res.Configuration cfg =
+                new android.content.res.Configuration(base.getResources().getConfiguration());
+        com.dsh.android.kernel.Lang.applyTo(cfg, base);
+        super.attachBaseContext(base.createConfigurationContext(cfg));
+    }
+
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // 去掉系统 ActionBar，只保留页面内自绘的返回栏
@@ -614,51 +628,19 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
         body.addView(sectionLabel(Texts.t(this, "language")));
         LinearLayout c = card();
-        c.addView(langRow(null, Texts.t(this, "lang_follow"), systemLabel(sys), sel == null
-                || com.dsh.android.kernel.Lang.SYSTEM.equals(sel)));
+        c.addView(langRow(null, Texts.t(this, "lang_follow"), systemLabel(sys),
+                sel == null || com.dsh.android.kernel.Lang.SYSTEM.equals(sel)));
         body.addView(c);
 
-        // 已完整翻译
-        body.addView(sectionLabel(Texts.t(this, "lang_full")));
-        LinearLayout full = card();
-        boolean firstFull = true;
+        // 全部语言平铺，不区分翻译完整度
+        LinearLayout all = card();
         for (int i = 0; i < items.size(); i++) {
             com.dsh.android.kernel.Lang.Item it = items.get(i);
-            if (it.level != com.dsh.android.kernel.Lang.SUPPORTED) continue;
-            if (!firstFull) full.addView(divider());
-            firstFull = false;
-            full.addView(langRow(it.code, it.native_,
+            all.addView(divider());
+            all.addView(langRow(it.code, it.native_,
                     it.rtl ? Texts.t(this, "lang_rtl") : "", it.code.equals(sel)));
         }
-        body.addView(full);
-
-        // 部分翻译
-        body.addView(sectionLabel(Texts.t(this, "lang_partial")));
-        LinearLayout part = card();
-        boolean firstPart = true;
-        for (int i = 0; i < items.size(); i++) {
-            com.dsh.android.kernel.Lang.Item it = items.get(i);
-            if (it.level != com.dsh.android.kernel.Lang.PARTIAL) continue;
-            if (!firstPart) part.addView(divider());
-            firstPart = false;
-            part.addView(langRow(it.code, it.native_,
-                    it.rtl ? Texts.t(this, "lang_rtl") : "", it.code.equals(sel)));
-        }
-        body.addView(part);
-
-        // 其余语言
-        body.addView(sectionLabel(Texts.t(this, "lang_partial")));
-        LinearLayout rest = card();
-        boolean firstRest = true;
-        for (int i = 0; i < items.size(); i++) {
-            com.dsh.android.kernel.Lang.Item it = items.get(i);
-            if (it.level != com.dsh.android.kernel.Lang.FALLBACK) continue;
-            if (!firstRest) rest.addView(divider());
-            firstRest = false;
-            rest.addView(langRow(it.code, it.native_,
-                    it.rtl ? Texts.t(this, "lang_rtl") : "", it.code.equals(sel)));
-        }
-        body.addView(rest);
+        body.addView(all);
 
         body.addView(hintRow(Texts.t(this, "lang_note")));
     }
