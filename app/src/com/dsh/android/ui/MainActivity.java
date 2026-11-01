@@ -489,7 +489,7 @@ public final class MainActivity extends Activity {
         head.setPadding(dp(14), dp(6), dp(14), dp(2));
 
         TextView headLabel = new TextView(this);
-        headLabel.setText("推理强度");
+        headLabel.setText(Texts.t(this, "reasoning"));
         headLabel.setTextSize(11);
         headLabel.setTextColor(Theme.caption());
         head.addView(headLabel, new LinearLayout.LayoutParams(0,
@@ -527,7 +527,7 @@ public final class MainActivity extends Activity {
         scopeHead.setGravity(Gravity.CENTER_VERTICAL);
         scopeHead.setPadding(dp(14), dp(6), dp(14), dp(2));
         TextView scopeLabel = new TextView(this);
-        scopeLabel.setText("文件作用域");
+        scopeLabel.setText(Texts.t(this, "file_scope"));
         scopeLabel.setTextSize(11);
         scopeLabel.setTextColor(Theme.caption());
         scopeHead.addView(scopeLabel, new LinearLayout.LayoutParams(0,
@@ -541,15 +541,15 @@ public final class MainActivity extends Activity {
 
         final boolean device = prefs().getString(C.KEY_FS_SCOPE, C.SCOPE_WORKSPACE)
                 .equals(C.SCOPE_DEVICE);
-        scopeValue.setText(device ? "全局" : "工作区");
+        scopeValue.setText(Texts.t(this, device ? "device_short" : "ws_short"));
 
-        box.addView(popupRow("工作区　应用私有目录，最安全", !device, new View.OnClickListener() {
+        box.addView(popupRow(Texts.t(this, "workspace"), !device, new View.OnClickListener() {
             public void onClick(View v) {
                 prefs().edit().putString(C.KEY_FS_SCOPE, C.SCOPE_WORKSPACE).apply();
                 applyChoice();
             }
         }));
-        box.addView(popupRow("全局　可读写整个存储（需授权）", device, new View.OnClickListener() {
+        box.addView(popupRow(Texts.t(this, "device"), device, new View.OnClickListener() {
             public void onClick(View v) {
                 if (!hasStorage()) {
                     if (modelPopup != null) modelPopup.dismiss();
@@ -1854,7 +1854,7 @@ public final class MainActivity extends Activity {
                 android.content.ClipboardManager cm =
                         (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 cm.setPrimaryClip(android.content.ClipData.newPlainText("msg", text));
-                Snack.show(MainActivity.this, "已复制");
+                Snack.show(MainActivity.this, Texts.t(MainActivity.this, "copied"));
                 return true;
             }
         });
@@ -1877,15 +1877,15 @@ public final class MainActivity extends Activity {
         menu.setOrientation(LinearLayout.VERTICAL);
         menu.setPadding(dp(4), dp(4), dp(4), dp(4));
 
-        menu.addView(menuItem("复制", new View.OnClickListener() {
+        menu.addView(menuItem(Texts.t(this, "copy"), new View.OnClickListener() {
             public void onClick(View x) {
                 android.content.ClipboardManager cm =
                         (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 cm.setPrimaryClip(android.content.ClipData.newPlainText("msg", text));
-                Snack.show(MainActivity.this, "已复制");
+                Snack.show(MainActivity.this, Texts.t(MainActivity.this, "copied"));
             }
         }));
-        menu.addView(menuItem("重新生成", new View.OnClickListener() {
+        menu.addView(menuItem(Texts.t(this, "regen"), new View.OnClickListener() {
             public void onClick(View x) { regen(); }
         }));
 

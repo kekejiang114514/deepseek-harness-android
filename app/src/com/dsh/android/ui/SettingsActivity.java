@@ -221,19 +221,19 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     /** 根菜单：五个分组入口。 */
     private void pageRoot(LinearLayout body) {
-        body.addView(sectionLabel("设置"));
+        body.addView(sectionLabel(Texts.t(this, "settings")));
         LinearLayout c = card();
-        c.addView(menuRow("接口与密钥", "接口地址、API Key、模型", 1));
+        c.addView(menuRow(Texts.t(this, "endpoint"), Texts.t(this, "sub_endpoint"), 1));
         c.addView(divider());
-        c.addView(menuRow("工具能力", "屏幕操作", 2));
+        c.addView(menuRow(Texts.t(this, "tools"), Texts.t(this, "sub_tools"), 2));
         c.addView(divider());
-        c.addView(menuRow("插件", "本地插件、插件市场", 3));
+        c.addView(menuRow(Texts.t(this, "plugins"), Texts.t(this, "sub_plugins"), 3));
         c.addView(divider());
-        c.addView(menuRow("外观", "主题", 4));
+        c.addView(menuRow(Texts.t(this, "appearance"), Texts.t(this, "sub_appearance"), 4));
         c.addView(divider());
-        c.addView(menuRow("语言", "界面语言与文字方向", 7));
+        c.addView(menuRow(Texts.t(this, "language"), Texts.t(this, "sub_language"), 7));
         c.addView(divider());
-        c.addView(menuRow("关于", "版本、更新、作者、开源许可", 5));
+        c.addView(menuRow(Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
         body.addView(c);
     }
 
@@ -612,14 +612,14 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         String sel = com.dsh.android.kernel.Lang.selected(this);
         String sys = com.dsh.android.kernel.Lang.systemTag(this);
 
-        body.addView(sectionLabel("界面语言"));
+        body.addView(sectionLabel(Texts.t(this, "language")));
         LinearLayout c = card();
-        c.addView(langRow(null, "跟随系统", systemLabel(sys), sel == null
+        c.addView(langRow(null, Texts.t(this, "lang_follow"), systemLabel(sys), sel == null
                 || com.dsh.android.kernel.Lang.SYSTEM.equals(sel)));
         body.addView(c);
 
         // 已完整翻译
-        body.addView(sectionLabel("已完整翻译"));
+        body.addView(sectionLabel(Texts.t(this, "lang_full")));
         LinearLayout full = card();
         boolean firstFull = true;
         for (int i = 0; i < items.size(); i++) {
@@ -627,13 +627,13 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             if (it.level != com.dsh.android.kernel.Lang.SUPPORTED) continue;
             if (!firstFull) full.addView(divider());
             firstFull = false;
-            full.addView(langRow(it.code, it.native_ + "　" + it.zh,
-                    it.rtl ? "从右到左" : "", it.code.equals(sel)));
+            full.addView(langRow(it.code, it.native_,
+                    it.rtl ? Texts.t(this, "lang_rtl") : "", it.code.equals(sel)));
         }
         body.addView(full);
 
         // 部分翻译
-        body.addView(sectionLabel("部分翻译"));
+        body.addView(sectionLabel(Texts.t(this, "lang_partial")));
         LinearLayout part = card();
         boolean firstPart = true;
         for (int i = 0; i < items.size(); i++) {
@@ -641,13 +641,13 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             if (it.level != com.dsh.android.kernel.Lang.PARTIAL) continue;
             if (!firstPart) part.addView(divider());
             firstPart = false;
-            part.addView(langRow(it.code, it.native_ + "　" + it.zh,
-                    it.rtl ? "从右到左" : "", it.code.equals(sel)));
+            part.addView(langRow(it.code, it.native_,
+                    it.rtl ? Texts.t(this, "lang_rtl") : "", it.code.equals(sel)));
         }
         body.addView(part);
 
         // 其余语言
-        body.addView(sectionLabel("其他语言（界面为英文）"));
+        body.addView(sectionLabel(Texts.t(this, "lang_partial")));
         LinearLayout rest = card();
         boolean firstRest = true;
         for (int i = 0; i < items.size(); i++) {
@@ -655,8 +655,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             if (it.level != com.dsh.android.kernel.Lang.FALLBACK) continue;
             if (!firstRest) rest.addView(divider());
             firstRest = false;
-            rest.addView(langRow(it.code, it.native_ + "　" + it.zh,
-                    it.rtl ? "从右到左" : "", it.code.equals(sel)));
+            rest.addView(langRow(it.code, it.native_,
+                    it.rtl ? Texts.t(this, "lang_rtl") : "", it.code.equals(sel)));
         }
         body.addView(rest);
 
@@ -665,8 +665,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     private String systemLabel(String tag) {
         com.dsh.android.kernel.Lang.Item it = com.dsh.android.kernel.Lang.byCode(tag);
-        if (it != null) return it.native_ + "　" + it.zh;
-        return tag;
+        return it != null ? it.native_ : tag;
     }
 
     /** 一行语言；code 为 null 表示「跟随系统」。 */
@@ -816,14 +815,14 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     }
 
     private String pageTitle() {
-        if (page == 1) return "接口与密钥";
-        if (page == 2) return "工具能力";
-        if (page == 3) return "插件";
-        if (page == 4) return "外观";
-        if (page == 5) return "关于";
-        if (page == 6) return "开源许可";
-        if (page == 7) return "语言";
-        return "设置";
+        if (page == 1) return Texts.t(this, "endpoint");
+        if (page == 2) return Texts.t(this, "tools");
+        if (page == 3) return Texts.t(this, "plugins");
+        if (page == 4) return Texts.t(this, "appearance");
+        if (page == 5) return Texts.t(this, "about");
+        if (page == 6) return Texts.t(this, "license");
+        if (page == 7) return Texts.t(this, "language");
+        return Texts.t(this, "settings");
     }
 
     private TextView sectionLabel(String text) {
