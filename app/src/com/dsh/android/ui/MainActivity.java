@@ -65,7 +65,21 @@ public final class MainActivity extends Activity {
     private StringBuilder streamingBuf = new StringBuilder();
     private String lastThemeMode = null;
 
+    /**
+     * 在 Activity 挂载前把语言与布局方向写进 Configuration。
+     *
+     * <p>只对具体的 View 调 setLayoutDirection 是不够的：文本方向、系统控件、
+     * 资源里的 localizable 值都来自 Configuration 的 Locale。阿拉伯语等 RTL 语言
+     * 必须在这里换掉 Locale，系统才会把整个界面镜像过来。
+     */
     @Override
+    protected void attachBaseContext(android.content.Context base) {
+        android.content.res.Configuration cfg =
+                new android.content.res.Configuration(base.getResources().getConfiguration());
+        com.dsh.android.kernel.Lang.applyTo(cfg, base);
+        super.attachBaseContext(base.createConfigurationContext(cfg));
+    }
+
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // 必须在 setContentView 之前：彻底去掉系统标题栏（ActionBar）
