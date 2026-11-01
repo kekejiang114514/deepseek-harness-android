@@ -20,6 +20,7 @@ public final class Texts {
 
     /** key -> {简体, 繁體(中国台湾), English, 日本語, 한국어, العربية} */
     private static final Object[][] TABLE = {
+            {"new_chat", new String[]{"新对话", "新對話", "New chat"}},
             {"welcome_title", new String[]{"有什么可以帮你？", "有什麼可以幫你？", "What can I help you with?", "何をお手伝いしましょうか？", "무엇을 도와드릴까요?", "كيف يمكنني مساعدتك؟"}},
             {"welcome_sub", new String[]{"我可以操作你的手机屏幕、读写文件", "我可以操作你的手機螢幕、讀寫檔案", "I can operate your screen and read or write files", "画面の操作やファイルの読み書きができます", "화면 조작과 파일 읽기/쓰기를 할 수 있습니다", "أستطيع التحكم بالشاشة وقراءة الملفات وكتابتها"}},
             {"settings", new String[]{"设置", "設定", "Settings", "設定", "설정", "الإعدادات"}},
@@ -108,10 +109,7 @@ public final class Texts {
         if (tag.startsWith("zh-MO")) return 2;
         if (tag.startsWith("zh-TW") || tag.startsWith("zh-Hant")) return 3;
         if (tag.startsWith("zh")) return 0;
-        if (tag.startsWith("ar")) return 5;
-        if (tag.startsWith("ja")) return 6;
-        if (tag.startsWith("ko")) return 7;
-        return 4;
+        return 4;   // 其它语言统一走翻译表
     }
 
     /** 取文案。中文三地用人工稿，其余语言查生成的翻译表，最后回退英文。 */
@@ -119,13 +117,14 @@ public final class Texts {
         for (int i = 0; i < TABLE.length; i++) {
             if (!key.equals(TABLE[i][0])) continue;
             String[] v = (String[]) TABLE[i][1];
-            int r = region(c);
-            if (r == 0) return v[0];
-            if (r == 1 || r == 2) return hkTyped(v[1]);
-            if (r == 3) return v[1];
-            if (r == 4) return v[2];
-
             String tag = com.dsh.android.kernel.Lang.textTag(c);
+            int r = region(c);
+            if (r == 0) return v[0];                    // 简体
+            if (r == 1 || r == 2) return hkTyped(v[1]); // 中国香港 / 中国澳门
+            if (r == 3) return v[1];                    // 中国台湾
+            if (tag.startsWith("en")) return v[2];      // 只有英文才直接用英文稿
+
+            // 其余语言：查生成的翻译表（含日、韩、阿及其他所有语言）
             String mt = machineText(tag, key);
             return mt != null && mt.length() > 0 ? mt : v[2];
         }
