@@ -164,11 +164,9 @@ public final class Lang {
         return hit == null ? byCode("en") : hit;
     }
 
-    /** 界面文案实际使用的语言代码（回退规则在这里统一处理）。 */
+    /** 界面文案实际使用的语言代码。所有语言都有译文，不再降级为英文。 */
     public static String textTag(Context c) {
-        Item it = effective(c);
-        if (it.level == FALLBACK) return "en";
-        return it.code;
+        return effective(c).code;
     }
 
     public static boolean isRtl(Context c) {

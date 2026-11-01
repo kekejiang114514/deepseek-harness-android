@@ -18,15 +18,17 @@ public final class Texts {
 
     private Texts() {}
 
-    /** key -> {简体, 繁體(中国台湾), English} */
+    /** key -> {简体, 繁體(中国台湾), English, 日本語, 한국어, العربية} */
     private static final Object[][] TABLE = {
-            {"settings", new String[]{"设置", "設定", "Settings"}},
-            {"endpoint", new String[]{"接口与密钥", "介面與金鑰", "Endpoint & key"}},
-            {"tools", new String[]{"工具能力", "工具能力", "Tools"}},
-            {"plugins", new String[]{"插件", "外掛", "Plugins"}},
-            {"appearance", new String[]{"外观", "外觀", "Appearance"}},
-            {"language", new String[]{"语言", "語言", "Language"}},
-            {"about", new String[]{"关于", "關於", "About"}},
+            {"welcome_title", new String[]{"有什么可以帮你？", "有什麼可以幫你？", "What can I help you with?", "何をお手伝いしましょうか？", "무엇을 도와드릴까요?", "كيف يمكنني مساعدتك؟"}},
+            {"welcome_sub", new String[]{"我可以操作你的手机屏幕、读写文件", "我可以操作你的手機螢幕、讀寫檔案", "I can operate your screen and read or write files", "画面の操作やファイルの読み書きができます", "화면 조작과 파일 읽기/쓰기를 할 수 있습니다", "أستطيع التحكم بالشاشة وقراءة الملفات وكتابتها"}},
+            {"settings", new String[]{"设置", "設定", "Settings", "設定", "설정", "الإعدادات"}},
+            {"endpoint", new String[]{"接口与密钥", "介面與金鑰", "Endpoint & key", "エンドポイントとキー", "엔드포인트 및 키", "الواجهة والمفتاح"}},
+            {"tools", new String[]{"工具能力", "工具能力", "Tools", "ツール", "도구", "الأدوات"}},
+            {"plugins", new String[]{"插件", "外掛", "Plugins", "プラグイン", "플러그인", "الإضافات"}},
+            {"appearance", new String[]{"外观", "外觀", "Appearance", "外観", "모양", "المظهر"}},
+            {"language", new String[]{"语言", "語言", "Language", "言語", "언어", "اللغة"}},
+            {"about", new String[]{"关于", "關於", "About", "情報", "정보", "حول"}},
             {"sub_endpoint", new String[]{"接口地址、API Key、模型", "介面位址、API Key、模型", "Endpoint, API key, models"}},
             {"sub_tools", new String[]{"屏幕操作", "螢幕操作", "Screen control"}},
             {"sub_plugins", new String[]{"本地插件、插件市场", "本機外掛、外掛市集", "Local plugins, market"}},
@@ -73,9 +75,9 @@ public final class Texts {
             {"lang_full", new String[]{"已完整翻译", "已完整翻譯", "Fully translated"}},
             {"lang_partial", new String[]{"其他语言", "其他語言", "Other languages"}},
             {"lang_note", new String[]{
-                    "切换后立即生效。未翻译的语言界面为英文。",
-                    "切換後立即生效。未翻譯的語言介面為英文。",
-                    "Applies immediately. Untranslated languages use English."}},
+                    "切换后立即生效，界面文案已覆盖全部语言。",
+                    "切換後立即生效，介面文案已涵蓋全部語言。",
+                    "Applies immediately. All languages are translated."}},
             {"lang_rtl", new String[]{"从右到左", "由右至左", "Right to left"}},
             {"market", new String[]{"插件市场", "外掛市集", "Plugin market"}},
             {"plugin_dir", new String[]{"插件目录 · 点击复制路径", "外掛目錄 · 點擊複製路徑", "Plugin directory · tap to copy"}},
@@ -106,23 +108,53 @@ public final class Texts {
         if (tag.startsWith("zh-MO")) return 2;
         if (tag.startsWith("zh-TW") || tag.startsWith("zh-Hant")) return 3;
         if (tag.startsWith("zh")) return 0;
+        if (tag.startsWith("ar")) return 5;
+        if (tag.startsWith("ja")) return 6;
+        if (tag.startsWith("ko")) return 7;
         return 4;
     }
 
-    /** 取文案。找不到键时原样返回键名，方便发现漏翻。 */
+    /** 取文案。中文三地用人工稿，其余语言查生成的翻译表，最后回退英文。 */
     public static String t(Context c, String key) {
         for (int i = 0; i < TABLE.length; i++) {
             if (!key.equals(TABLE[i][0])) continue;
             String[] v = (String[]) TABLE[i][1];
             int r = region(c);
             if (r == 0) return v[0];
+            if (r == 1 || r == 2) return hkTyped(v[1]);
+            if (r == 3) return v[1];
             if (r == 4) return v[2];
-            String tw = v[1];
-            if (r == 1) return hkTyped(tw);   // 中国香港
-            if (r == 2) return hkTyped(tw);   // 中国澳门同香港惯用
-            return tw;                        // 中国台湾
+
+            String tag = com.dsh.android.kernel.Lang.textTag(c);
+            String mt = machineText(tag, key);
+            return mt != null && mt.length() > 0 ? mt : v[2];
         }
         return key;
+    }
+
+    /** 查生成的多语言表；按 key 名定位，避免表顺序变动导致错位。 */
+    private static String machineText(String tag, String key) {
+        int idx = -1;
+        for (int i = 0; i < TextsData.KEYS.length; i++) {
+            if (key.equals(TextsData.KEYS[i])) { idx = i; break; }
+        }
+        if (idx < 0) return null;
+
+        String[] row = rowOf(tag);
+        if (row == null) {
+            int dash = tag.indexOf('-');
+            if (dash > 0) row = rowOf(tag.substring(0, dash));
+        }
+        if (row == null || idx + 1 >= row.length) return null;
+        return row[idx + 1];
+    }
+
+    private static String[] rowOf(String code) {
+        String[][] d = TextsData.DATA;
+        for (int i = 0; i < d.length; i++) {
+            if (code.equals(d[i][0])) return d[i];
+        }
+        return null;
     }
 
     /** 中国香港/澳门惯用词与台湾不同：软件、网络、用户、数据这类。 */
