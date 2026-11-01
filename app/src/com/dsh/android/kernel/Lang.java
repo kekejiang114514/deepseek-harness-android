@@ -39,6 +39,8 @@ public final class Lang {
         public final String zh;        // 中文名（用于中文界面下的显示）
         public final int level;
         public final boolean rtl;
+        /** 地区标注，用于繁体三地这类同名语言；空表示不需要。 */
+        public final String region;
 
         Item(String code, String native_, String zh, int level, boolean rtl) {
             this.code = code;
@@ -46,6 +48,15 @@ public final class Lang {
             this.zh = zh;
             this.level = level;
             this.rtl = rtl;
+            if ("zh-HK".equals(code)) this.region = "中國香港";
+            else if ("zh-MO".equals(code)) this.region = "中國澳門";
+            else if ("zh-TW".equals(code)) this.region = "中國台灣";
+            else this.region = "";
+        }
+
+        /** 列表里显示的名字；繁体三地带上地区，避免看起来一模一样。 */
+        public String display() {
+            return region.length() == 0 ? native_ : native_ + "（" + region + "）";
         }
     }
 
