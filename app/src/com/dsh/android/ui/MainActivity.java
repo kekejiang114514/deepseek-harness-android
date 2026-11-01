@@ -999,7 +999,11 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < all.size(); i++) {
             if (all.get(i).id.equals(id)) {
                 String t = all.get(i).title;
-                return t == null || t.length() == 0 ? "新对话" : t;
+                if (t == null || t.length() == 0
+                        || "新对话".equals(t) || "新会话".equals(t)) {
+                    return Texts.t(this, "new_chat");
+                }
+                return t;
             }
         }
         return "DShAndroid";

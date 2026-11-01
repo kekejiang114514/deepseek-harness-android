@@ -60,8 +60,12 @@ public final class Theme {
             int dir = rtl ? android.view.View.LAYOUT_DIRECTION_RTL
                     : android.view.View.LAYOUT_DIRECTION_LTR;
             if (ctx instanceof android.app.Activity) {
-                android.view.Window w = ((android.app.Activity) ctx).getWindow();
+                android.app.Activity a = (android.app.Activity) ctx;
+                android.view.Window w = a.getWindow();
                 if (w != null) w.getDecorView().setLayoutDirection(dir);
+                // 内容根视图单独设一次：部分机型上 decor 的方向不会传给 inflate 出来的层级
+                android.view.View content = a.findViewById(android.R.id.content);
+                if (content != null) content.setLayoutDirection(dir);
             }
         } catch (Throwable ignored) {}
     }
