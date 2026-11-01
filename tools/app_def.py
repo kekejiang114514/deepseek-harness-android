@@ -69,8 +69,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 33
-    a.version_name = '1.1-beta2'
+    a.version_code = 34
+    a.version_name = '1.1-beta3'
     a.min_sdk = 23
     a.target_sdk = 29
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
@@ -115,15 +115,6 @@ def build_dshandroid_app():
     # 插件市场：从 dshmarket 索引一键装插件
     a.components.append(ComponentDef(
         'activity', '.ui.MarketActivity', False,
-        attrs=[
-            ('theme', TYPE_REF, 0x0103012c),
-            ('windowSoftInputMode', TYPE_INT_HEX, 0x10),
-            ('configChanges', TYPE_INT_HEX, 0x06A0),
-        ],
-    ))
-    # 关于软件
-    a.components.append(ComponentDef(
-        'activity', '.ui.AboutActivity', False,
         attrs=[
             ('theme', TYPE_REF, 0x0103012c),
             ('windowSoftInputMode', TYPE_INT_HEX, 0x10),

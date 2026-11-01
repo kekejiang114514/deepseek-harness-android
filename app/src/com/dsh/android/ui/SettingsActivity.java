@@ -215,6 +215,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 2) pageTools(bodyBox);
         else if (page == 3) pagePlugins(bodyBox);
         else if (page == 4) pageAppearance(bodyBox);
+        else if (page == 6) pageLicense(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -230,7 +231,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(divider());
         c.addView(menuRow("外观", "主题", 4));
         c.addView(divider());
-        c.addView(menuRow("关于", "版本、更新、开源协议", 5));
+        c.addView(menuRow("关于", "版本、更新、开源许可", 5));
+        c.addView(divider());
+        c.addView(menuRow("关于作者", "项目与反馈", 7));
         body.addView(c);
     }
 
@@ -269,6 +272,14 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     }
 
     private void gotoPage(int target) {
+        if (target == 7) {
+            try {
+                startActivity(new Intent(SettingsActivity.this, AuthorActivity.class));
+            } catch (Exception e) {
+                toast("无法打开");
+            }
+            return;
+        }
         page = target;
         if (titleView != null) titleView.setText(pageTitle());
         fillBody();
@@ -377,6 +388,17 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         lp.setMargins(dp(14), dp(4), dp(14), dp(6));
         et.setLayoutParams(lp);
         return et;
+    }
+
+
+    // ------------------------------------------------------------ 更新
+
+    private TextView updateStatusView;
+    /** 检查中标志：避免连点触发多次请求。 */
+    private boolean checking = false;
+
+    private void setUpdateStatus(String text) {
+        if (updateStatusView != null) updateStatusView.setText(text);
     }
 
     // ------------------------------------------------------------ 工具能力
@@ -488,27 +510,275 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         body.addView(uiCard);
     }
 
+    private void checkUpdate() {
+        if (checking) return;
+        checking = true;
+        setUpdateStatus("正在检查…");
+        Updater.checkAsync(this, new Updater.Callback() {
+            public void onResult(Updater.Release r, String error) {
+                checking = false;
+                setUpdateStatus(error != null ? ("检查失败：" + error)
+                        : (r == null ? "已是最新版本" : "有新版本：" + r.version));
+                if (error != null) {
+                    toast(error);
+                } else if (r != null) {
+                    showUpdate(r);
+                } else {
+                    toast("已是最新版本");
+                }
+            }
+        });
+    }
+
+    private void showUpdate(final Updater.Release r) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("当前 ").append(C.VERSION).append("  →  最新 ").append(r.version);
+        if (r.apkSize > 0) sb.append("\n安装包 ").append(r.sizeText());
+        String notes = r.notes == null ? "" : r.notes.trim();
+        if (notes.length() > 0) {
+            String[] lines = notes.split("\n");
+            StringBuilder cut = new StringBuilder();
+            for (int i = 0; i < lines.length && i < 8; i++) cut.append(lines[i]).append("\n");
+            if (lines.length > 8) cut.append("…");
+            sb.append("\n\n").append(cut.toString().trim());
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("发现新版本 " + r.version)
+                .setMessage(sb.toString())
+                .setPositiveButton("下载并安装", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        if (!r.hasApk()) {
+                            toast("这个版本没有附带安装包");
+                            open(r.pageUrl);
+                            return;
+                        }
+                        downloadAndInstall(r);
+                    }
+                })
+                .setNeutralButton("发布页", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { open(r.pageUrl); }
+                })
+                .setNegativeButton("稍后", null)
+                .show();
+    }
+
+    private void downloadAndInstall(final Updater.Release r) {
+        if (!com.dsh.android.kernel.ApkInstaller.canInstall(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("需要安装权限")
+                    .setMessage("Android 8 起，应用安装更新需要你允许「安装未知应用」。"
+                            + "点「去设置」打开本应用的开关，回来再点一次更新。")
+                    .setPositiveButton("去设置", new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface d, int w) {
+                            try {
+                                startActivity(new Intent(
+                                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                        android.net.Uri.parse("package:" + getPackageName())));
+                            } catch (Exception e) {
+                                toast("请手动到 设置 → 应用 → 特殊权限 里允许");
+                            }
+                        }
+                    })
+                    .setNegativeButton("取消", null)
+                    .show();
+            return;
+        }
+
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setTitle("正在下载更新");
+        pd.setMessage("0%");
+        pd.setCancelable(true);
+        pd.show();
+
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    final java.io.File apk = com.dsh.android.kernel.ApkInstaller.download(
+                            SettingsActivity.this, r.apkUrl,
+                            new com.dsh.android.kernel.ApkInstaller.Progress() {
+                                public void onProgress(final long done, final long total) {
+                                    runOnUiThread(new Runnable() {
+                                        public void run() {
+                                            pd.setMessage((done * 100 / Math.max(1, total)) + "%"
+                                                    + "（" + (done / 1024) + "KB / " + (total / 1024) + "KB）");
+                                        }
+                                    });
+                                }
+                            });
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            dismiss(pd);
+                            confirmInstall(apk);
+                        }
+                    });
+                } catch (final Throwable t) {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            dismiss(pd);
+                            new AlertDialog.Builder(SettingsActivity.this)
+                                    .setTitle("下载失败")
+                                    .setMessage(t.getMessage() == null
+                                            ? t.getClass().getSimpleName() : t.getMessage())
+                                    .setPositiveButton("去发布页", new DialogInterface.OnClickListener() {
+                                        public void onClick(DialogInterface d, int w) { open(r.pageUrl); }
+                                    })
+                                    .setNegativeButton("取消", null)
+                                    .show();
+                        }
+                    });
+                }
+            }
+        }, "apk-download").start();
+    }
+
+    private void confirmInstall(final java.io.File apk) {
+        long mb = Math.max(1, apk.length() / 1048576);
+        new AlertDialog.Builder(this)
+                .setTitle("下载完成")
+                .setMessage("安装包已下载（约 " + mb + "MB）。\n\n"
+                        + "点「立即安装」后系统会弹出安装界面，装完会保留你的设置与对话。")
+                .setPositiveButton("立即安装", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        com.dsh.android.kernel.ApkInstaller.install(
+                                SettingsActivity.this, apk,
+                                new com.dsh.android.kernel.ApkInstaller.Callback() {
+                                    public void onDone(final String err) {
+                                        if (err != null) {
+                                            new AlertDialog.Builder(SettingsActivity.this)
+                                                    .setTitle("无法启动安装")
+                                                    .setMessage(err + "\n\n可以到设置 → 关于作者 里"
+                                                            + "打开应用信息清除权限后重试，"
+                                                            + "或直接从发布页手动下载。")
+                                                    .setPositiveButton("知道了", null)
+                                                    .show();
+                                        }
+                                    }
+                                });
+                    }
+                })
+                .setNegativeButton("稍后", null)
+                .show();
+    }
+
+    private void dismiss(android.app.Dialog d) {
+        try { if (d != null && d.isShowing()) d.dismiss(); } catch (Throwable ignored) {}
+    }
+
+    private void open(String url) {
+        if (url == null || url.length() == 0) return;
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+        } catch (Exception e) {
+            toast("没有可用的浏览器");
+        }
+    }
+
     // ------------------------------------------------------------ 关于
 
     private void pageAbout(LinearLayout body) {
-        // ---- 关于 ----
-        body.addView(sectionLabel("关于"));
-        LinearLayout aboutCard = card();
-        aboutCard.addView(switchRow("接收 Beta 版本", "开启后，测试版本也会提示更新",
+        // ---- 版本 ----
+        body.addView(sectionLabel("版本"));
+        LinearLayout verCard = card();
+        verCard.addView(row("当前版本", null, new Fmt() {
+            public String get() { return C.VERSION; }
+        }, null, false));
+        verCard.addView(divider());
+        verCard.addView(row("包名", null, new Fmt() {
+            public String get() { return getPackageName(); }
+        }, null, false));
+        verCard.addView(divider());
+        verCard.addView(row("构建方式", null, new Fmt() {
+            public String get() { return "javac + d8 + 自写打包链"; }
+        }, null, false));
+        body.addView(verCard);
+
+        // ---- 更新 ----
+        body.addView(sectionLabel("更新"));
+        LinearLayout upCard = card();
+        updateStatusView = new TextView(this);
+        updateStatusView.setTextSize(13);
+        updateStatusView.setTextColor(Theme.text());
+        updateStatusView.setPadding(dp(16), dp(14), dp(16), dp(14));
+        updateStatusView.setText(Updater.lastCheckedText(this));
+        upCard.addView(updateStatusView);
+        upCard.addView(divider());
+        upCard.addView(actionRow("检查更新", new View.OnClickListener() {
+            public void onClick(View v) { checkUpdate(); }
+        }));
+        upCard.addView(divider());
+        upCard.addView(switchRow("自动检查更新", "每次打开应用时查一次，每天最多一次",
+                Updater.autoEnabled(this), new CompoundCallback() {
+                    public void onChanged(boolean checked) {
+                        Updater.setAutoEnabled(SettingsActivity.this, checked);
+                    }
+                }));
+        upCard.addView(divider());
+        upCard.addView(switchRow("接收 Beta 版本", "开启后，测试版本也会提示更新",
                 Updater.betaEnabled(this), new CompoundCallback() {
                     public void onChanged(boolean checked) {
                         Updater.setBetaEnabled(SettingsActivity.this, checked);
                     }
                 }));
-        aboutCard.addView(divider());
-        aboutCard.addView(actionRow("关于软件", new View.OnClickListener() {
-            public void onClick(View v) {
-                startActivity(new Intent(SettingsActivity.this, AboutActivity.class));
-            }
-        }));
+        body.addView(upCard);
 
-        body.addView(aboutCard);
+        // ---- 开源 ----
+        body.addView(sectionLabel("开源"));
+        LinearLayout osCard = card();
+        osCard.addView(hintRow("本项目以 MIT 协议开源，构建脚本随源码一起提供，可以自己跑一遍再签名。"));
+        osCard.addView(divider());
+        osCard.addView(actionRow("源码仓库", new View.OnClickListener() {
+            public void onClick(View v) { open(com.dsh.android.kernel.About.REPO); }
+        }));
+        osCard.addView(divider());
+        osCard.addView(actionRow("开源许可", new View.OnClickListener() {
+            public void onClick(View v) { gotoPage(6); }
+        }));
+        body.addView(osCard);
     }
+
+    // ------------------------------------------------------------ 开源许可
+
+    private void pageLicense(LinearLayout body) {
+        body.addView(sectionLabel("MIT License"));
+        LinearLayout c = card();
+        TextView t = new TextView(this);
+        t.setText(LICENSE);
+        t.setTextSize(11.5f);
+        t.setTextColor(Theme.text2());
+        t.setTypeface(android.graphics.Typeface.MONOSPACE);
+        t.setLineSpacing(dp(3), 1f);
+        t.setTextIsSelectable(true);
+        t.setPadding(dp(14), dp(14), dp(14), dp(14));
+        c.addView(t);
+        body.addView(c);
+
+        body.addView(sectionLabel("第三方组件"));
+        LinearLayout d = card();
+        d.addView(hintRow("org.json —— JSON 解析，Android 平台自带接口的桌面测试实现，公共领域"));
+        d.addView(divider());
+        d.addView(hintRow("Android SDK 与系统 WebView —— 由设备系统提供，随系统许可"));
+        body.addView(d);
+    }
+
+    private static final String LICENSE =
+            "MIT License\n\n"
+            + "Copyright (c) 2026 DShAndroid\n\n"
+            + "Permission is hereby granted, free of charge, to any person obtaining a copy\n"
+            + "of this software and associated documentation files (the \"Software\"), to deal\n"
+            + "in the Software without restriction, including without limitation the rights\n"
+            + "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
+            + "copies of the Software, and to permit persons to whom the Software is\n"
+            + "furnished to do so, subject to the following conditions:\n\n"
+            + "The above copyright notice and this permission notice shall be included in all\n"
+            + "copies or substantial portions of the Software.\n\n"
+            + "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
+            + "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
+            + "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
+            + "AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
+            + "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
+            + "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n"
+            + "SOFTWARE.\n";
 
     private View topBar() {
         LinearLayout bar = new LinearLayout(this);
@@ -548,6 +818,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (page == 3) return "插件";
         if (page == 4) return "外观";
         if (page == 5) return "关于";
+        if (page == 6) return "开源许可";
         return "设置";
     }
 
@@ -1241,8 +1512,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }
     }
 
-    /** 检查中标志：避免连点触发多次请求。 */
-    private boolean checking = false;
     /** 本次运行期间的检查结果文案。 */
     private String lastResult = null;
 
