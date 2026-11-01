@@ -231,9 +231,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(divider());
         c.addView(menuRow("外观", "主题", 4));
         c.addView(divider());
-        c.addView(menuRow("关于", "版本、更新、开源许可", 5));
-        c.addView(divider());
-        c.addView(menuRow("关于作者", "项目与反馈", 7));
+        c.addView(menuRow("关于", "版本、更新、作者、开源许可", 5));
         body.addView(c);
     }
 
@@ -272,14 +270,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     }
 
     private void gotoPage(int target) {
-        if (target == 7) {
-            try {
-                startActivity(new Intent(SettingsActivity.this, AuthorActivity.class));
-            } catch (Exception e) {
-                toast("无法打开");
-            }
-            return;
-        }
         page = target;
         if (titleView != null) titleView.setText(pageTitle());
         fillBody();
@@ -683,14 +673,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         verCard.addView(row("当前版本", null, new Fmt() {
             public String get() { return C.VERSION; }
         }, null, false));
-        verCard.addView(divider());
-        verCard.addView(row("包名", null, new Fmt() {
-            public String get() { return getPackageName(); }
-        }, null, false));
-        verCard.addView(divider());
-        verCard.addView(row("构建方式", null, new Fmt() {
-            public String get() { return "javac + d8 + 自写打包链"; }
-        }, null, false));
         body.addView(verCard);
 
         // ---- 更新 ----
@@ -735,6 +717,20 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             public void onClick(View v) { gotoPage(6); }
         }));
         body.addView(osCard);
+
+        // ---- 作者 ----
+        body.addView(sectionLabel("作者"));
+        LinearLayout auCard = card();
+        auCard.addView(hintRow("问题反馈与建议请走仓库 issue，能最快被看到。"));
+        auCard.addView(divider());
+        auCard.addView(actionRow("GitHub", new View.OnClickListener() {
+            public void onClick(View v) { open(com.dsh.android.kernel.About.GITHUB); }
+        }));
+        auCard.addView(divider());
+        auCard.addView(actionRow("提交 issue", new View.OnClickListener() {
+            public void onClick(View v) { open(com.dsh.android.kernel.About.ISSUES); }
+        }));
+        body.addView(auCard);
     }
 
     // ------------------------------------------------------------ 开源许可
