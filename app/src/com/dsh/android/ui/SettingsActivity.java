@@ -215,6 +215,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 3) pagePlugins(bodyBox);
         else if (page == 4) pageAppearance(bodyBox);
         else if (page == 6) pageLicense(bodyBox);
+        else if (page == 7) pageLanguage(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -229,6 +230,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(menuRow("插件", "本地插件、插件市场", 3));
         c.addView(divider());
         c.addView(menuRow("外观", "主题", 4));
+        c.addView(divider());
+        c.addView(menuRow("语言", "界面语言与文字方向", 7));
         c.addView(divider());
         c.addView(menuRow("关于", "版本、更新、作者、开源许可", 5));
         body.addView(c);
@@ -602,6 +605,114 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         body.addView(auCard);
     }
 
+    // ------------------------------------------------------------ 语言
+
+    private void pageLanguage(LinearLayout body) {
+        java.util.List<com.dsh.android.kernel.Lang.Item> items = com.dsh.android.kernel.Lang.all();
+        String sel = com.dsh.android.kernel.Lang.selected(this);
+        String sys = com.dsh.android.kernel.Lang.systemTag(this);
+
+        body.addView(sectionLabel("界面语言"));
+        LinearLayout c = card();
+        c.addView(langRow(null, "跟随系统", systemLabel(sys), sel == null
+                || com.dsh.android.kernel.Lang.SYSTEM.equals(sel)));
+        body.addView(c);
+
+        // 已完整翻译
+        body.addView(sectionLabel("已完整翻译"));
+        LinearLayout full = card();
+        boolean firstFull = true;
+        for (int i = 0; i < items.size(); i++) {
+            com.dsh.android.kernel.Lang.Item it = items.get(i);
+            if (it.level != com.dsh.android.kernel.Lang.SUPPORTED) continue;
+            if (!firstFull) full.addView(divider());
+            firstFull = false;
+            full.addView(langRow(it.code, it.native_ + "　" + it.zh,
+                    it.rtl ? "从右到左" : "", it.code.equals(sel)));
+        }
+        body.addView(full);
+
+        // 部分翻译
+        body.addView(sectionLabel("部分翻译"));
+        LinearLayout part = card();
+        boolean firstPart = true;
+        for (int i = 0; i < items.size(); i++) {
+            com.dsh.android.kernel.Lang.Item it = items.get(i);
+            if (it.level != com.dsh.android.kernel.Lang.PARTIAL) continue;
+            if (!firstPart) part.addView(divider());
+            firstPart = false;
+            part.addView(langRow(it.code, it.native_ + "　" + it.zh,
+                    it.rtl ? "从右到左" : "", it.code.equals(sel)));
+        }
+        body.addView(part);
+
+        // 其余语言
+        body.addView(sectionLabel("其他语言（界面为英文）"));
+        LinearLayout rest = card();
+        boolean firstRest = true;
+        for (int i = 0; i < items.size(); i++) {
+            com.dsh.android.kernel.Lang.Item it = items.get(i);
+            if (it.level != com.dsh.android.kernel.Lang.FALLBACK) continue;
+            if (!firstRest) rest.addView(divider());
+            firstRest = false;
+            rest.addView(langRow(it.code, it.native_ + "　" + it.zh,
+                    it.rtl ? "从右到左" : "", it.code.equals(sel)));
+        }
+        body.addView(rest);
+
+        body.addView(hintRow(Texts.t(this, "lang_note")));
+    }
+
+    private String systemLabel(String tag) {
+        com.dsh.android.kernel.Lang.Item it = com.dsh.android.kernel.Lang.byCode(tag);
+        if (it != null) return it.native_ + "　" + it.zh;
+        return tag;
+    }
+
+    /** 一行语言；code 为 null 表示「跟随系统」。 */
+    private View langRow(final String code, String title, String sub, boolean selected) {
+        LinearLayout r = new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(16), dp(12), dp(16), dp(12));
+        r.setBackground(pressable());
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView t = new TextView(this);
+        t.setText(title);
+        t.setTextSize(14);
+        t.setTextColor(selected ? Theme.link() : Theme.text());
+        col.addView(t);
+        if (sub != null && sub.length() > 0) {
+            TextView s = new TextView(this);
+            s.setText(sub);
+            s.setTextSize(11);
+            s.setTextColor(Theme.caption());
+            s.setPadding(0, dp(2), 0, 0);
+            col.addView(s);
+        }
+        r.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        if (selected) {
+            TextView check = new TextView(this);
+            check.setText("\u2713");
+            check.setTextSize(15);
+            check.setTextColor(Theme.link());
+            r.addView(check);
+        }
+
+        r.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                com.dsh.android.kernel.Lang.setSelected(SettingsActivity.this,
+                        code == null ? com.dsh.android.kernel.Lang.SYSTEM : code);
+                Theme.init(SettingsActivity.this);      // 重新判定深浅色与布局方向
+                setContentView(build());                // 语言、方向都变了，整页重建
+            }
+        });
+        return r;
+    }
+
     // ------------------------------------------------------------ 开源许可
 
     private void pageLicense(LinearLayout body) {
@@ -711,6 +822,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (page == 4) return "外观";
         if (page == 5) return "关于";
         if (page == 6) return "开源许可";
+        if (page == 7) return "语言";
         return "设置";
     }
 
