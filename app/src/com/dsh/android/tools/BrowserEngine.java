@@ -321,6 +321,51 @@ public final class BrowserEngine {
         return result[0] == null ? "{\"ok\":false,\"error\":\"没有结果\"}" : result[0];
     }
 
+    /**
+     * 抓一帧当前渲染画面（给可视化的「电脑」面板用）。
+     *
+     * <p>在主线程把 WebView 画到 Bitmap 上；没有加载过页面时返回 null。
+     */
+    public static android.graphics.Bitmap capture(final int width, final int height) {
+        final android.graphics.Bitmap[] out = new android.graphics.Bitmap[1];
+        final CountDownLatch done = new CountDownLatch(1);
+        UI.post(new Runnable() {
+            public void run() {
+                try {
+                    WebView w;
+                    synchronized (BrowserEngine.class) { w = web; }
+                    if (w != null) {
+                        w.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+                        w.layout(0, 0, width, height);
+                        android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
+                                width, height, android.graphics.Bitmap.Config.ARGB_8888);
+                        w.draw(new android.graphics.Canvas(bmp));
+                        out[0] = bmp;
+                    }
+                } catch (Throwable ignored) {
+                } finally {
+                    done.countDown();
+                }
+            }
+        });
+        try {
+            done.await(3000, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return out[0];
+    }
+
+    /** 当前页地址（引擎最近加载的那个）。 */
+    public static String currentUrl() {
+        try {
+            return com.dsh.android.ui.BrowserActivity.last();
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
     /** 主线程创建 WebView；已存在直接复用。 */
     private static boolean ensure(Context ctx) {
         synchronized (BrowserEngine.class) {
