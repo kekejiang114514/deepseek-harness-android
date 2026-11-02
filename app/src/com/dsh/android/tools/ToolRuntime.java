@@ -240,7 +240,75 @@ public final class ToolRuntime {
                 return BrowserEngine.eval(ctx, url, script);
             }
         }));
+        // 页面操作类（参考 OpenMinis 的浏览器动作集，保留 WebView 能稳妥做到的几项）
+        String[][] acts = {
+                {"browser.click", "click", "点击页面上第一个匹配 selector 的元素。"},
+                {"browser.type", "type", "把文本填入匹配 selector 的输入框，并触发 input/change 事件。"},
+                {"browser.find", "find", "查找匹配 selector 的元素，返回数量与前若干条的文本。"},
+                {"browser.info", "info", "读取当前页面的标题、地址、链接数与正文长度。"},
+        };
+        for (int i = 0; i < acts.length; i++) {
+            final String action = acts[i][1];
+            JSONObject p = new JSONObject();
+            try {
+                JSONObject props = new JSONObject();
+                JSONObject urlP = new JSONObject();
+                urlP.put("type", "string");
+                urlP.put("description", "网址");
+                props.put("url", urlP);
+                if (!"info".equals(action)) {
+                    JSONObject sel = new JSONObject();
+                    sel.put("type", "string");
+                    sel.put("description", "CSS 选择器");
+                    props.put("selector", sel);
+                }
+                if ("type".equals(action)) {
+                    JSONObject t = new JSONObject();
+                    t.put("type", "string");
+                    t.put("description", "要输入的文本");
+                    props.put("text", t);
+                }
+                p.put("type", "object");
+                p.put("properties", props);
+                JSONArray req = new JSONArray().put("url");
+                if (!"info".equals(action)) req.put("selector");
+                if ("type".equals(action)) req.put("text");
+                p.put("required", req);
+            } catch (Exception ignored) {}
+
+            registry.put(acts[i][0], new ToolDef(acts[i][0], acts[i][2], p, new ToolExecutor() {
+                public String execute(JSONObject args) throws Exception {
+                    String url = args.optString("url", "");
+                    if (!url.startsWith("http")) return err("url 必须是 http/https");
+                    return BrowserEngine.act(ctx, url, action, args);
+                }
+            }));
+        }
+
+        JSONObject ckParams = new JSONObject();
+        try {
+            JSONObject u = new JSONObject();
+            u.put("type", "string");
+            u.put("description", "网址");
+            JSONObject props = new JSONObject();
+            props.put("url", u);
+            ckParams.put("type", "object");
+            ckParams.put("properties", props);
+            ckParams.put("required", new JSONArray().put("url"));
+        } catch (Exception ignored) {}
+
+        registry.put("browser.cookies", new ToolDef("browser.cookies",
+                "读取内置浏览器在该站点上的 Cookie。用于需要登录态的场景，"
+                        + "注意不要把敏感值原样贴进回答。",
+                ckParams, new ToolExecutor() {
+            public String execute(JSONObject args) {
+                String url = args.optString("url", "");
+                if (!url.startsWith("http")) return err("url 必须是 http/https");
+                return BrowserEngine.cookies(ctx, url);
+            }
+        }));
     }
+
 
     /** 记忆库工具：只暴露名称与用途，值只在执行动作时解密使用。 */
     private void registerVaultTools() {

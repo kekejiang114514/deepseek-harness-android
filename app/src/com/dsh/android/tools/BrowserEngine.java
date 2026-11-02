@@ -180,6 +180,60 @@ public final class BrowserEngine {
         return result[0] == null ? "{\"ok\":false,\"error\":\"没有返回\"}" : "{\"ok\":true,\"value\":" + result[0] + "}";
     }
 
+    /**
+     * 在已加载的页面上执行一个动作（点击、输入、查找等）。
+     *
+     * <p>参考 OpenMinis 的浏览器动作集合，但只保留 WebView 能稳妥做到的几项：
+     * 点击、输入、查找元素、读取页面信息、读取 Cookie。
+     */
+    public static String act(Context ctx, String url, String action, JSONObject params) {
+        String js;
+        if ("click".equals(action)) {
+            String sel = params.optString("selector", "");
+            if (sel.length() == 0) return "{\"ok\":false,\"error\":\"需要 selector\"}";
+            js = "var el=document.querySelector(" + JSONObject.quote(sel) + ");"
+                    + "if(!el) return {found:false};"
+                    + "el.scrollIntoView({block:'center'});el.click();"
+                    + "return {found:true,tag:el.tagName,text:(el.innerText||'').slice(0,120)};";
+        } else if ("type".equals(action)) {
+            String sel = params.optString("selector", "");
+            String text = params.optString("text", "");
+            if (sel.length() == 0) return "{\"ok\":false,\"error\":\"需要 selector\"}";
+            js = "var el=document.querySelector(" + JSONObject.quote(sel) + ");"
+                    + "if(!el) return {found:false};"
+                    + "el.focus();el.value=" + JSONObject.quote(text) + ";"
+                    + "el.dispatchEvent(new Event('input',{bubbles:true}));"
+                    + "el.dispatchEvent(new Event('change',{bubbles:true}));"
+                    + "return {found:true};";
+        } else if ("find".equals(action)) {
+            String sel = params.optString("selector", "");
+            js = "var list=document.querySelectorAll(" + JSONObject.quote(sel) + ");"
+                    + "return {count:list.length,items:Array.prototype.slice.call(list,0,30).map(function(e){"
+                    + "return {tag:e.tagName,text:(e.innerText||e.value||'').slice(0,120)}})};";
+        } else if ("info".equals(action)) {
+            js = "return {title:document.title,url:location.href,"
+                    + "links:document.querySelectorAll('a').length,"
+                    + "textLength:(document.body?document.body.innerText.length:0)};";
+        } else {
+            return "{\"ok\":false,\"error\":\"不支持的动作: " + action + "\"}";
+        }
+        return eval(ctx, url, js);
+    }
+
+    /** 读取当前页面的 Cookie（用于需要登录态的后续请求）。 */
+    public static String cookies(Context ctx, String url) {
+        try {
+            android.webkit.CookieManager cm = android.webkit.CookieManager.getInstance();
+            String v = cm.getCookie(url);
+            JSONObject o = new JSONObject();
+            o.put("ok", v != null && v.length() > 0);
+            o.put("cookie", v == null ? "" : v);
+            return o.toString();
+        } catch (Throwable t) {
+            return "{\"ok\":false,\"error\":\"读取 Cookie 失败\"}";
+        }
+    }
+
     /** 主线程创建 WebView；已存在直接复用。 */
     private static boolean ensure(Context ctx) {
         synchronized (BrowserEngine.class) {
