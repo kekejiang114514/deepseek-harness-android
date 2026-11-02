@@ -237,6 +237,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 7) pageLanguage(bodyBox);
         else if (page == 8) pageVault(bodyBox);
         else if (page == 9) pagePresets(bodyBox);
+        else if (page == 10) pageTerminal(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -258,6 +259,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(menuRow("记忆库", "给 AI 用的凭据，不进聊天记录", 8));
         c.addView(divider());
         c.addView(menuRow("提示词预设", "提前交代工作环境与背景", 9));
+        c.addView(divider());
+        c.addView(menuRow("终端", "在应用内执行系统命令", 10));
         c.addView(divider());
         c.addView(menuRow(Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
         body.addView(c);
@@ -1114,6 +1117,26 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 .show();
     }
 
+    // ------------------------------------------------------------ 终端
+
+    private void pageTerminal(LinearLayout body) {
+        body.addView(sectionLabel("终端"));
+        body.addView(hintRow("在应用内执行系统命令，和 AI 用的 shell.run 是同一套执行器。"
+                + "以本应用身份运行：没有 root 就做不了需要 root 的事，也读不到别的应用私有目录。"));
+
+        LinearLayout c = card();
+        c.addView(actionRow("打开终端", new View.OnClickListener() {
+            public void onClick(View v) {
+                try {
+                    startActivity(new Intent(SettingsActivity.this, TerminalActivity.class));
+                } catch (Exception e) {
+                    Snack.show(SettingsActivity.this, "无法打开终端");
+                }
+            }
+        }));
+        body.addView(c);
+    }
+
     // ------------------------------------------------------------ 开源许可
 
     private void pageLicense(LinearLayout body) {
@@ -1233,6 +1256,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (page == 7) return Texts.t(this, "language");
         if (page == 8) return "记忆库";
         if (page == 9) return "提示词预设";
+        if (page == 10) return "终端";
         return Texts.t(this, "settings");
     }
 
