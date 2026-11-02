@@ -286,6 +286,26 @@ public final class MainActivity extends Activity {
         composer.setBackground(Theme.roundOutlined(
                 Theme.surface(), Theme.R_PANEL, Theme.border(), this));
 
+        // Computer 面板入口：和输入框同排的小按钮
+        TextView computerBtn = new TextView(this);
+        computerBtn.setText("\u25A3");
+        computerBtn.setTextSize(15);
+        computerBtn.setGravity(Gravity.CENTER);
+        computerBtn.setTextColor(Theme.text2());
+        computerBtn.setIncludeFontPadding(false);
+        computerBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                try {
+                    ComputerSheet.show(MainActivity.this);
+                } catch (Throwable t) {
+                    Snack.show(MainActivity.this, "无法打开面板");
+                }
+            }
+        });
+        LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(dp(36), dp(40));
+        cLp.setMargins(dp(4), 0, dp(2), 0);
+        composer.addView(computerBtn, cLp);
+
         TextView attachBtn = new TextView(this);
         attachBtn.setText("\u002B");
         attachBtn.setTextSize(22);
@@ -1426,6 +1446,11 @@ public final class MainActivity extends Activity {
     private boolean pinnedToBottom = true;
     private TextView jumpBottom;
     /** 任务状态条：本轮跑了多久、调了几个工具。 */
+    /** 当前正在流式输出的思考块。 */
+    private ThinkingBlock liveThinking;
+    /** 最近一次工具调用的开始时间，用于面板里的耗时。 */
+    private long toolStartAt;
+
     private TextView taskBar;
     private long runStartMs;
     private int runToolCount;
@@ -1580,6 +1605,7 @@ public final class MainActivity extends Activity {
         // 这样「文字 → 工具 → 卡片 → 文字」能按真实顺序穿插
         streamingBuf.setLength(0);
         streamingView = null;
+        liveThinking = null;
         scrollBottom();
 
         loop.setSystemPrompt(buildSystemPrompt());
@@ -2088,6 +2114,7 @@ public final class MainActivity extends Activity {
     private void resend(final String text, final JSONArray hist) {
         streamingBuf.setLength(0);
         streamingView = null;
+        liveThinking = null;
         scrollBottom();
         running = true;
         setSendMode(true);
@@ -2167,6 +2194,26 @@ public final class MainActivity extends Activity {
                     }
                 });
             }
+
+            public void onReasoning(final String delta) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (liveThinking == null) {
+                            closeTextSegment();
+                            liveThinking = new ThinkingBlock(MainActivity.this, "");
+                            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT);
+                            lp.setMargins(dp(2), dp(4), dp(2), dp(6));
+                            liveThinking.setLayoutParams(lp);
+                            messages.addView(liveThinking);
+                        }
+                        liveThinking.append(delta);
+                        scrollBottomIfPinned();
+                    }
+                });
+            }
+
             public void onToolCall(final String name, final String args) {
                 runOnUiThread(new Runnable() {
                     public void run() {
@@ -2175,6 +2222,7 @@ public final class MainActivity extends Activity {
                         // ui.ask 的视觉就是那张选项卡片，不用再插一行工具日志
                         runToolCount++;
                         if (!"ui.ask".equals(name)) addToolPill(name, args);
+                        toolStartAt = System.currentTimeMillis();
                         scrollBottomIfPinned();
                     }
                 });
@@ -2184,6 +2232,8 @@ public final class MainActivity extends Activity {
                     public void run() {
                         boolean ok = result == null || !result.contains("\"ok\":false");
                         ToolPill pill = takePill(name);
+                        ComputerSheet.addStep(friendlyTool(name),
+                                Math.max(0, System.currentTimeMillis() - toolStartAt), ok, result);
                         if (pill != null) {
                             pill.finish(ok, result);
                         } else if (!ok) {
