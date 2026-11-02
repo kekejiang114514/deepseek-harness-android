@@ -45,6 +45,22 @@ public final class TerminalActivity extends Activity {
         root.setBackgroundColor(Theme.bg());
         root.addView(Ui.topBar(this, "终端"));
 
+        LinearLayout tools = new LinearLayout(this);
+        tools.setOrientation(LinearLayout.HORIZONTAL);
+        tools.setPadding(Theme.dp(this, 14), 0, Theme.dp(this, 14), Theme.dp(this, 4));
+        TextView clear = new TextView(this);
+        clear.setText("清屏");
+        clear.setTextSize(12);
+        clear.setTextColor(Theme.link());
+        clear.setPadding(0, Theme.dp(this, 4), Theme.dp(this, 16), Theme.dp(this, 4));
+        clear.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                out.setText("");
+            }
+        });
+        tools.addView(clear);
+        root.addView(tools);
+
         scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         out = new TextView(this);

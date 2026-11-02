@@ -126,6 +126,31 @@ public final class ComputerSheet {
         bar.addView(live);
         root.addView(bar);
 
+        // 底部资源：CPU 与内存（只读 /proc，无需权限）
+        final TextView res = new TextView(a);
+        res.setTextSize(11);
+        res.setTextColor(0xFF22C55E);
+        res.setTypeface(Typeface.MONOSPACE);
+        res.setGravity(Gravity.CENTER);
+        res.setPadding(0, dp(a, 6), 0, dp(a, 10));
+        root.addView(res);
+        final Runnable resTick = new Runnable() {
+            public void run() {
+                if (host == null) return;
+                new Thread(new Runnable() {
+                    public void run() {
+                        final String txt = com.dsh.android.tools.ResMonitor.sample();
+                        if (txt.length() == 0) return;
+                        a.runOnUiThread(new Runnable() {
+                            public void run() { res.setText(txt); }
+                        });
+                    }
+                }, "res-monitor").start();
+                UI.postDelayed(this, 2500);
+            }
+        };
+        UI.postDelayed(resTick, 400);
+
         ScrollView sv = new ScrollView(a);
         list = new LinearLayout(a);
         list.setOrientation(LinearLayout.VERTICAL);
