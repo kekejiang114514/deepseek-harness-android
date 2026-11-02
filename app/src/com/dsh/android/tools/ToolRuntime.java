@@ -49,6 +49,7 @@ public final class ToolRuntime {
         this.ctx = ctx;
         this.prefs = ctx.getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
         registerAskTool();
+        registerVaultTools();
     }
 
     // ---------- 作用域 ----------
@@ -179,6 +180,87 @@ public final class ToolRuntime {
                     out.put("selected", picked);
                 }
                 return out.toString();
+            }
+        }));
+    }
+
+    /** 记忆库工具：只暴露名称与用途，值只在执行动作时解密使用。 */
+    private void registerVaultTools() {
+        JSONObject listParams = new JSONObject();
+        JSONObject fillParams = new JSONObject();
+        try {
+            listParams.put("type", "object");
+            listParams.put("properties", new JSONObject());
+
+            JSONObject props = new JSONObject();
+            JSONObject name = new JSONObject();
+            name.put("type", "string");
+            name.put("description", "记忆库条目名称");
+            props.put("name", name);
+            JSONObject idx = new JSONObject();
+            idx.put("type", "integer");
+            idx.put("description", "要填入的输入框索引（来自 a11y.dump）");
+            props.put("index", idx);
+            fillParams.put("type", "object");
+            fillParams.put("properties", props);
+            fillParams.put("required", new JSONArray().put("name").put("index"));
+        } catch (Exception ignored) {}
+
+        registry.put("vault.list", new ToolDef("vault.list",
+                "列出记忆库里保存的凭据名称与用途。返回值永远不含密码本身，"
+                        + "需要使用时调用 vault.fill 直接填入输入框。",
+                listParams, new ToolExecutor() {
+            public String execute(JSONObject args) {
+                java.util.List<com.dsh.android.kernel.Vault.Item> items =
+                        com.dsh.android.kernel.Vault.list(ctx);
+                JSONArray arr = new JSONArray();
+                for (int i = 0; i < items.size(); i++) {
+                    JSONObject o = new JSONObject();
+                    try {
+                        o.put("name", items.get(i).name);
+                        o.put("note", items.get(i).note);
+                    } catch (Exception ignored) {}
+                    arr.put(o);
+                }
+                JSONObject out = new JSONObject();
+                try {
+                    out.put("ok", true);
+                    out.put("entries", arr);
+                    out.put("hint", "值不可读取。需要填写时用 vault.fill(name, index) 直接写入输入框。");
+                } catch (Exception ignored) {}
+                return out.toString();
+            }
+        }));
+
+        registry.put("vault.fill", new ToolDef("vault.fill",
+                "把记忆库里的一条凭据直接填入当前屏幕的输入框。值不会出现在对话里。"
+                        + "先用 a11y.dump 找到目标输入框的索引。",
+                fillParams, new ToolExecutor() {
+            public String execute(JSONObject args) throws Exception {
+                String name = args.optString("name", "");
+                int index = args.optInt("index", -1);
+                if (name.length() == 0 || index < 0) {
+                    return "{\"ok\":false,\"error\":\"需要 name 与 index\"}";
+                }
+                if (!isA11yEnabled()) return "{\"ok\":false,\"error\":\"无障碍操作已关闭\"}";
+                if (!A11yService.isReady()) {
+                    com.dsh.android.ui.A11yGuide.requestPrompt();
+                    return "{\"ok\":false,\"need_a11y\":true,\"error\":\"无障碍服务未开启\"}";
+                }
+                String value = com.dsh.android.kernel.Vault.value(ctx, name);
+                if (value == null) {
+                    JSONObject o = new JSONObject();
+                    o.put("ok", false);
+                    o.put("error", "记忆库里没有名为 " + name + " 的条目");
+                    return o.toString();
+                }
+                String res = A11yService.get().setText(index, value);
+                JSONObject o = new JSONObject();
+                o.put("ok", true);
+                o.put("filled", name);
+                o.put("result", res);
+                o.put("hint", "已填入，未回显内容。");
+                return o.toString();
             }
         }));
     }

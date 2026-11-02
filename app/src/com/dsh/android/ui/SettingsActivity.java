@@ -235,6 +235,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 4) pageAppearance(bodyBox);
         else if (page == 6) pageLicense(bodyBox);
         else if (page == 7) pageLanguage(bodyBox);
+        else if (page == 8) pageVault(bodyBox);
+        else if (page == 9) pagePresets(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -251,6 +253,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(menuRow(Texts.t(this, "appearance"), Texts.t(this, "sub_appearance"), 4));
         c.addView(divider());
         c.addView(menuRow(Texts.t(this, "language"), Texts.t(this, "sub_language"), 7));
+        c.addView(divider());
+        c.addView(menuRow("记忆库", "给 AI 用的凭据，不进聊天记录", 8));
+        c.addView(divider());
+        c.addView(menuRow("提示词预设", "提前交代工作环境与背景", 9));
         c.addView(divider());
         c.addView(menuRow(Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
         body.addView(c);
@@ -675,6 +681,26 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }
         body.addView(packs);
 
+        LinearLayout acts = card();
+        acts.addView(actionRow("更新已下载的语言包", new View.OnClickListener() {
+            public void onClick(View v) {
+                Snack.show(SettingsActivity.this, "正在更新语言包…");
+                new Thread(new Runnable() {
+                    public void run() {
+                        final int failed = com.dsh.android.kernel.LangPack.updateInstalled(SettingsActivity.this);
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                Snack.show(SettingsActivity.this,
+                                        failed == 0 ? "语言包已是最新" : ("有 " + failed + " 个更新失败"));
+                                fillBody();
+                            }
+                        });
+                    }
+                }, "langpack-update").start();
+            }
+        }));
+        body.addView(acts);
+
         body.addView(hintRow(Texts.t(this, "lang_note")));
     }
 
@@ -749,6 +775,247 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             }
         });
         return r;
+    }
+
+    // ------------------------------------------------------------ 记忆库
+
+    private void pageVault(LinearLayout body) {
+        java.util.List<com.dsh.android.kernel.Vault.Item> items =
+                com.dsh.android.kernel.Vault.list(this);
+
+        body.addView(sectionLabel("记忆库"));
+        body.addView(hintRow("这里的值加密保存在本机，AI 只能把值直接填进屏幕输入框，"
+                + "不会读到内容，也不会出现在聊天记录里。"));
+
+        LinearLayout c = card();
+        c.addView(actionRow("新增条目", new View.OnClickListener() {
+            public void onClick(View v) { editVault(null); }
+        }));
+        body.addView(c);
+
+        if (items.isEmpty()) {
+            body.addView(hintRow("还没有条目。可以把常用网站的账号密码放进来。"));
+            return;
+        }
+
+        LinearLayout list = card();
+        for (int i = 0; i < items.size(); i++) {
+            final com.dsh.android.kernel.Vault.Item it = items.get(i);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(dp(16), dp(12), dp(16), dp(12));
+            row.setBackground(pressable());
+
+            TextView name = new TextView(this);
+            name.setText(it.name);
+            name.setTextSize(15);
+            name.setTextColor(Theme.text());
+            row.addView(name);
+
+            TextView note = new TextView(this);
+            note.setText(it.note == null || it.note.length() == 0 ? "（无说明）" : it.note);
+            note.setTextSize(12);
+            note.setTextColor(Theme.caption());
+            note.setPadding(0, dp(3), 0, 0);
+            row.addView(note);
+
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { editVault(it); }
+            });
+            row.setOnLongClickListener(new View.OnLongClickListener() {
+                public boolean onLongClick(View v) {
+                    confirmDelete(it);
+                    return true;
+                }
+            });
+
+            if (i > 0) list.addView(divider());
+            list.addView(row);
+        }
+        body.addView(list);
+    }
+
+    private void editVault(final com.dsh.android.kernel.Vault.Item existing) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+
+        final EditText etName = fieldInput(existing == null ? "" : existing.name, false, "名称，例如 GitHub");
+        final EditText etNote = fieldInput(existing == null ? "" : existing.note, false, "用途，例如 登录网页版");
+        final EditText etValue = fieldInput("", true, existing == null ? "密码或密钥" : "留空表示不修改");
+
+        box.addView(fieldLabel("名称"));
+        box.addView(etName);
+        box.addView(fieldLabel("用途"));
+        box.addView(etNote);
+        box.addView(fieldLabel("内容（加密保存）"));
+        box.addView(etValue);
+
+        new AppDialog.Builder(this)
+                .setTitle(existing == null ? "新增条目" : "编辑条目")
+                .setView(box)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String name = etName.getText().toString().trim();
+                        String note = etNote.getText().toString().trim();
+                        String value = etValue.getText().toString();
+                        if (name.length() == 0) { Snack.show(SettingsActivity.this, "名称不能为空"); return; }
+                        if (existing == null && value.length() == 0) {
+                            Snack.show(SettingsActivity.this, "内容不能为空");
+                            return;
+                        }
+                        String finalValue = value;
+                        if (value.length() == 0 && existing != null) {
+                            String old = com.dsh.android.kernel.Vault.value(SettingsActivity.this, existing.name);
+                            finalValue = old == null ? "" : old;
+                        }
+                        com.dsh.android.kernel.Vault.put(SettingsActivity.this, name, note, finalValue);
+                        if (existing != null && !existing.name.equals(name)) {
+                            com.dsh.android.kernel.Vault.remove(SettingsActivity.this, existing.name);
+                        }
+                        fillBody();
+                        Snack.show(SettingsActivity.this, "已保存");
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void confirmDelete(final com.dsh.android.kernel.Vault.Item it) {
+        new AppDialog.Builder(this)
+                .setTitle("删除条目")
+                .setMessage("确定删除「" + it.name + "」？")
+                .setPositiveButton("删除", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        com.dsh.android.kernel.Vault.remove(SettingsActivity.this, it.name);
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // ------------------------------------------------------------ 提示词预设
+
+    private void pagePresets(LinearLayout body) {
+        java.util.List<com.dsh.android.kernel.Presets.Item> items =
+                com.dsh.android.kernel.Presets.all(this);
+
+        body.addView(sectionLabel("提示词预设"));
+        body.addView(hintRow("启用中的条目会拼进系统提示词，模型每轮都能看到。"
+                + "适合写工作环境、项目约定、回答风格这类不用每次重复交代的事。"));
+
+        LinearLayout c = card();
+        c.addView(actionRow("新增预设", new View.OnClickListener() {
+            public void onClick(View v) { editPreset(null); }
+        }));
+        body.addView(c);
+
+        if (items.isEmpty()) {
+            body.addView(hintRow("还没有预设。可以写一条比如「我在做一个 Android 项目，用纯 Java」。")); 
+            return;
+        }
+
+        LinearLayout list = card();
+        for (int i = 0; i < items.size(); i++) {
+            final com.dsh.android.kernel.Presets.Item it = items.get(i);
+            if (i > 0) list.addView(divider());
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(16), dp(10), dp(12), dp(10));
+
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
+            TextView title = new TextView(this);
+            title.setText(it.title.length() == 0 ? "（未命名）" : it.title);
+            title.setTextSize(15);
+            title.setTextColor(it.enabled ? Theme.text() : Theme.caption());
+            col.addView(title);
+
+            TextView preview = new TextView(this);
+            String text = it.content.replace('\n', ' ');
+            preview.setText(text.length() > 48 ? text.substring(0, 48) + "…" : text);
+            preview.setTextSize(12);
+            preview.setTextColor(Theme.caption());
+            preview.setPadding(0, dp(3), 0, 0);
+            col.addView(preview);
+
+            col.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { editPreset(it); }
+            });
+            col.setOnLongClickListener(new View.OnLongClickListener() {
+                public boolean onLongClick(View v) {
+                    confirmDeletePreset(it);
+                    return true;
+                }
+            });
+            row.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            Toggle sw = new Toggle(this);
+            sw.setChecked(it.enabled);
+            sw.setOnChangeListener(new Toggle.OnChange() {
+                public void onChanged(boolean checked) {
+                    com.dsh.android.kernel.Presets.setEnabled(SettingsActivity.this, it.id, checked);
+                    fillBody();
+                }
+            });
+            row.addView(sw);
+
+            list.addView(row);
+        }
+        body.addView(list);
+    }
+
+    private void editPreset(final com.dsh.android.kernel.Presets.Item existing) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+
+        final EditText etTitle = fieldInput(existing == null ? "" : existing.title, false, "标题，例如 我的工作环境");
+        final EditText etContent = fieldInput(existing == null ? "" : existing.content, false, "内容");
+        etContent.setSingleLine(false);
+        etContent.setMinLines(4);
+        etContent.setGravity(Gravity.TOP | Gravity.START);
+
+        box.addView(fieldLabel("标题"));
+        box.addView(etTitle);
+        box.addView(fieldLabel("内容"));
+        box.addView(etContent);
+
+        new AppDialog.Builder(this)
+                .setTitle(existing == null ? "新增预设" : "编辑预设")
+                .setView(box)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String title = etTitle.getText().toString().trim();
+                        String content = etContent.getText().toString().trim();
+                        if (content.length() == 0) {
+                            Snack.show(SettingsActivity.this, "内容不能为空");
+                            return;
+                        }
+                        com.dsh.android.kernel.Presets.put(SettingsActivity.this,
+                                existing == null ? null : existing.id,
+                                title, content, existing == null || existing.enabled);
+                        fillBody();
+                        Snack.show(SettingsActivity.this, "已保存");
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void confirmDeletePreset(final com.dsh.android.kernel.Presets.Item it) {
+        new AppDialog.Builder(this)
+                .setTitle("删除预设")
+                .setMessage("确定删除「" + it.title + "」？")
+                .setPositiveButton("删除", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        com.dsh.android.kernel.Presets.remove(SettingsActivity.this, it.id);
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     // ------------------------------------------------------------ 开源许可
@@ -861,6 +1128,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (page == 5) return Texts.t(this, "about");
         if (page == 6) return Texts.t(this, "license");
         if (page == 7) return Texts.t(this, "language");
+        if (page == 8) return "记忆库";
+        if (page == 9) return "提示词预设";
         return Texts.t(this, "settings");
     }
 

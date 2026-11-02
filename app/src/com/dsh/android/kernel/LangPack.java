@@ -106,6 +106,19 @@ public final class LangPack {
         return err == null ? "下载失败" : err;
     }
 
+    /** 重新拉取所有已安装的语言包（用于跟随后续翻译修正）。返回失败数量。 */
+    public static int updateInstalled(Context c) {
+        String[] codes = dir(c).list();
+        if (codes == null) return 0;
+        int failed = 0;
+        for (String f : codes) {
+            if (!f.endsWith(".json")) continue;
+            String code = f.substring(0, f.length() - 5);
+            if (download(c, code) != null) failed++;
+        }
+        return failed;
+    }
+
     public static void remove(Context c, String code) {
         fileOf(c, code).delete();
         synchronized (CACHE) {

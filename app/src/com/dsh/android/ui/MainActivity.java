@@ -1395,6 +1395,13 @@ public final class MainActivity extends Activity {
           .append("调用前先在正文里用一两句话把情况说清（选项卡片会接在这段话下面显示），")
           .append("每个选项写清做法和主要代价，让用户一眼能选。")
           .append("调用后本轮先停下，等工具返回 selected 再继续执行。");
+
+        // 用户预先写好的背景与环境说明
+        String preset = com.dsh.android.kernel.Presets.activeText(this);
+        if (preset.length() > 0) {
+            sb.append("\n\n【用户设定的背景】以下是用户事先交代的工作环境与约定，回答时据此进行：\n");
+            sb.append(preset);
+        }
         return sb.toString();
     }
 
