@@ -268,66 +268,19 @@ public final class Md {
     // ------------------------------------------------------------ 表格
 
     private static View table(Context ctx, List<String[]> rows) {
-        int cols = 0;
-        for (int i = 0; i < rows.size(); i++) cols = Math.max(cols, rows.get(i).length);
-        if (cols == 0) cols = 1;
-
-        // 按内容长度估算列宽（中文按 2 个字符算）。
-        // 注意：TableLayout 放在 HorizontalScrollView 里时父宽是 wrap_content，
-        // 用 weight 会因为「剩余空间」为 0 而塌成 0 宽，所以这里算固定像素宽。
-        float[] colW = new float[cols];
-        for (int c = 0; c < cols; c++) colW[c] = 3f;
-        for (int r = 0; r < rows.size(); r++) {
-            String[] row = rows.get(r);
-            for (int c = 0; c < cols && c < row.length; c++) {
-                colW[c] = Math.max(colW[c], Math.min(26f, visualLen(stripMarks(row[c]))));
-            }
-        }
-        int[] widthPx = new int[cols];
-        for (int c = 0; c < cols; c++) {
-            float px = colW[c] * 7.4f + 22f;   // 每字符约 7.4dp + 内边距
-            widthPx[c] = Math.max(Theme.dp(ctx, 56), Theme.dp(ctx, px));
-        }
-
-        TableLayout tl = new TableLayout(ctx);
-        tl.setStretchAllColumns(false);
-        tl.setShrinkAllColumns(false);
-
-        for (int r = 0; r < rows.size(); r++) {
-            String[] row = rows.get(r);
-            TableRow tr = new TableRow(ctx);
-            for (int c = 0; c < cols; c++) {
-                String cell = c < row.length ? row[c] : "";
-                TextView tv = new TextView(ctx);
-                tv.setText(inline(cell));
-                style(tv, Theme.text(), 13.5f);
-                if (r == 0) {
-                    tv.setTypeface(Typeface.DEFAULT_BOLD);
-                    tv.setBackground(Theme.roundOutlined(Theme.surface2(), Theme.R_SM,
-                            Theme.border(), ctx));
-                } else {
-                    tv.setBackground(Theme.roundOutlined(Theme.bg(), Theme.R_SM,
-                            Theme.border(), ctx));
-                }
-                tv.setPadding(Theme.dp(ctx, 9), Theme.dp(ctx, 7), Theme.dp(ctx, 9), Theme.dp(ctx, 7));
-
-                TableRow.LayoutParams clp = new TableRow.LayoutParams(widthPx[c],
-                        TableRow.LayoutParams.WRAP_CONTENT);
-                clp.setMargins(0, Theme.dp(ctx, 2), Theme.dp(ctx, 4), 0);
-                tr.addView(tv, clp);
-            }
-            tl.addView(tr);
-        }
+        // 一张连续的网格，交给 TableBlock 自绘；超宽时横向滚动
+        TableBlock tb = new TableBlock(ctx, rows);
 
         HorizontalScrollView hs = new HorizontalScrollView(ctx);
         hs.setHorizontalScrollBarEnabled(false);
-        hs.addView(tl, new HorizontalScrollView.LayoutParams(
+        hs.setClipToPadding(false);
+        hs.addView(tb, new HorizontalScrollView.LayoutParams(
                 HorizontalScrollView.LayoutParams.WRAP_CONTENT,
                 HorizontalScrollView.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.topMargin = Theme.dp(ctx, 10);
-        lp.bottomMargin = Theme.dp(ctx, 6);
+        lp.bottomMargin = Theme.dp(ctx, 8);
         hs.setLayoutParams(lp);
         return hs;
     }

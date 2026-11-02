@@ -211,7 +211,11 @@ public final class ToolRuntime {
             public String execute(JSONObject args) throws Exception {
                 String cmd = args.optString("command", "");
                 int timeout = args.optInt("timeoutMs", 20000);
+                com.dsh.android.ui.ComputerSheet.log("$ " + cmd);
                 ShellEngine.Result r = ShellEngine.run(cmd, timeout);
+                if (r.out != null && r.out.length() > 0) {
+                    com.dsh.android.ui.ComputerSheet.log(r.out.trim());
+                }
                 JSONObject o = new JSONObject();
                 o.put("ok", r.error == null && !r.timeout && r.exit == 0);
                 if (r.error != null) o.put("error", r.error);

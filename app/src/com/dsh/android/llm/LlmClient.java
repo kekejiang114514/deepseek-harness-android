@@ -30,6 +30,8 @@ public final class LlmClient {
 
     public static final class Result {
         public String content = "";
+        /** 思考过程全文；模型不支持该字段时为空串。 */
+        public String reasoning = "";
         public List<ToolCall> toolCalls = new ArrayList<ToolCall>();
         public boolean hasToolCalls() { return !toolCalls.isEmpty(); }
     }
@@ -37,6 +39,8 @@ public final class LlmClient {
     /** 流式回调：增量文本或工具调用。 */
     public interface StreamSink {
         void onDelta(String delta);                    // 文本增量
+        /** 思考过程增量（DeepSeek reasoner 的 reasoning_content）。 */
+        void onReasoning(String delta);
         void onToolCallStart(int index, String id, String name); // 工具调用开始
         void onToolCallDelta(int index, String argsDelta);       // 工具参数增量
     }
@@ -227,6 +231,13 @@ public final class LlmClient {
             JSONObject first = choices.optJSONObject(0);
             JSONObject delta = first.optJSONObject("delta");
             if (delta == null) continue;
+
+            // 思考过程（reasoner 专有字段）
+            Object rc = delta.opt("reasoning_content");
+            if (rc instanceof String && ((String) rc).length() > 0) {
+                r.reasoning += (String) rc;
+                if (sink != null) sink.onReasoning((String) rc);
+            }
 
             // 文本增量
             Object c = delta.opt("content");

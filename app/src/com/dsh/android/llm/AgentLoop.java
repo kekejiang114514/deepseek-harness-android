@@ -15,6 +15,9 @@ public final class AgentLoop {
         void onToolResult(String name, String result); // 工具结果
         void onError(String msg);
 
+        /** 思考过程增量（reasoning_content），模型不支持时不会触发。 */
+        default void onReasoning(String delta) {}
+
         /** 上下文被压缩时回调，用于在界面上提示用户。 */
         default void onCompact(HistoryCompactor.Report r) {}
     }
@@ -111,6 +114,9 @@ public final class AgentLoop {
                                 textBuf.append(delta);
                                 sink.onDelta(delta);
                             }
+                            public void onReasoning(String delta) {
+                                // 思考过程由界面侧拉取（r.reasoning），这里不重复转发
+                            }
                             public void onToolCallStart(int index, String id, String name) {
                                 gotToolCall[0] = true;
                             }
@@ -200,6 +206,9 @@ public final class AgentLoop {
                     JSONObject a = new JSONObject();
                     a.put("role", "assistant");
                     a.put("content", r.content);
+                    if (r.reasoning != null && r.reasoning.length() > 0) {
+                        a.put("reasoning", r.reasoning);
+                    }
                     history.put(a);
                 }
                 return;
