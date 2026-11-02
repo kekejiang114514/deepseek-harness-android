@@ -31,7 +31,7 @@ public final class ToolPill extends LinearLayout {
     public ToolPill(Context c, String toolLabel, String argsSummary) {
         super(c);
         setOrientation(VERTICAL);
-        setBackground(Theme.round(Theme.surface2(), 999, c));
+        setBackground(Theme.round(Theme.surface2(), 14, c));
         setPadding(dp(12), dp(7), dp(12), dp(7));
 
         LinearLayout head = new LinearLayout(c);
@@ -67,6 +67,13 @@ public final class ToolPill extends LinearLayout {
         detail.setTextColor(Theme.text3());
         detail.setPadding(0, dp(7), 0, dp(1));
         detail.setTextIsSelectable(true);
+        detail.setSingleLine(false);
+        detail.setHorizontallyScrolling(false);
+        // 长 JSON 里常有无空格长串，Android 默认不在这里断行，会撑出屏幕
+        if (android.os.Build.VERSION.SDK_INT >= 23) {
+            detail.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);
+            detail.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
+        }
         detail.setVisibility(GONE);
         addView(detail);
 
@@ -99,11 +106,22 @@ public final class ToolPill extends LinearLayout {
         expanded = !expanded;
         detail.setVisibility(expanded ? VISIBLE : GONE);
         chevron.setText(expanded ? "\u02C5" : "\u02C4");
+        requestLayout();
         if (expanded) {
             detail.setAlpha(0f);
             detail.animate().alpha(1f).setDuration(140).start();
         }
+        if (onExpand != null) onExpand.onToggled(this);
     }
+
+    /** 展开后通知宿主重新贴底（否则内容变高，视口停在半空）。 */
+    public interface OnExpand {
+        void onToggled(ToolPill pill);
+    }
+
+    private OnExpand onExpand;
+
+    public void setOnExpandListener(OnExpand l) { onExpand = l; }
 
     private int dp(float v) { return Theme.dp(getContext(), v); }
 
