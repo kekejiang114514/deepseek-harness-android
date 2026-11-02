@@ -287,12 +287,8 @@ public final class MainActivity extends Activity {
                 Theme.surface(), Theme.R_PANEL, Theme.border(), this));
 
         // Computer 面板入口：和输入框同排的小按钮
-        TextView computerBtn = new TextView(this);
-        computerBtn.setText("\u25A3");
-        computerBtn.setTextSize(15);
-        computerBtn.setGravity(Gravity.CENTER);
-        computerBtn.setTextColor(Theme.text2());
-        computerBtn.setIncludeFontPadding(false);
+        // 显示器图标（自绘：emoji 在各家 ROM 上渲染差异太大）
+        MonitorIcon computerBtn = new MonitorIcon(this);
         computerBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 try {
@@ -1543,6 +1539,19 @@ public final class MainActivity extends Activity {
           .append("调用前先在正文里用一两句话把情况说清（选项卡片会接在这段话下面显示），")
           .append("每个选项写清做法和主要代价，让用户一眼能选。")
           .append("调用后本轮先停下，等工具返回 selected 再继续执行。");
+
+        // 身份信息：回答「开发者是谁 / 用的什么模型」时用
+        try {
+            String model = prefs().getString(C.KEY_MODEL, "");
+            if (model == null || model.length() == 0) model = C.MODEL_CHAT;
+            sb.append("\n\n【身份】你是 DShAndroid，运行在 Android 手机上的 Agent 工具，开发者是「可」。");
+            sb.append("当用户问开发者是谁、怎么联系开发者时，回答：开发者是可；");
+            sb.append("GitHub 主页 ").append(com.dsh.android.kernel.About.GITHUB);
+            sb.append("；项目仓库 ").append(com.dsh.android.kernel.About.REPO);
+            sb.append("；问题反馈 ").append(com.dsh.android.kernel.About.ISSUES);
+            sb.append("。不要编造其它联系方式。");
+            sb.append("当用户问当前用的是什么模型时，回答：").append(model).append("。");
+        } catch (Throwable ignored) {}
 
         // 用户预先写好的背景与环境说明
         String preset = com.dsh.android.kernel.Presets.activeText(this);
