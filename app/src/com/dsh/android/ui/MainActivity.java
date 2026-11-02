@@ -300,6 +300,7 @@ public final class MainActivity extends Activity {
         });
         LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(dp(36), dp(40));
         cLp.setMargins(dp(4), 0, dp(2), 0);
+        cLp.gravity = Gravity.CENTER_VERTICAL;
         composer.addView(computerBtn, cLp);
 
         TextView attachBtn = new TextView(this);

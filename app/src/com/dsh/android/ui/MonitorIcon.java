@@ -24,15 +24,24 @@ public final class MonitorIcon extends View {
 
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
+        // 父布局给了确定尺寸就用它，图形在内部居中——否则会和相邻按钮对不齐
+        int wMode = MeasureSpec.getMode(widthSpec);
+        int hMode = MeasureSpec.getMode(heightSpec);
         float d = getResources().getDisplayMetrics().density;
-        setMeasuredDimension((int) (22 * d), (int) (22 * d));
+        int size = (int) (22 * d);
+        setMeasuredDimension(
+                wMode == MeasureSpec.EXACTLY ? MeasureSpec.getSize(widthSpec) : size,
+                hMode == MeasureSpec.EXACTLY ? MeasureSpec.getSize(heightSpec) : size);
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         float d = getResources().getDisplayMetrics().density;
-        float w = getWidth();
-        float h = getHeight();
+        float full = Math.min(getWidth(), getHeight());
+        float w = Math.min(full, 22 * d);
+        float h = w;
+        canvas.save();
+        canvas.translate((getWidth() - w) / 2f, (getHeight() - h) / 2f);
 
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(Math.max(1.4f, 1.4f * d));
@@ -49,6 +58,7 @@ public final class MonitorIcon extends View {
         canvas.drawLine(w / 2f, top + sh, w / 2f, top + sh + 3 * d, paint);
         paint.setStrokeWidth(Math.max(1.6f, 1.6f * d));
         canvas.drawLine(w * 0.34f, top + sh + 3.4f * d, w * 0.66f, top + sh + 3.4f * d, paint);
+        canvas.restore();
     }
 
     @Override

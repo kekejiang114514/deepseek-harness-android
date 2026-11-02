@@ -264,7 +264,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(divider());
         c.addView(menuRow("终端", "在应用内执行系统命令", 10));
         c.addView(divider());
-        c.addView(menuRow("电脑", "实时画面与截图", 12));
+        c.addView(menuRow("内置虚拟机", "实时画面与截图", 12));
         c.addView(divider());
         c.addView(menuRow("浏览器", "查看 AI 正在访问的页面", 11));
         c.addView(divider());
@@ -1165,7 +1165,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     // ------------------------------------------------------------ 电脑
 
     private void pageComputer(LinearLayout body) {
-        body.addView(sectionLabel("电脑"));
+        body.addView(sectionLabel("内置虚拟机"));
         body.addView(hintRow("把内置浏览器的渲染画面实时显示出来——AI 在看什么，这里就能看到什么。"
                 + "画面来自浏览器自身的绘制结果，不需要录屏权限。"));
         LinearLayout c = card();
@@ -1296,7 +1296,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (page == 9) return "提示词预设";
         if (page == 10) return "终端";
         if (page == 11) return "浏览器";
-        if (page == 12) return "电脑";
+        if (page == 12) return "内置虚拟机";
         return Texts.t(this, "settings");
     }
 
