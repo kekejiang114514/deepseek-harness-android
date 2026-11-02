@@ -3,6 +3,7 @@ package com.dsh.android.tools;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
 import android.webkit.ValueCallback;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -122,6 +123,9 @@ public final class BrowserEngine {
         } catch (Exception ignored) {}
 
         if (page.text.length() == 0) page.error = "页面没有可读文本";
+        try {
+            com.dsh.android.ui.BrowserActivity.note(page.url);
+        } catch (Throwable ignored) {}
         return page;
     }
 
@@ -232,6 +236,89 @@ public final class BrowserEngine {
         } catch (Throwable t) {
             return "{\"ok\":false,\"error\":\"读取 Cookie 失败\"}";
         }
+    }
+
+    /**
+     * 在引擎里渲染页面并截图，保存成 PNG。
+     *
+     * <p>截的是内置浏览器的渲染结果，不是用户手机屏幕——所以不需要录屏权限，
+     * 也不会碰到用户的其它应用。
+     */
+    public static String screenshot(final Context ctx, final String url) {
+        if (!ensure(ctx)) return "{\"ok\":false,\"error\":\"无法创建内置浏览器\"}";
+        final CountDownLatch loaded = new CountDownLatch(1);
+        final CountDownLatch saved = new CountDownLatch(1);
+        final String[] result = new String[1];
+
+        UI.post(new Runnable() {
+            public void run() {
+                WebView w;
+                synchronized (BrowserEngine.class) { w = web; }
+                if (w == null) {
+                    loaded.countDown();
+                    saved.countDown();
+                    return;
+                }
+                w.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onPageFinished(final WebView view, String u) {
+                        loaded.countDown();
+                        UI.postDelayed(new Runnable() {
+                            public void run() {
+                                try {
+                                    int width = 1080;
+                                    int height = 1920;
+                                    view.measure(
+                                            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                                            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+                                    view.layout(0, 0, width, height);
+                                    android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
+                                            width, height, android.graphics.Bitmap.Config.ARGB_8888);
+                                    view.draw(new android.graphics.Canvas(bmp));
+
+                                    java.io.File dir = new java.io.File(ctx.getFilesDir(), "shots");
+                                    if (!dir.exists()) dir.mkdirs();
+                                    java.io.File f = new java.io.File(dir,
+                                            "shot-" + System.currentTimeMillis() + ".png");
+                                    java.io.FileOutputStream out = new java.io.FileOutputStream(f);
+                                    bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, out);
+                                    out.flush();
+                                    out.close();
+                                    bmp.recycle();
+
+                                    JSONObject o = new JSONObject();
+                                    o.put("ok", true);
+                                    o.put("path", f.getAbsolutePath());
+                                    o.put("width", width);
+                                    o.put("height", height);
+                                    o.put("bytes", f.length());
+                                    result[0] = o.toString();
+                                } catch (Throwable t) {
+                                    result[0] = "{\"ok\":false,\"error\":\"截图失败\"}";
+                                } finally {
+                                    saved.countDown();
+                                }
+                            }
+                        }, SETTLE_MS);
+                    }
+                });
+                try {
+                    w.loadUrl(url);
+                } catch (Throwable t) {
+                    loaded.countDown();
+                    saved.countDown();
+                }
+            }
+        });
+
+        try {
+            if (!loaded.await(PAGE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) return "{\"ok\":false,\"error\":\"加载超时\"}";
+            if (!saved.await(15000, TimeUnit.MILLISECONDS)) return "{\"ok\":false,\"error\":\"截图超时\"}";
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "{\"ok\":false,\"error\":\"被中断\"}";
+        }
+        return result[0] == null ? "{\"ok\":false,\"error\":\"没有结果\"}" : result[0];
     }
 
     /** 主线程创建 WebView；已存在直接复用。 */

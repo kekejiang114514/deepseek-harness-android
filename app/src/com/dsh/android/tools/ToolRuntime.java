@@ -336,6 +336,17 @@ public final class ToolRuntime {
             ckParams.put("required", new JSONArray().put("url"));
         } catch (Exception ignored) {}
 
+        registry.put("browser.screenshot", new ToolDef("browser.screenshot",
+                "用内置浏览器渲染页面并截图，返回 PNG 路径与尺寸。截的是浏览器渲染结果，"
+                        + "不是手机屏幕，因此不需要录屏权限。",
+                ckParams, new ToolExecutor() {
+            public String execute(JSONObject args) {
+                String url = args.optString("url", "");
+                if (!url.startsWith("http")) return err("url 必须是 http/https");
+                return BrowserEngine.screenshot(ctx, url);
+            }
+        }));
+
         registry.put("browser.cookies", new ToolDef("browser.cookies",
                 "读取内置浏览器在该站点上的 Cookie。用于需要登录态的场景，"
                         + "注意不要把敏感值原样贴进回答。",

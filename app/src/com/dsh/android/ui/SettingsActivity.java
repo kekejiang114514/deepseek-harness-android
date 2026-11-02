@@ -238,6 +238,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 8) pageVault(bodyBox);
         else if (page == 9) pagePresets(bodyBox);
         else if (page == 10) pageTerminal(bodyBox);
+        else if (page == 11) pageBrowser(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -261,6 +262,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(menuRow("提示词预设", "提前交代工作环境与背景", 9));
         c.addView(divider());
         c.addView(menuRow("终端", "在应用内执行系统命令", 10));
+        c.addView(divider());
+        c.addView(menuRow("浏览器", "查看 AI 正在访问的页面", 11));
         c.addView(divider());
         c.addView(menuRow(Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
         body.addView(c);
@@ -1137,6 +1140,25 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         body.addView(c);
     }
 
+    // ------------------------------------------------------------ 浏览器
+
+    private void pageBrowser(LinearLayout body) {
+        body.addView(sectionLabel("内置浏览器"));
+        body.addView(hintRow("AI 访问过的页面会在内置浏览器里渲染，你可以接着看、接着点。"
+                + "浏览器与 AI 共用同一份 Cookie，登录状态一致。"));
+        LinearLayout c = card();
+        c.addView(actionRow("打开浏览器", new View.OnClickListener() {
+            public void onClick(View v) {
+                try {
+                    startActivity(new Intent(SettingsActivity.this, BrowserActivity.class));
+                } catch (Exception e) {
+                    Snack.show(SettingsActivity.this, "无法打开浏览器");
+                }
+            }
+        }));
+        body.addView(c);
+    }
+
     // ------------------------------------------------------------ 开源许可
 
     private void pageLicense(LinearLayout body) {
@@ -1257,6 +1279,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (page == 8) return "记忆库";
         if (page == 9) return "提示词预设";
         if (page == 10) return "终端";
+        if (page == 11) return "浏览器";
         return Texts.t(this, "settings");
     }
 
