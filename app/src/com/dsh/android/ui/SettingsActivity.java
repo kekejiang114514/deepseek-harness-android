@@ -1147,6 +1147,13 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                         + "按其公开实现（packages/core/agent-loop）的思路用 Java 重写。");
         r.addView(a1);
         r.addView(divider());
+        TextView a3 = attribution(
+                "OpenMinis（GPL-3.0）",
+                "内置浏览器的动作划分（navigate / click / type / find / get_text / cookies 等）"
+                        + "参考其公开设计，用 Java 对 Android WebView 重新实现；"
+                        + "本项目未复制其源代码。若需直接移植其代码，本项目须整体改为 GPL-3.0。");
+        r.addView(a3);
+        r.addView(divider());
         TextView a2 = attribution(
                 "dsh-effort-switcher",
                 "推理强度滑块的视觉参数（轨道与滑块尺寸、渐变配色、过渡时长）参考该项目；"
