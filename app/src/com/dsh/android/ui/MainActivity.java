@@ -241,6 +241,14 @@ public final class MainActivity extends Activity {
         col.addView(buildHeader());
         col.addView(buildModelBar());
 
+        taskBar = new TextView(this);
+        taskBar.setTextSize(11);
+        taskBar.setTextColor(Theme.caption());
+        taskBar.setGravity(Gravity.CENTER);
+        taskBar.setPadding(0, dp(2), 0, dp(4));
+        taskBar.setVisibility(View.GONE);
+        col.addView(taskBar);
+
         // 消息区
         messageScroll = new ScrollView(this);
         messageScroll.setFillViewport(true);
@@ -1417,6 +1425,19 @@ public final class MainActivity extends Activity {
     /** 是否「贴底」：用户在底部附近时，新内容才自动跟随滚动。 */
     private boolean pinnedToBottom = true;
     private TextView jumpBottom;
+    /** 任务状态条：本轮跑了多久、调了几个工具。 */
+    private TextView taskBar;
+    private long runStartMs;
+    private int runToolCount;
+    private final android.os.Handler ticker = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable tick = new Runnable() {
+        public void run() {
+            if (!running || taskBar == null) return;
+            long sec = (System.currentTimeMillis() - runStartMs) / 1000;
+            taskBar.setText("运行中 · " + runToolCount + " 个工具 · " + sec + "s");
+            ticker.postDelayed(this, 1000);
+        }
+    };
 
     /** 同步右下角「回到底部」按钮的显示。 */
     private void syncJumpButton() {
@@ -1564,6 +1585,7 @@ public final class MainActivity extends Activity {
         loop.setSystemPrompt(buildSystemPrompt());
         running = true;
         setSendMode(true);
+        startTaskBar();
 
         new Thread(new Runnable() {
             public void run() {
@@ -2069,6 +2091,7 @@ public final class MainActivity extends Activity {
         scrollBottom();
         running = true;
         setSendMode(true);
+        startTaskBar();
 
         new Thread(new Runnable() {
             public void run() {
@@ -2096,6 +2119,36 @@ public final class MainActivity extends Activity {
         setSendMode(false);
         closeTextSegment();
         scrollBottom();
+        stopTaskBar();
+    }
+
+    /** 任务状态条：运行中显示工具数与耗时，结束后留 4 秒摘要再淡出。 */
+    private void startTaskBar() {
+        if (taskBar == null) return;
+        runStartMs = System.currentTimeMillis();
+        runToolCount = 0;
+        taskBar.setText("运行中 · 0 个工具 · 0s");
+        taskBar.setAlpha(1f);
+        taskBar.setVisibility(View.VISIBLE);
+        ticker.removeCallbacks(tick);
+        ticker.post(tick);
+    }
+
+    private void stopTaskBar() {
+        ticker.removeCallbacks(tick);
+        if (taskBar == null) return;
+        long sec = Math.max(1, (System.currentTimeMillis() - runStartMs) / 1000);
+        taskBar.setText("完成 · " + runToolCount + " 个工具 · " + sec + "s");
+        taskBar.postDelayed(new Runnable() {
+            public void run() {
+                if (taskBar == null || running) return;
+                taskBar.animate().alpha(0f).setDuration(300).withEndAction(new Runnable() {
+                    public void run() {
+                        if (taskBar != null) taskBar.setVisibility(View.GONE);
+                    }
+                }).start();
+            }
+        }, 4000);
     }
 
     private AgentLoop.Sink sink() {
@@ -2120,6 +2173,7 @@ public final class MainActivity extends Activity {
                         // 先把这段文字定稿，工具行/卡片才会排在它下面
                         closeTextSegment();
                         // ui.ask 的视觉就是那张选项卡片，不用再插一行工具日志
+                        runToolCount++;
                         if (!"ui.ask".equals(name)) addToolPill(name, args);
                         scrollBottomIfPinned();
                     }

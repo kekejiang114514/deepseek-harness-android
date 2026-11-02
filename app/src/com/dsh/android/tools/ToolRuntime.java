@@ -51,6 +51,7 @@ public final class ToolRuntime {
         registerAskTool();
         registerVaultTools();
         registerBrowserTools();
+        registerShellTool();
     }
 
     // ---------- 作用域 ----------
@@ -181,6 +182,44 @@ public final class ToolRuntime {
                     out.put("selected", picked);
                 }
                 return out.toString();
+            }
+        }));
+    }
+
+    /** 命令执行：给模型一个能看设备状态的入口。 */
+    private void registerShellTool() {
+        JSONObject params = new JSONObject();
+        try {
+            JSONObject cmd = new JSONObject();
+            cmd.put("type", "string");
+            cmd.put("description", "要执行的 shell 命令，例如 ls /sdcard 或 getprop ro.product.model");
+            JSONObject timeout = new JSONObject();
+            timeout.put("type", "integer");
+            timeout.put("description", "超时毫秒，默认 20000，上限 120000");
+            JSONObject props = new JSONObject();
+            props.put("command", cmd);
+            props.put("timeoutMs", timeout);
+            params.put("type", "object");
+            params.put("properties", props);
+            params.put("required", new JSONArray().put("command"));
+        } catch (Exception ignored) {}
+
+        registry.put("shell.run", new ToolDef("shell.run",
+                "用系统 shell 执行一条命令并返回输出。以本应用身份运行，没有 root 就做不了需要 root 的事。"
+                        + "适合查设备信息、看目录、读系统属性。",
+                params, new ToolExecutor() {
+            public String execute(JSONObject args) throws Exception {
+                String cmd = args.optString("command", "");
+                int timeout = args.optInt("timeoutMs", 20000);
+                ShellEngine.Result r = ShellEngine.run(cmd, timeout);
+                JSONObject o = new JSONObject();
+                o.put("ok", r.error == null && !r.timeout && r.exit == 0);
+                if (r.error != null) o.put("error", r.error);
+                if (r.timeout) o.put("error", "命令超时，已终止");
+                o.put("exit", r.exit);
+                if (r.out.length() > 0) o.put("stdout", r.out);
+                if (r.err.length() > 0) o.put("stderr", r.err);
+                return o.toString();
             }
         }));
     }
