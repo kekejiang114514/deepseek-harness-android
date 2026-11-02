@@ -1077,6 +1077,18 @@ public final class MainActivity extends Activity {
                 addUserBubble(content);
                 shown++;
             } else if ("assistant".equals(role) && content.length() > 0) {
+                // 存过思考过程就补一个折叠块，默认收起
+                String think = o.optString("reasoning", "");
+                if (think.length() > 0) {
+                    ThinkingBlock tb = new ThinkingBlock(this, think);
+                    LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+                    tlp.setMargins(dp(2), dp(6), dp(2), dp(2));
+                    tb.setLayoutParams(tlp);
+                    tb.collapse();
+                    messages.addView(tb);
+                }
                 addAssistantBubble(content);
                 shown++;
             }

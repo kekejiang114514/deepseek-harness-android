@@ -225,13 +225,33 @@ public final class BrowserEngine {
     }
 
     /** 读取当前页面的 Cookie（用于需要登录态的后续请求）。 */
+    /**
+     * 读取站点上的 Cookie。
+     *
+     * <p>只返回条数与名目，<b>不回显值</b>：Cookie 里常有会话令牌，
+     * 一旦进了对话历史就等于永久留痕，和记忆库的设计原则冲突。
+     * 需要登录态时由浏览器自己带着 Cookie 发请求即可。
+     */
     public static String cookies(Context ctx, String url) {
         try {
             android.webkit.CookieManager cm = android.webkit.CookieManager.getInstance();
             String v = cm.getCookie(url);
             JSONObject o = new JSONObject();
-            o.put("ok", v != null && v.length() > 0);
-            o.put("cookie", v == null ? "" : v);
+            boolean has = v != null && v.length() > 0;
+            o.put("ok", true);
+            o.put("hasCookies", has);
+            if (has) {
+                String[] parts = v.split(";");
+                org.json.JSONArray names = new org.json.JSONArray();
+                for (int i = 0; i < parts.length; i++) {
+                    String one = parts[i].trim();
+                    int eq = one.indexOf('=');
+                    if (eq > 0) names.put(one.substring(0, eq));
+                }
+                o.put("count", names.length());
+                o.put("names", names);
+                o.put("hint", "出于安全考虑不返回 Cookie 值；需要登录态的操作直接让浏览器带着它发请求。");
+            }
             return o.toString();
         } catch (Throwable t) {
             return "{\"ok\":false,\"error\":\"读取 Cookie 失败\"}";
