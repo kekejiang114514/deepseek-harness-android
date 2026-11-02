@@ -3,6 +3,7 @@ package com.dsh.android.ui;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,221 +11,258 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-
-import com.dsh.android.tools.ShellEngine;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Computer 面板：从聊天页底部弹出的半屏面板，实时显示 agent 正在做什么。
+ * 电脑面板：按步骤展示 agent 正在做什么。
  *
- * <p>形态参考 Minis 的 Computer 面板：顶部标题与关闭、中间是等宽字体的执行记录
- * （终端输出与工具步骤）、底部一行资源占用与实时指示。
- *
- * <p>用 {@link Dialog} 而不是 Activity：面板要盖在对话上、关掉就回到原位，
- * 用 Activity 会打断聊天状态。
+ * <p>每一步是工具调用；如果是 shell 显示实时终端输出，如果是 browser 显示实时渲染画面。
+ * 面板从聊天页底部弹出，关掉不影响对话。
  */
 public final class ComputerSheet {
 
-    /** 一条步骤记录。 */
+    /** 一步。 */
     public static final class Step {
-        public final String tool;
-        public final long ms;
-        public final boolean ok;
-        public final String detail;
-
-        Step(String tool, long ms, boolean ok, String detail) {
-            this.tool = tool;
-            this.ms = ms;
-            this.ok = ok;
-            this.detail = detail;
-        }
+        public String name = "";
+        public String args = "";
+        public String output = "";
+        public long ms;
+        public boolean ok = true;
+        public boolean running = true;
+        public boolean browser;
     }
 
     private static final List<Step> STEPS = new ArrayList<Step>();
-    private static final List<String> LINES = new ArrayList<String>();
+    private static final Handler UI = new Handler(Looper.getMainLooper());
+    private static Dialog dialog;
+    private static LinearLayout list;
+    private static Activity host;
 
     private ComputerSheet() {}
 
-    /** 记录一条步骤（由聊天页在工具回调里调用）。 */
-    public static void addStep(String tool, long ms, boolean ok, String detail) {
-        STEPS.add(new Step(tool, ms, ok, detail));
-        while (STEPS.size() > 200) STEPS.remove(0);
+    // ---------- 记录 ----------
+
+    /** 新开一步，返回可后续填充的对象。 */
+    public static Step begin(String name, String args, boolean browser) {
+        Step s = new Step();
+        s.name = name;
+        s.args = args == null ? "" : args;
+        s.browser = browser;
+        STEPS.add(s);
+        final Activity a = host;
+        if (a != null) a.runOnUiThread(new Runnable() {
+            public void run() { refresh(); }
+        });
+        return s;
     }
 
-    /** 记录一行输出（终端、状态等）。 */
-    public static void log(String line) {
-        if (line == null) return;
-        LINES.add(line);
-        while (LINES.size() > 400) LINES.remove(0);
+    public static void finish(Step s, boolean ok, String output, long ms) {
+        if (s == null) return;
+        s.ok = ok;
+        s.running = false;
+        s.output = output == null ? "" : output;
+        s.ms = ms;
+        final Activity a = host;
+        if (a != null) a.runOnUiThread(new Runnable() {
+            public void run() { refresh(); }
+        });
     }
 
-    public static void clearSteps() {
+    public static void clear() {
         STEPS.clear();
     }
 
-    public static void show(Activity a) {
-        final Dialog dlg = new Dialog(a);
-        dlg.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        if (dlg.getWindow() != null) {
-            dlg.getWindow().setBackgroundDrawable(
-                    new android.graphics.drawable.ColorDrawable(0x00000000));
-            dlg.getWindow().setGravity(Gravity.BOTTOM);
+    // ---------- 界面 ----------
+
+    public static void show(final Activity a) {
+        host = a;
+        dialog = new Dialog(a);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(
+                    new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            dialog.getWindow().setGravity(Gravity.BOTTOM);
         }
 
         LinearLayout root = new LinearLayout(a);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackground(Theme.round(Theme.panel(), 22, a));
+        root.setBackground(Theme.round(Theme.panel(), 20, a));
 
         // 标题栏
         LinearLayout bar = new LinearLayout(a);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(Theme.dp(a, 10), Theme.dp(a, 12), Theme.dp(a, 10), Theme.dp(a, 8));
+        bar.setPadding(dp(a, 14), dp(a, 12), dp(a, 14), dp(a, 8));
 
         TextView close = new TextView(a);
         close.setText("\u2715");
-        close.setTextSize(16);
+        close.setTextSize(15);
         close.setTextColor(Theme.text2());
-        close.setGravity(Gravity.CENTER);
+        close.setPadding(dp(a, 8), dp(a, 6), dp(a, 8), dp(a, 6));
         close.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { dlg.dismiss(); }
+            public void onClick(View v) { dialog.dismiss(); }
         });
-        bar.addView(close, new LinearLayout.LayoutParams(
-                Theme.dp(a, 40), Theme.dp(a, 40)));
+        bar.addView(close);
 
         TextView title = new TextView(a);
         title.setText("Computer");
-        title.setTextSize(16);
-        title.setTypeface(null, Typeface.BOLD);
+        title.setTextSize(15);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(Theme.text());
         title.setGravity(Gravity.CENTER);
         bar.addView(title, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView shot = new TextView(a);
-        shot.setText("\u25A3");
-        shot.setTextSize(16);
-        shot.setTextColor(Theme.text2());
-        shot.setGravity(Gravity.CENTER);
-        shot.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                Snack.show(a, "截图已保存在 shots 目录");
-            }
-        });
-        bar.addView(shot, new LinearLayout.LayoutParams(
-                Theme.dp(a, 40), Theme.dp(a, 40)));
+        TextView live = new TextView(a);
+        live.setText("\u25CF Live");
+        live.setTextSize(11);
+        live.setTextColor(0xFF22C55E);
+        bar.addView(live);
         root.addView(bar);
 
-        // 终端/步骤区
-        LinearLayout screen = new LinearLayout(a);
-        screen.setOrientation(LinearLayout.VERTICAL);
-        screen.setBackground(Theme.round(0xFF0B0B0C, 14, a));
-        screen.setPadding(Theme.dp(a, 14), Theme.dp(a, 14), Theme.dp(a, 14), Theme.dp(a, 14));
-
-        final TextView log = new TextView(a);
-        log.setTextSize(11.5f);
-        log.setTextColor(0xFFE8E8EA);
-        log.setTypeface(Typeface.MONOSPACE);
-        log.setLineSpacing(Theme.dp(a, 4), 1f);
-        log.setTextIsSelectable(true);
-
         ScrollView sv = new ScrollView(a);
-        sv.setVerticalScrollBarEnabled(false);
-        sv.addView(log);
-        screen.addView(sv, new LinearLayout.LayoutParams(
+        list = new LinearLayout(a);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(a, 12), 0, dp(a, 12), dp(a, 16));
+        sv.addView(list);
+        root.addView(sv, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        slp.setMargins(Theme.dp(a, 12), Theme.dp(a, 4), Theme.dp(a, 12), Theme.dp(a, 6));
-        root.addView(screen, slp);
-
-        // 底部状态
-        final TextView status = new TextView(a);
-        status.setTextSize(10);
-        status.setTextColor(0xFF22C55E);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(0, 0, 0, Theme.dp(a, 10));
-        root.addView(status);
-
-        dlg.setContentView(root);
-        WindowManager.LayoutParams lp = dlg.getWindow() == null
-                ? null : dlg.getWindow().getAttributes();
+        dialog.setContentView(root);
+        WindowManager.LayoutParams lp = dialog.getWindow() == null
+                ? null : dialog.getWindow().getAttributes();
         if (lp != null) {
-            lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-            lp.height = (int) (a.getResources().getDisplayMetrics().heightPixels * 0.72f);
-            dlg.getWindow().setAttributes(lp);
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height = (int) (a.getResources().getDisplayMetrics().heightPixels * 0.78f);
+            dialog.getWindow().setAttributes(lp);
         }
-        dlg.show();
-
-        // 每秒刷新：追加新步骤/输出，并更新资源行
-        final Handler h = new Handler(Looper.getMainLooper());
-        final int[] seen = {0};
-        final Runnable tick = new Runnable() {
-            public void run() {
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < STEPS.size(); i++) {
-                    Step s = STEPS.get(i);
-                    sb.append(s.ok ? "✓ " : "✗ ").append(s.tool)
-                      .append("  ").append(s.ms).append("ms\n");
-                    if (s.detail != null && s.detail.length() > 0) {
-                        String d = s.detail;
-                        if (d.length() > 400) d = d.substring(0, 400) + "…";
-                        sb.append(d).append('\n');
-                    }
-                }
-                for (int i = 0; i < LINES.size(); i++) {
-                    sb.append(LINES.get(i)).append('\n');
-                }
-                log.setText(sb.length() == 0 ? "（暂时没有正在进行的步骤）" : sb.toString());
-                sv.post(new Runnable() {
-                    public void run() { sv.fullScroll(View.FOCUS_DOWN); }
-                });
-                status.setText(resourceLine());
-                h.postDelayed(this, 1000);
-            }
-        };
-        h.post(tick);
-        dlg.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+        dialog.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
             public void onDismiss(android.content.DialogInterface d) {
-                h.removeCallbacks(tick);
+                host = null;
+                dialog = null;
             }
         });
+        dialog.show();
+        refresh();
     }
 
-    /** 读一次内存占用；CPU 用 /proc/stat 两次采样求差，读不到就不显示。 */
-    private static String resourceLine() {
-        String mem = "";
-        try {
-            java.io.BufferedReader r = new java.io.BufferedReader(
-                    new java.io.FileReader("/proc/meminfo"));
-            String line;
-            long total = 0, avail = 0;
-            while ((line = r.readLine()) != null) {
-                if (line.startsWith("MemTotal:")) total = num(line);
-                else if (line.startsWith("MemAvailable:")) avail = num(line);
-            }
-            r.close();
-            if (total > 0) {
-                double used = (total - avail) / 1024.0 / 1024.0;
-                double all = total / 1024.0 / 1024.0;
-                mem = String.format(java.util.Locale.US, "MEM %.1f/%.1f GB", used, all);
-            }
-        } catch (Throwable ignored) {}
-        return mem.length() == 0 ? "\u25CF LIVE" : ("\u25CF LIVE    " + mem);
-    }
-
-    private static long num(String line) {
-        try {
-            String[] parts = line.replaceAll("[^0-9]", " ").trim().split("\\s+");
-            return Long.parseLong(parts[0]);
-        } catch (Exception e) {
-            return 0;
+    /** 重建步骤列表（步骤数量有限，整体重建比增量维护简单可靠）。 */
+    private static void refresh() {
+        if (list == null || host == null) return;
+        list.removeAllViews();
+        if (STEPS.isEmpty()) {
+            TextView empty = new TextView(host);
+            empty.setText("还没有操作。让助手跑一次工具就会出现在这里。");
+            empty.setTextSize(12);
+            empty.setTextColor(Theme.caption());
+            empty.setPadding(0, dp(host, 20), 0, 0);
+            list.addView(empty);
+            return;
+        }
+        for (int i = 0; i < STEPS.size(); i++) {
+            list.addView(stepView(host, STEPS.get(i), i == STEPS.size() - 1));
         }
     }
+
+    private static View stepView(final Activity a, final Step s, boolean latest) {
+        LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(a, 12), dp(a, 10), dp(a, 12), dp(a, 10));
+        box.setBackground(Theme.roundOutlined(Theme.surface(), 14, Theme.border(), a));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(a, 4), 0, dp(a, 4));
+        box.setLayoutParams(lp);
+
+        LinearLayout head = new LinearLayout(a);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView dot = new TextView(a);
+        dot.setText(s.running ? "\u25CF" : (s.ok ? "\u2713" : "\u2715"));
+        dot.setTextSize(12);
+        dot.setTextColor(s.running ? Theme.primary() : (s.ok ? 0xFF22C55E : Theme.danger()));
+        dot.setPadding(0, 0, dp(a, 8), 0);
+        head.addView(dot);
+
+        TextView name = new TextView(a);
+        name.setText(s.name + (s.args.length() > 0 ? "  " + s.args : ""));
+        name.setTextSize(12);
+        name.setTextColor(Theme.text2());
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        head.addView(name, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView time = new TextView(a);
+        time.setText(s.running ? "运行中" : (s.ms + "ms"));
+        time.setTextSize(11);
+        time.setTextColor(Theme.caption());
+        head.addView(time);
+        box.addView(head);
+
+        // 浏览器步骤：实时画面
+        if (s.browser) {
+            final ImageView shot = new ImageView(a);
+            shot.setAdjustViewBounds(true);
+            shot.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            shot.setBackgroundColor(0xFF000000);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(a, 220));
+            slp.setMargins(0, dp(a, 8), 0, 0);
+            box.addView(shot, slp);
+            if (latest) startFrames(a, shot);
+            return box;
+        }
+
+        // 其它步骤：输出文本
+        if (s.output.length() > 0) {
+            TextView out = new TextView(a);
+            String t = s.output.trim();
+            if (t.length() > 1500) t = t.substring(0, 1500) + "\n…";
+            out.setText(t);
+            out.setTextSize(11);
+            out.setTypeface(Typeface.MONOSPACE);
+            out.setTextColor(0xFF9BE59B);
+            out.setBackground(Theme.round(0xFF101312, 10, a));
+            out.setPadding(dp(a, 10), dp(a, 8), dp(a, 10), dp(a, 8));
+            out.setTextIsSelectable(true);
+            LinearLayout.LayoutParams olp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            olp.setMargins(0, dp(a, 8), 0, 0);
+            box.addView(out, olp);
+        }
+        return box;
+    }
+
+    /** 浏览器步骤每秒抓一帧，形成"实时"感。 */
+    private static void startFrames(final Activity a, final ImageView target) {
+        final Runnable[] tick = new Runnable[1];
+        tick[0] = new Runnable() {
+            public void run() {
+                if (host == null || target.getParent() == null) return;
+                new Thread(new Runnable() {
+                    public void run() {
+                        final android.graphics.Bitmap bmp =
+                                com.dsh.android.tools.BrowserEngine.capture(720, 1280);
+                        if (bmp == null) return;
+                        a.runOnUiThread(new Runnable() {
+                            public void run() {
+                                if (target.getParent() != null) target.setImageBitmap(bmp);
+                            }
+                        });
+                    }
+                }, "computer-frame").start();
+                UI.postDelayed(tick[0], 1200);
+            }
+        };
+        UI.postDelayed(tick[0], 300);
+    }
+
+    private static int dp(Context c, float v) { return Theme.dp(c, v); }
 }
