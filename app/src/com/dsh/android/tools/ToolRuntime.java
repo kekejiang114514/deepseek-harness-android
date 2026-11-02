@@ -50,6 +50,7 @@ public final class ToolRuntime {
         this.prefs = ctx.getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
         registerAskTool();
         registerVaultTools();
+        registerBrowserTools();
     }
 
     // ---------- 作用域 ----------
@@ -180,6 +181,63 @@ public final class ToolRuntime {
                     out.put("selected", picked);
                 }
                 return out.toString();
+            }
+        }));
+    }
+
+    /** 内置浏览器：真 WebView 打开页面并取正文，能处理需要 JS 渲染的站点。 */
+    private void registerBrowserTools() {
+        JSONObject readParams = new JSONObject();
+        JSONObject jsParams = new JSONObject();
+        try {
+            JSONObject u = new JSONObject();
+            u.put("type", "string");
+            u.put("description", "完整网址，以 http:// 或 https:// 开头");
+            JSONObject props = new JSONObject();
+            props.put("url", u);
+            readParams.put("type", "object");
+            readParams.put("properties", props);
+            readParams.put("required", new JSONArray().put("url"));
+
+            JSONObject code = new JSONObject();
+            code.put("type", "string");
+            code.put("description", "在页面里执行的 JS 代码，返回值会转成 JSON 交给你");
+            JSONObject props2 = new JSONObject();
+            props2.put("url", u);
+            props2.put("script", code);
+            jsParams.put("type", "object");
+            jsParams.put("properties", props2);
+            jsParams.put("required", new JSONArray().put("url").put("script"));
+        } catch (Exception ignored) {}
+
+        registry.put("browser.read", new ToolDef("browser.read",
+                "用内置浏览器打开网页并返回标题与正文。比 web.fetch 慢，但会执行页面脚本、"
+                        + "携带 Cookie，单页应用和需要登录的站点也能读到内容。",
+                readParams, new ToolExecutor() {
+            public String execute(JSONObject args) throws Exception {
+                String url = args.optString("url", "");
+                if (!url.startsWith("http")) return err("url 必须是 http/https");
+                BrowserEngine.Page p = BrowserEngine.read(ctx, url);
+                JSONObject o = new JSONObject();
+                o.put("ok", p.error == null);
+                if (p.error != null) o.put("error", p.error);
+                o.put("url", p.url);
+                o.put("title", p.title);
+                o.put("text", p.text);
+                return o.toString();
+            }
+        }));
+
+        registry.put("browser.js", new ToolDef("browser.js",
+                "用内置浏览器打开页面并执行一段 JavaScript，返回值以 JSON 交给你。"
+                        + "适合点按钮、读某个元素、翻页这类 web.fetch 做不到的操作。",
+                jsParams, new ToolExecutor() {
+            public String execute(JSONObject args) throws Exception {
+                String url = args.optString("url", "");
+                String script = args.optString("script", "");
+                if (!url.startsWith("http")) return err("url 必须是 http/https");
+                if (script.length() == 0) return err("script 不能为空");
+                return BrowserEngine.eval(ctx, url, script);
             }
         }));
     }
