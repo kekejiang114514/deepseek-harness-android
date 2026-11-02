@@ -1450,6 +1450,7 @@ public final class MainActivity extends Activity {
     private ThinkingBlock liveThinking;
     /** 最近一次工具调用的开始时间，用于面板里的耗时。 */
     private long toolStartAt;
+    private ComputerSheet.Step curStep;
 
     private TextView taskBar;
     private long runStartMs;
@@ -2221,8 +2222,10 @@ public final class MainActivity extends Activity {
                         closeTextSegment();
                         // ui.ask 的视觉就是那张选项卡片，不用再插一行工具日志
                         runToolCount++;
-                        if (!"ui.ask".equals(name)) addToolPill(name, args);
                         toolStartAt = System.currentTimeMillis();
+                        curStep = ("ui.ask".equals(name)) ? null
+                                : ComputerSheet.begin(friendlyTool(name), summaryOf(args),
+                                        name.startsWith("browser"));
                         scrollBottomIfPinned();
                     }
                 });
@@ -2232,8 +2235,9 @@ public final class MainActivity extends Activity {
                     public void run() {
                         boolean ok = result == null || !result.contains("\"ok\":false");
                         ToolPill pill = takePill(name);
-                        ComputerSheet.addStep(friendlyTool(name),
-                                Math.max(0, System.currentTimeMillis() - toolStartAt), ok, result);
+                        ComputerSheet.finish(curStep, ok, result,
+                                Math.max(0, System.currentTimeMillis() - toolStartAt));
+                        curStep = null;
                         if (pill != null) {
                             pill.finish(ok, result);
                         } else if (!ok) {
