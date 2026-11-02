@@ -53,6 +53,10 @@ public final class MainActivity extends Activity {
     private EditText input;
     private TextView sendBtn;
     private TextView titleView;
+    /** 运行中的工具胶囊，按工具名排队；onToolResult 只带名字，没有调用 id。 */
+    private final java.util.Map<String, java.util.ArrayDeque<ToolPill>> runningPills =
+            new java.util.HashMap<String, java.util.ArrayDeque<ToolPill>>();
+
     private TextView modelPill;
     private android.widget.PopupWindow modelPopup;
     private LinearLayout attachBar;
@@ -247,6 +251,7 @@ public final class MainActivity extends Activity {
             public boolean onTouch(View v, android.view.MotionEvent e) {
                 if (e.getAction() == android.view.MotionEvent.ACTION_UP) {
                     pinnedToBottom = isNearBottom();
+                    syncJumpButton();
                 }
                 return false;
             }
@@ -337,6 +342,25 @@ public final class MainActivity extends Activity {
         // 悬浮按钮挂在内容之上，保证可点击
         root.addView(col, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // 用户上滑离开底部后，右下角给一个回去的入口（否则新消息来了看不到）
+        jumpBottom = new TextView(this);
+        jumpBottom.setText("\u2193");
+        jumpBottom.setTextSize(16);
+        jumpBottom.setGravity(Gravity.CENTER);
+        jumpBottom.setTextColor(Theme.onPrimary());
+        jumpBottom.setBackground(Theme.round(Theme.primary(), 999, this));
+        jumpBottom.setElevation(dp(6));
+        jumpBottom.setVisibility(View.GONE);
+        jumpBottom.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                scrollBottom();
+            }
+        });
+        FrameLayout.LayoutParams jlp = new FrameLayout.LayoutParams(dp(38), dp(38));
+        jlp.gravity = Gravity.BOTTOM | Gravity.END;
+        jlp.setMargins(0, 0, dp(16), dp(96));
+        root.addView(jumpBottom, jlp);
 
         // 遮罩
         scrim = new View(this);
@@ -1240,6 +1264,56 @@ public final class MainActivity extends Activity {
 
     /** 工具调用：一行小字灰卡。 */
     /** 工具调用：可点击展开的折叠卡片（仿 Minis）。 */
+    /** 新建一条工具胶囊并登记，等 onToolResult 回来再收尾。 */
+    private void addToolPill(String name, String args) {
+        ToolPill pill = new ToolPill(this, friendlyTool(name), summaryOf(args));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(2), dp(4), dp(2), dp(4));
+        pill.setLayoutParams(lp);
+        pill.setAlpha(0f);
+        pill.setTranslationY(dp(4));
+        messages.addView(pill);
+        pill.animate().alpha(1f).translationY(0).setDuration(160).start();
+
+        java.util.ArrayDeque<ToolPill> q = runningPills.get(name);
+        if (q == null) {
+            q = new java.util.ArrayDeque<ToolPill>();
+            runningPills.put(name, q);
+        }
+        q.addLast(pill);
+    }
+
+    private ToolPill takePill(String name) {
+        java.util.ArrayDeque<ToolPill> q = runningPills.get(name);
+        if (q == null || q.isEmpty()) return null;
+        return q.pollFirst();
+    }
+
+    /** 参数摘要：只留最关键的短值，避免胶囊被长 JSON 撑开。 */
+    private static String summaryOf(String args) {
+        if (args == null) return "";
+        String a = args.trim();
+        if (a.length() == 0) return "";
+        try {
+            org.json.JSONObject o = new org.json.JSONObject(a);
+            String[] prefer = {"path", "url", "query", "name", "cmd", "selector"};
+            for (int i = 0; i < prefer.length; i++) {
+                String v = o.optString(prefer[i], "");
+                if (v.length() > 0) {
+                    return v.length() > 36 ? v.substring(0, 36) + "…" : v;
+                }
+            }
+            java.util.Iterator<String> it = o.keys();
+            if (it.hasNext()) {
+                String k = it.next();
+                String v = o.optString(k, "");
+                if (v.length() > 0) return v.length() > 30 ? v.substring(0, 30) + "…" : v;
+            }
+        } catch (Exception ignored) {}
+        return a.length() > 36 ? a.substring(0, 36) + "…" : a;
+    }
+
     private void addToolLine(String name, boolean okFlag, final String detail) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1333,9 +1407,26 @@ public final class MainActivity extends Activity {
 
     /** 是否「贴底」：用户在底部附近时，新内容才自动跟随滚动。 */
     private boolean pinnedToBottom = true;
+    private TextView jumpBottom;
+
+    /** 同步右下角「回到底部」按钮的显示。 */
+    private void syncJumpButton() {
+        if (jumpBottom == null) return;
+        boolean show = !pinnedToBottom;
+        if (show && jumpBottom.getVisibility() != View.VISIBLE) {
+            jumpBottom.setVisibility(View.VISIBLE);
+            jumpBottom.setAlpha(0f);
+            jumpBottom.animate().alpha(1f).setDuration(140).start();
+        } else if (!show && jumpBottom.getVisibility() == View.VISIBLE) {
+            jumpBottom.animate().alpha(0f).setDuration(120).withEndAction(new Runnable() {
+                public void run() { jumpBottom.setVisibility(View.GONE); }
+            }).start();
+        }
+    }
 
     private void scrollBottom() {
         pinnedToBottom = true;
+        syncJumpButton();
         messageScroll.post(new Runnable() {
             public void run() { messageScroll.fullScroll(View.FOCUS_DOWN); }
         });
@@ -2020,21 +2111,26 @@ public final class MainActivity extends Activity {
                         // 先把这段文字定稿，工具行/卡片才会排在它下面
                         closeTextSegment();
                         // ui.ask 的视觉就是那张选项卡片，不用再插一行工具日志
-                        if (!"ui.ask".equals(name)) addToolLine(name, true, args);
+                        if (!"ui.ask".equals(name)) addToolPill(name, args);
                         scrollBottomIfPinned();
                     }
                 });
             }
             public void onToolResult(final String name, final String result) {
-                if (result != null && result.contains("\"ok\":false")) {
-                    runOnUiThread(new Runnable() {
-                        public void run() {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        boolean ok = result == null || !result.contains("\"ok\":false");
+                        ToolPill pill = takePill(name);
+                        if (pill != null) {
+                            pill.finish(ok, result);
+                        } else if (!ok) {
+                            // 没找到对应胶囊（比如历史回放），退回文字提示
                             closeTextSegment();
                             addToolLine(name, false, result);
-                            scrollBottomIfPinned();
                         }
-                    });
-                }
+                        scrollBottomIfPinned();
+                    }
+                });
             }
             public void onError(final String msg) {
                 runOnUiThread(new Runnable() {
