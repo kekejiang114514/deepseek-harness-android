@@ -239,6 +239,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 9) pagePresets(bodyBox);
         else if (page == 10) pageTerminal(bodyBox);
         else if (page == 11) pageBrowser(bodyBox);
+        else if (page == 12) pageComputer(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -262,6 +263,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(menuRow("提示词预设", "提前交代工作环境与背景", 9));
         c.addView(divider());
         c.addView(menuRow("终端", "在应用内执行系统命令", 10));
+        c.addView(divider());
+        c.addView(menuRow("电脑", "实时画面与截图", 12));
         c.addView(divider());
         c.addView(menuRow("浏览器", "查看 AI 正在访问的页面", 11));
         c.addView(divider());
@@ -1159,6 +1162,19 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         body.addView(c);
     }
 
+    // ------------------------------------------------------------ 电脑
+
+    private void pageComputer(LinearLayout body) {
+        body.addView(sectionLabel("电脑"));
+        body.addView(hintRow("把内置浏览器的渲染画面实时显示出来——AI 在看什么，这里就能看到什么。"
+                + "画面来自浏览器自身的绘制结果，不需要录屏权限。"));
+        LinearLayout c = card();
+        c.addView(actionRow("打开电脑面板", new View.OnClickListener() {
+            public void onClick(View v) { ComputerActivity.open(SettingsActivity.this); }
+        }));
+        body.addView(c);
+    }
+
     // ------------------------------------------------------------ 开源许可
 
     private void pageLicense(LinearLayout body) {
@@ -1280,6 +1296,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         if (page == 9) return "提示词预设";
         if (page == 10) return "终端";
         if (page == 11) return "浏览器";
+        if (page == 12) return "电脑";
         return Texts.t(this, "settings");
     }
 
