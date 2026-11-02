@@ -1368,7 +1368,8 @@ public final class MainActivity extends Activity {
         String level = C.normalizeLevel(sp.getString(C.KEY_REASONING, C.LEVEL_MEDIUM));
         int maxTokens = C.maxTokensFor(level);
 
-        client = new LlmClient(base, key, model, maxTokens);
+        client = new LlmClient(this, base, key, model, maxTokens);
+        com.dsh.android.kernel.UsageStats.addRequest(this);
         loop = new AgentLoop(client, tools, buildSystemPrompt());
     }
 
@@ -2101,6 +2102,42 @@ public final class MainActivity extends Activity {
         card.animate().alpha(1f).translationY(0f).setDuration(180).start();
     }
 
+    /** 让用户自己写答案，代替点选项。 */
+    private void askCustomAnswer(final AskBridge.Ask live, final TextView tag) {
+        final EditText et = new EditText(this);
+        et.setSingleLine(false);
+        et.setMinLines(2);
+        et.setTextSize(14);
+        et.setTextColor(Theme.text());
+        et.setHintTextColor(Theme.caption());
+        et.setHint("写下你的回答");
+        et.setPadding(dp(12), dp(10), dp(12), dp(10));
+        et.setBackground(Theme.round(Theme.surface2(), Theme.R_MD, this));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(16), dp(8), dp(16), dp(4));
+        et.setLayoutParams(lp);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(et);
+
+        new AppDialog.Builder(this)
+                .setTitle("自己填写")
+                .setView(box)
+                .setPositiveButton("提交", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String text = et.getText().toString().trim();
+                        if (text.length() == 0) return;
+                        live.reply(text);
+                        tag.setText("已选择");
+                        tag.setTextColor(Theme.primary());
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     /**
      * 画一张选择题卡片。
      *
@@ -2202,6 +2239,42 @@ public final class MainActivity extends Activity {
             }
             rows.add(row);
             card.addView(row);
+        }
+
+        // 自定义填写：选项之外的答案
+        boolean answerIsOption = false;
+        for (int i = 0; i < options.length; i++) {
+            if (options[i].equals(answer)) { answerIsOption = true; break; }
+        }
+        if (!readonly && !answered) {
+            TextView custom = new TextView(this);
+            custom.setText("\u270E 自己填写…");
+            custom.setTextSize(14);
+            custom.setPadding(dp(12), dp(11), dp(12), dp(11));
+            LinearLayout.LayoutParams clp2 = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            clp2.setMargins(0, 0, 0, dp(6));
+            custom.setLayoutParams(clp2);
+            custom.setBackground(Theme.roundOutlined(Theme.surface(), Theme.R_MD,
+                    Theme.border(), this));
+            custom.setTextColor(Theme.text2());
+            custom.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (live.isAnswered()) {
+                        Snack.show(MainActivity.this, "这个选择已经提交过了");
+                        return;
+                    }
+                    askCustomAnswer(live, tag);
+                }
+            });
+            card.addView(custom);
+        } else if (answered && !answerIsOption && answer.length() > 0) {
+            TextView custom = new TextView(this);
+            custom.setText(answer);
+            custom.setTextSize(14);
+            custom.setPadding(dp(12), dp(11), dp(12), dp(11));
+            applyChoiceStyle(custom, true, true);
+            card.addView(custom);
         }
 
         if (multi && !answered && !readonly) {

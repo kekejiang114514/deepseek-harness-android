@@ -240,8 +240,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else pageAbout(bodyBox);
     }
 
-    /** 根菜单：五个分组入口。 */
+    /** 根菜单：顶部三个数值 + 分组入口。 */
     private void pageRoot(LinearLayout body) {
+        statsHeader(body);
         body.addView(sectionLabel(Texts.t(this, "settings")));
         LinearLayout c = card();
         c.addView(menuRow(Texts.t(this, "endpoint"), Texts.t(this, "sub_endpoint"), 1));
@@ -260,6 +261,101 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(divider());
         c.addView(menuRow(Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
         body.addView(c);
+    }
+
+    /** 顶部数值：余额与请求数并排，token 单独一行。 */
+    private void statsHeader(LinearLayout body) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rlp.setMargins(0, dp(12), 0, 0);
+        row.setLayoutParams(rlp);
+
+        LinearLayout left = statCard("账户余额", balanceText(), new View.OnClickListener() {
+            public void onClick(View v) { refreshBalance(); }
+        });
+        LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        llp.setMargins(0, 0, dp(8), 0);
+        row.addView(left, llp);
+
+        LinearLayout right = statCard("API 请求数",
+                String.valueOf(com.dsh.android.kernel.UsageStats.requests(this)), null);
+        row.addView(right, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        body.addView(row);
+
+        long total = com.dsh.android.kernel.UsageStats.totalTokens(this);
+        long p = com.dsh.android.kernel.UsageStats.promptTokens(this);
+        long c = com.dsh.android.kernel.UsageStats.completionTokens(this);
+        LinearLayout tok = statCard("累计消耗 token", formatNum(total), null);
+        TextView sub = new TextView(this);
+        sub.setText("输入 " + formatNum(p) + " · 输出 " + formatNum(c));
+        sub.setTextSize(11);
+        sub.setTextColor(Theme.caption());
+        sub.setPadding(dp(16), 0, dp(16), dp(12));
+        tok.addView(sub);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tlp.setMargins(0, dp(8), 0, 0);
+        tok.setLayoutParams(tlp);
+        body.addView(tok);
+    }
+
+    /** 一块数值卡：小标题 + 大数字。 */
+    private LinearLayout statCard(String label, String value, View.OnClickListener click) {
+        LinearLayout c = card();
+        if (click != null) c.setOnClickListener(click);
+
+        TextView l = new TextView(this);
+        l.setText(label);
+        l.setTextSize(11);
+        l.setTextColor(Theme.caption());
+        l.setPadding(dp(16), dp(12), dp(16), 0);
+        c.addView(l);
+
+        TextView v = new TextView(this);
+        v.setText(value);
+        v.setTextSize(20);
+        v.setTypeface(null, android.graphics.Typeface.BOLD);
+        v.setTextColor(Theme.text());
+        v.setPadding(dp(16), dp(2), dp(16), dp(12));
+        c.addView(v);
+        return c;
+    }
+
+    private static String formatNum(long n) {
+        if (n < 1000) return String.valueOf(n);
+        return String.format(java.util.Locale.US, "%,d", n);
+    }
+
+    /** 余额：先显示缓存，点一下重新查。 */
+    private String balanceText() {
+        String cached = sp.getString("balance_cache", "");
+        if (cached == null || cached.length() == 0) return "点此查询";
+        return cached;
+    }
+
+    private void refreshBalance() {
+        Snack.show(this, "正在查询余额…");
+        new Thread(new Runnable() {
+            public void run() {
+                final com.dsh.android.kernel.Balance.Info info =
+                        com.dsh.android.kernel.Balance.fetch(SettingsActivity.this);
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (info.error != null) {
+                            Snack.show(SettingsActivity.this, "查询失败：" + info.error);
+                            return;
+                        }
+                        String text = info.amount + " " + info.currency;
+                        sp.edit().putString("balance_cache", text).apply();
+                        fillBody();
+                    }
+                });
+            }
+        }, "balance").start();
     }
 
     private View menuRow(final String title, String sub, final int target) {

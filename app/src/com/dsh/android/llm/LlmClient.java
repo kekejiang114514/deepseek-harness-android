@@ -46,7 +46,12 @@ public final class LlmClient {
     private final String model;
     private final int maxTokens;
 
-    public LlmClient(String baseUrl, String apiKey, String model, int maxTokens) {
+    /** 记录用量需要 Context；为空时统计跳过，不影响对话。 */
+    private android.content.Context ctx;
+
+    public LlmClient(android.content.Context ctx, String baseUrl, String apiKey,
+                     String model, int maxTokens) {
+        this.ctx = ctx;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.apiKey = apiKey;
         this.model = model;
@@ -172,8 +177,18 @@ public final class LlmClient {
         return body;
     }
 
+    /** 把响应里的 usage 累加到本地统计；没有就跳过。 */
+    private void recordUsage(JSONObject o) {
+        if (ctx == null) return;
+        JSONObject usage = o.optJSONObject("usage");
+        if (usage == null) return;
+        com.dsh.android.kernel.UsageStats.addUsage(ctx,
+                usage.optLong("prompt_tokens", 0), usage.optLong("completion_tokens", 0));
+    }
+
     private Result parseNonStream(String json) throws Exception {
         JSONObject resp = new JSONObject(json);
+        recordUsage(resp);
         JSONArray choices = resp.optJSONArray("choices");
         Result r = new Result();
         if (choices != null && choices.length() > 0) {
@@ -206,6 +221,7 @@ public final class LlmClient {
             } catch (Exception e) {
                 continue;
             }
+            recordUsage(obj);
             JSONArray choices = obj.optJSONArray("choices");
             if (choices == null || choices.length() == 0) continue;
             JSONObject first = choices.optJSONObject(0);
