@@ -1268,9 +1268,18 @@ public final class MainActivity extends Activity {
     private void addToolPill(String name, String args) {
         ToolPill pill = new ToolPill(this, friendlyTool(name), summaryOf(args));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(dp(2), dp(4), dp(2), dp(4));
         pill.setLayoutParams(lp);
+        pill.setOnExpandListener(new ToolPill.OnExpand() {
+            public void onToggled(ToolPill p) {
+                if (pinnedToBottom) {
+                    messageScroll.post(new Runnable() {
+                        public void run() { messageScroll.fullScroll(View.FOCUS_DOWN); }
+                    });
+                }
+            }
+        });
         pill.setAlpha(0f);
         pill.setTranslationY(dp(4));
         messages.addView(pill);
