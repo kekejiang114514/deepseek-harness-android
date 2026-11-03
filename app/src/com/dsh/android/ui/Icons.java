@@ -3,7 +3,8 @@ package com.dsh.android.ui;
 /**
  * 图标路径（Lucide，ISC 许可；24×24 网格、2px 圆头描边）。
  *
- * <p>每条子路径都以绝对 M 开头，多段拼接后不会因为相对坐标错位。
+ * <p>每条子路径都以绝对 M 开头；原先以相对 m 开头的元素已按规范换算，
+ * 拼接成单条路径后坐标不会漂移。
  */
 public final class Icons {
 
@@ -13,7 +14,7 @@ public final class Icons {
 
     public static final String PLUS = "M5 12h14M12 5v14";
 
-    public static final String SEND = "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11zM21.854 2.147-10.94 l10.939";
+    public static final String SEND = "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11zM21.854 2.147 l-10.94 10.939";
 
     public static final String TRASH = "M10 11v6M14 11v6M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2";
 
@@ -27,7 +28,7 @@ public final class Icons {
 
     public static final String PLUGIN = "M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z";
 
-    public static final String BACK = "M12 19-7-7 l7-7M19 12H5";
+    public static final String BACK = "M12 19 l-7-7 7-7M19 12H5";
 
     public static final String CLOSE = "M18 6 6 18M6 6 l12 12";
 
