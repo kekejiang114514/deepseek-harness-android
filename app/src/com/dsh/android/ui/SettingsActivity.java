@@ -1883,25 +1883,27 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
      * 切换主题时用圆形扩散过渡：先截下当前画面，重建新主题后再把旧画面从左上角
      * 收成一个圆（半径由整屏收到 0），视觉上新主题就是从那个角呈半圆扩散开的。
      */
+    /**
+     * 切换主题：重建界面，并用一层遮罩做「从左上角收拢」的过渡。
+     *
+     * <p>遮罩优先用旧界面的截图，看起来是旧画面被收走；
+     * 截屏失败（硬件加速视图上可能发生）时退回纯色遮罩——动画照旧，绝不因此不切换。
+     */
     private void applyThemeReveal() {
         final View content = findViewById(android.R.id.content);
         int w = content == null ? 0 : content.getWidth();
         int h = content == null ? 0 : content.getHeight();
-        if (w <= 0 || h <= 0) {
-            setContentView(build());
-            return;
-        }
 
+        final int oldBg = Theme.bg();
         android.graphics.Bitmap shot = null;
-        try {
-            shot = android.graphics.Bitmap.createBitmap(w, h,
-                    android.graphics.Bitmap.Config.ARGB_8888);
-            content.draw(new android.graphics.Canvas(shot));
-        } catch (Throwable t) {
-            // 截不到旧画面就直接重建，绝不能因为动画失败而让主题看起来"没切换"
-            Theme.init(this);
-            setContentView(build());
-            return;
+        if (w > 0 && h > 0) {
+            try {
+                shot = android.graphics.Bitmap.createBitmap(w, h,
+                        android.graphics.Bitmap.Config.ARGB_8888);
+                content.draw(new android.graphics.Canvas(shot));
+            } catch (Throwable t) {
+                shot = null;
+            }
         }
 
         Theme.init(this);
@@ -1910,9 +1912,17 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         final android.view.ViewGroup host = findViewById(android.R.id.content);
         if (host == null) return;
 
-        final android.widget.ImageView overlay = new android.widget.ImageView(this);
-        overlay.setImageBitmap(shot);
-        overlay.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        final View overlay;
+        if (shot != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setImageBitmap(shot);
+            iv.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+            overlay = iv;
+        } else {
+            View v = new View(this);
+            v.setBackgroundColor(oldBg);
+            overlay = v;
+        }
         host.addView(overlay, new android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -1920,19 +1930,26 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             public void run() {
                 int w2 = host.getWidth();
                 int h2 = host.getHeight();
+                if (w2 <= 0 || h2 <= 0) {
+                    try { host.removeView(overlay); } catch (Throwable ignored) {}
+                    return;
+                }
                 float maxR = (float) Math.hypot(w2, h2);
-                android.animation.Animator a = android.view.ViewAnimationUtils
-                        .createCircularReveal(overlay, 0, 0, maxR, 0f);
-                a.setDuration(420);
-                a.setInterpolator(new android.view.animation.DecelerateInterpolator());
-                a.addListener(new android.animation.AnimatorListenerAdapter() {
-                    public void onAnimationEnd(android.animation.Animator anim) {
-                        try {
-                            host.removeView(overlay);
-                        } catch (Throwable ignored) {}
-                    }
-                });
-                a.start();
+                try {
+                    android.animation.Animator a = android.view.ViewAnimationUtils
+                            .createCircularReveal(overlay, 0, 0, maxR, 0f);
+                    a.setDuration(420);
+                    a.setInterpolator(new android.view.animation.DecelerateInterpolator());
+                    a.addListener(new android.animation.AnimatorListenerAdapter() {
+                        public void onAnimationEnd(android.animation.Animator anim) {
+                            try { host.removeView(overlay); } catch (Throwable ignored) {}
+                        }
+                    });
+                    a.start();
+                } catch (Throwable t) {
+                    // 动画本身不可用时也别留一块遮罩挡住界面
+                    try { host.removeView(overlay); } catch (Throwable ignored) {}
+                }
             }
         });
     }

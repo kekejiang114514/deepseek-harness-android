@@ -206,7 +206,7 @@ sh build.sh
 sh test/run.sh
 ```
 
-215 pure-JVM tests, no device needed: context compaction, version comparison, release selection, plugin parsing and loading, tar.gz extraction, effort-level mapping.
+215 pure-JVM tests, no device needed: context compaction, version comparison, release selection, plugin parsing and loading, tar.gz extraction, effort-level mapping, icon path parsing.
 
 ---
 
