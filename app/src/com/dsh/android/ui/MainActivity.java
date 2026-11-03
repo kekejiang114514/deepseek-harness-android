@@ -717,12 +717,28 @@ public final class MainActivity extends Activity {
             return true;
         }
         if ("thinking".equals(name)) {
+            String arg = sp < 0 ? "" : body.substring(sp + 1).trim();
             String cur = C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM));
-            String next = C.LEVEL_OFF.equals(cur) ? C.LEVEL_HIGH : C.LEVEL_OFF;
+            if (arg.length() == 0) {
+                Snack.show(this, "当前 " + cur + "。用法：/thinking 0-5（0 off，5 max）");
+                return true;
+            }
+            int level;
+            try {
+                level = Integer.parseInt(arg);
+            } catch (Exception e) {
+                Snack.show(this, "参数要是 0-5 的数字");
+                return true;
+            }
+            if (level < 0 || level > 5) {
+                Snack.show(this, "参数超出范围，只接受 0-5");
+                return true;
+            }
+            String next = C.LEVELS[level][0];
             prefs().edit().putString(C.KEY_REASONING, next).apply();
             reloadClient();
             refreshModelPill();
-            Snack.show(this, "深度思考：" + (C.LEVEL_OFF.equals(next) ? "关闭" : "开启"));
+            Snack.show(this, "推理强度：" + next + "（" + C.LEVELS[level][1] + "）");
             return true;
         }
         if ("memory".equals(name)) {
@@ -826,15 +842,17 @@ public final class MainActivity extends Activity {
         card.setPadding(dp(6), dp(8), dp(6), dp(8));
 
         cmdStateViews.clear();
+        // {图标, 命令, 说明, 是否显示开关状态}
         String[][] builtin = {
-                {"\u232B", "/clear", "清空当前会话的所有消息"},
-                {"\u21F2", "/compact", "压缩对话历史为摘要"},
-                {"\u25CE", "/thinking", "深度思考"},
-                {"\u25C8", "/memory", "提示词预设"},
-                {"?", "/help", "查看全部指令"},
+                {"\u232B", "/clear", "清空当前会话的所有消息", "0"},
+                {"\u21F2", "/compact", "压缩对话历史为摘要", "0"},
+                {"\u25CE", "/thinking", "输入 0-5 调整强度", "0"},
+                {"\u25C8", "/memory", "提示词预设", "1"},
+                {"?", "/help", "查看全部指令", "0"},
         };
         for (int i = 0; i < builtin.length; i++) {
-            View row = cmdRow(builtin[i][0], builtin[i][1], builtin[i][2], true);
+            View row = cmdRow(builtin[i][0], builtin[i][1], builtin[i][2],
+                    "1".equals(builtin[i][3]));
             card.addView(row);
         }
 
@@ -859,10 +877,17 @@ public final class MainActivity extends Activity {
 
     /** 开关类指令的状态文字（每次打开时刷新，不重建视图）。 */
     private void refreshCommandStates() {
-        boolean thinking = !C.LEVEL_OFF.equals(
-                C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM)));
+        String level = C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM));
+        int idx = 2;
+        for (int i = 0; i < C.LEVELS.length; i++) {
+            if (C.LEVELS[i][0].equals(level)) idx = i;
+        }
+        TextView thinkSub = cmdStateViews.get("/thinking");
+        if (thinkSub != null) {
+            thinkSub.setText("当前 " + level + "（" + idx + "）· 输入 0-5 调整");
+        }
+
         boolean presets = prefs().getBoolean("presets_on", true);
-        setCmdState("/thinking", thinking ? "已开启 · 点击切换" : "已关闭 · 点击切换", thinking);
         setCmdState("/memory", presets ? "已开启 · 点击切换" : "已关闭 · 点击切换", presets);
     }
 
@@ -931,6 +956,9 @@ public final class MainActivity extends Activity {
         clp.setMargins(dp(8), 0, 0, 0);
         row.addView(col, clp);
 
+        if (!toggle) {
+            cmdStateViews.put(name, st);
+        }
         if (toggle) {
             TextView mark = new TextView(this);
             mark.setText("\u2713");
