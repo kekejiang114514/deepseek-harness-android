@@ -311,6 +311,7 @@ public final class MainActivity extends Activity {
         composer.addView(computerBtn, cLp);
 
         IconView attachBtn = new IconView(this, IconView.PLUS, 20);
+        attachBtn.setColor(Theme.text2());
         attachBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { pickFile(); }
         });
@@ -319,6 +320,7 @@ public final class MainActivity extends Activity {
 
         // 指令入口：列出插件注册的命令，点选后填入输入框
         IconView cmdBtn = new IconView(this, IconView.SLASH, 20);
+        cmdBtn.setColor(Theme.text2());
         cmdBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showCommandPicker(); }
         });
