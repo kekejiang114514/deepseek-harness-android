@@ -32,11 +32,8 @@ final class Ui {
         bar.setPadding(dp(a, 8), dp(a, 10), dp(a, 16), dp(a, 10));
         bar.setBackgroundColor(Theme.bg());
 
-        TextView back = new TextView(a);
-        back.setText("\u2039");
-        back.setTextSize(26);
-        back.setTextColor(Theme.text());
-        back.setGravity(Gravity.CENTER);
+        IconView back = new IconView(a, IconView.BACK, 20);
+        back.setColor(Theme.text());
         back.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { a.finish(); }
         });

@@ -51,7 +51,8 @@ public final class MainActivity extends Activity {
     private LinearLayout messages;
     private ScrollView messageScroll;
     private EditText input;
-    private TextView sendBtn;
+    private FrameLayout sendBtn;
+    private IconView sendIcon;
     private TextView titleView;
     /** 运行中的工具胶囊，按工具名排队；onToolResult 只带名字，没有调用 id。 */
     private final java.util.Map<String, java.util.ArrayDeque<ToolPill>> runningPills =
@@ -309,12 +310,7 @@ public final class MainActivity extends Activity {
         cLp.gravity = Gravity.CENTER_VERTICAL;
         composer.addView(computerBtn, cLp);
 
-        TextView attachBtn = new TextView(this);
-        attachBtn.setText("\u002B");
-        attachBtn.setTextSize(22);
-        attachBtn.setGravity(Gravity.CENTER);
-        attachBtn.setTextColor(Theme.text2());
-        attachBtn.setIncludeFontPadding(false);
+        IconView attachBtn = new IconView(this, IconView.PLUS, 20);
         attachBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { pickFile(); }
         });
@@ -322,12 +318,7 @@ public final class MainActivity extends Activity {
         composer.addView(attachBtn, attLp);
 
         // 指令入口：列出插件注册的命令，点选后填入输入框
-        TextView cmdBtn = new TextView(this);
-        cmdBtn.setText("/");
-        cmdBtn.setTextSize(19);
-        cmdBtn.setGravity(Gravity.CENTER);
-        cmdBtn.setTextColor(Theme.text2());
-        cmdBtn.setIncludeFontPadding(false);
+        IconView cmdBtn = new IconView(this, IconView.SLASH, 20);
         cmdBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showCommandPicker(); }
         });
@@ -358,13 +349,11 @@ public final class MainActivity extends Activity {
         composer.addView(input, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        sendBtn = new TextView(this);
-        sendBtn.setText("\u2191");
-        sendBtn.setTextSize(17);
-        sendBtn.setGravity(Gravity.CENTER);
-        sendBtn.setTextColor(Theme.onPrimary());
+        sendBtn = new FrameLayout(this);
         sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
-        sendBtn.setIncludeFontPadding(false);
+        sendIcon = new IconView(this, IconView.SEND, 16);
+        sendIcon.setColor(Theme.onPrimary());
+        sendBtn.addView(sendIcon, new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
         sendBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { onSend(); }
         });
@@ -436,8 +425,8 @@ public final class MainActivity extends Activity {
         // content 区已经在状态栏下方（非全屏主题），这里不再额外留白
         bar.setPadding(dp(4), dp(4), dp(4), dp(2));
 
-        TextView menu = iconBtn("\u2630");
-        menu.setTextSize(17);
+        IconView menu = new IconView(this, IconView.MENU, 20);
+        menu.setColor(Theme.text());
         menu.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { openDrawer(); }
         });
@@ -454,8 +443,8 @@ public final class MainActivity extends Activity {
         bar.addView(titleView, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView gear = iconBtn("\u2699");
-        gear.setTextSize(17);
+        IconView gear = new IconView(this, IconView.GEAR, 20);
+        gear.setColor(Theme.text());
         gear.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 startActivity(new Intent(MainActivity.this, SettingsActivity.class));
@@ -843,16 +832,16 @@ public final class MainActivity extends Activity {
 
         cmdStateViews.clear();
         // {图标, 命令, 说明, 是否显示开关状态}
-        String[][] builtin = {
-                {"\u232B", "/clear", "清空当前会话的所有消息", "0"},
-                {"\u21F2", "/compact", "压缩对话历史为摘要", "0"},
-                {"\u25CE", "/thinking", "输入 0-5 调整强度", "0"},
-                {"\u25C8", "/memory", "提示词预设", "1"},
-                {"?", "/help", "查看全部指令", "0"},
+        Object[][] builtin = {
+                {Integer.valueOf(IconView.TRASH), "/clear", "清空当前会话的所有消息", "0"},
+                {Integer.valueOf(IconView.COMPACT), "/compact", "压缩对话历史为摘要", "0"},
+                {Integer.valueOf(IconView.THINKING), "/thinking", "输入 0-5 调整强度", "0"},
+                {Integer.valueOf(IconView.MEMORY), "/memory", "提示词预设", "1"},
+                {Integer.valueOf(IconView.HELP), "/help", "查看全部指令", "0"},
         };
         for (int i = 0; i < builtin.length; i++) {
-            View row = cmdRow(builtin[i][0], builtin[i][1], builtin[i][2],
-                    "1".equals(builtin[i][3]));
+            View row = cmdRow(((Integer) builtin[i][0]).intValue(), (String) builtin[i][1],
+                    (String) builtin[i][2], "1".equals(builtin[i][3]));
             card.addView(row);
         }
 
@@ -913,7 +902,7 @@ public final class MainActivity extends Activity {
             String plugin = c.optString("plugin", "");
             String sub = desc.length() > 0 ? desc : "插件指令";
             if (plugin.length() > 0) sub = sub + "　·　" + plugin;
-            cmdPluginHost.addView(cmdRow("\u2318", "/" + name, sub, false));
+            cmdPluginHost.addView(cmdRow(IconView.PLUGIN, "/" + name, sub, false));
         }
     }
 
@@ -922,19 +911,18 @@ public final class MainActivity extends Activity {
      *
      * @param toggle 是否是需要显示开关状态的内置指令
      */
-    private View cmdRow(String icon, String name, String desc, boolean toggle) {
+    private View cmdRow(int icon, String name, String desc, boolean toggle) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12), dp(11), dp(12), dp(11));
 
-        TextView ic = new TextView(this);
-        ic.setText(icon);
-        ic.setTextSize(16);
-        ic.setTextColor(Theme.text3());
-        ic.setGravity(Gravity.CENTER);
-        row.addView(ic, new LinearLayout.LayoutParams(dp(26),
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+        IconView ic = new IconView(this, icon, 18);
+        ic.setColor(Theme.text3());
+        LinearLayout.LayoutParams iclp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        iclp.setMargins(0, 0, dp(4), 0);
+        row.addView(ic, iclp);
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -2380,19 +2368,13 @@ public final class MainActivity extends Activity {
 
     /** 发送按钮在「发送 ↑」与「停止 ■」之间切换（仿 Minis）。 */
     private void setSendMode(boolean stop) {
-        if (sendBtn == null) return;
+        if (sendBtn == null || sendIcon == null) return;
         if (stop) {
-            sendBtn.setText("\u25A0");
-            sendBtn.setTextSize(14);
-            sendBtn.setTextColor(Theme.onPrimary());
+            sendIcon.setType(IconView.STOP);
             sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
-        sendBtn.setIncludeFontPadding(false);
         } else {
-            sendBtn.setText("\u2191");
-            sendBtn.setTextSize(18);
-            sendBtn.setTextColor(Theme.onPrimary());
+            sendIcon.setType(IconView.SEND);
             sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
-        sendBtn.setIncludeFontPadding(false);
         }
     }
 
