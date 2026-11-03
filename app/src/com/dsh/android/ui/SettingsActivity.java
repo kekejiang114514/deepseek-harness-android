@@ -248,27 +248,27 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         statsHeader(body);
         body.addView(sectionLabel(Texts.t(this, "settings")));
         LinearLayout c = card();
-        c.addView(menuRow(Texts.t(this, "endpoint"), Texts.t(this, "sub_endpoint"), 1));
+        c.addView(menuRow(IconView.KEY, Texts.t(this, "endpoint"), Texts.t(this, "sub_endpoint"), 1));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "tools"), Texts.t(this, "sub_tools"), 2));
+        c.addView(menuRow(IconView.WRENCH, Texts.t(this, "tools"), Texts.t(this, "sub_tools"), 2));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "plugins"), Texts.t(this, "sub_plugins"), 3));
+        c.addView(menuRow(IconView.PLUGIN, Texts.t(this, "plugins"), Texts.t(this, "sub_plugins"), 3));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "appearance"), Texts.t(this, "sub_appearance"), 4));
+        c.addView(menuRow(IconView.PALETTE, Texts.t(this, "appearance"), Texts.t(this, "sub_appearance"), 4));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "language"), Texts.t(this, "sub_language"), 7));
+        c.addView(menuRow(IconView.GLOBE, Texts.t(this, "language"), Texts.t(this, "sub_language"), 7));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "vault"), "给 AI 用的凭据，不进聊天记录", 8));
+        c.addView(menuRow(IconView.LOCK, Texts.t(this, "vault"), "给 AI 用的凭据，不进聊天记录", 8));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "presets"), "提前交代工作环境与背景", 9));
+        c.addView(menuRow(IconView.DOC, Texts.t(this, "presets"), "提前交代工作环境与背景", 9));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "terminal"), "在应用内执行系统命令", 10));
+        c.addView(menuRow(IconView.TERMINAL, Texts.t(this, "terminal"), "在应用内执行系统命令", 10));
         c.addView(divider());
-        c.addView(menuRow("内置虚拟机", "实时画面与截图", 12));
+        c.addView(menuRow(IconView.WINDOW, "内置虚拟机", "实时画面与截图", 12));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "browser"), "查看 AI 正在访问的页面", 11));
+        c.addView(menuRow(IconView.BAG, Texts.t(this, "browser"), "查看 AI 正在访问的页面", 11));
         c.addView(divider());
-        c.addView(menuRow(Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
+        c.addView(menuRow(IconView.INFO, Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
         body.addView(c);
     }
 
@@ -367,12 +367,18 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }, "balance").start();
     }
 
-    private View menuRow(final String title, String sub, final int target) {
+    private View menuRow(int icon, final String title, String sub, final int target) {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.HORIZONTAL);
         r.setGravity(Gravity.CENTER_VERTICAL);
         r.setPadding(dp(16), dp(14), dp(16), dp(14));
         r.setBackground(pressable());
+
+        IconView iv = new IconView(this, icon, 20);
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        ilp.setMargins(0, 0, dp(14), 0);
+        r.addView(iv, ilp);
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -1259,11 +1265,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         bar.setPadding(dp(8), dp(10), dp(16), dp(10));
         bar.setBackgroundColor(Theme.bg());
 
-        TextView back = new TextView(this);
-        back.setText("\u2039");
-        back.setTextSize(26);
-        back.setTextColor(Theme.text());
-        back.setGravity(Gravity.CENTER);
+        IconView back = new IconView(this, IconView.BACK, 20);
+        back.setColor(Theme.text());
         back.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 if (page != 0) {
