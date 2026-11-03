@@ -1215,8 +1215,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         r.addView(a1);
         r.addView(divider());
         TextView a4 = attribution(
-                "Material Icons（Apache-2.0）",
-                "界面图标的路径数据取自 Material Icons 官方 SVG，填充绘制，未改动图形本身。");
+                "Lucide（ISC）",
+                "界面图标的路径取自 Lucide，24×24 网格、2px 圆头描边，绘制时按比例缩放。");
         r.addView(a4);
         r.addView(divider());
         TextView a3 = attribution(
