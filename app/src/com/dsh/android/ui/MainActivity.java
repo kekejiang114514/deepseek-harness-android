@@ -1118,11 +1118,22 @@ public final class MainActivity extends Activity {
         box.setGravity(Gravity.CENTER);
         box.setPadding(0, dp(80), 0, 0);
 
-        TextView logo = new TextView(this);
-        logo.setText("\uD83D\uDC0B");
-        logo.setTextSize(40);
-        logo.setGravity(Gravity.CENTER);
-        box.addView(logo);
+        // DeepSeek 标志：深色模式白色、浅色模式黑色（同一张白色剪影 + 染色）
+        android.widget.ImageView logo = new android.widget.ImageView(this);
+        try {
+            java.io.InputStream in = getAssets().open("deepseek_logo.png");
+            android.graphics.drawable.Drawable d =
+                    android.graphics.drawable.Drawable.createFromStream(in, "deepseek_logo");
+            in.close();
+            logo.setImageDrawable(d);
+        } catch (Throwable t) {
+            logo.setVisibility(View.GONE);
+        }
+        logo.setColorFilter(Theme.isDark() ? 0xFFFFFFFF : 0xFF000000);
+        int logoSize = dp(64);
+        LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(logoSize, logoSize);
+        llp.gravity = Gravity.CENTER_HORIZONTAL;
+        box.addView(logo, llp);
 
         TextView h = new TextView(this);
         h.setText(Texts.t(this, "welcome_title"));

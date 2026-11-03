@@ -115,7 +115,8 @@ public final class AgentLoop {
                                 sink.onDelta(delta);
                             }
                             public void onReasoning(String delta) {
-                                // 思考过程由界面侧拉取（r.reasoning），这里不重复转发
+                                // 思考过程是逐块流出来的，必须转发给界面，否则只存不显
+                                sink.onReasoning(delta);
                             }
                             public void onToolCallStart(int index, String id, String name) {
                                 gotToolCall[0] = true;
