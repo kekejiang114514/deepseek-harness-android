@@ -1214,6 +1214,11 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                         + "按其公开实现（packages/core/agent-loop）的思路用 Java 重写。");
         r.addView(a1);
         r.addView(divider());
+        TextView a4 = attribution(
+                "Material Icons（Apache-2.0）",
+                "界面图标的路径数据取自 Material Icons 官方 SVG，填充绘制，未改动图形本身。");
+        r.addView(a4);
+        r.addView(divider());
         TextView a3 = attribution(
                 "OpenMinis（GPL-3.0）",
                 "内置浏览器的动作划分（navigate / click / type / find / get_text / cookies 等）"
