@@ -140,6 +140,12 @@ public final class MainActivity extends Activity {
         });
 
         buildUi();
+        // 指令面板预构建：首次点击零成本，避免低端机上弹出一卡
+        findViewById(android.R.id.content).postDelayed(new Runnable() {
+            public void run() {
+                if (!isFinishing() && cmdCard == null) buildCommandCard();
+            }
+        }, 600);
         reloadClient();
         renderHistory();
         playSplash();
@@ -758,46 +764,121 @@ public final class MainActivity extends Activity {
         scrollBottom();
     }
 
-    /**
-     * 指令面板：贴着输入框向上弹出，宽与输入框一致。
-     *
-     * <p>用 PopupWindow 而不是对话框——它不抢占焦点、不遮住输入框，
-     * 关掉时下面的键盘也不会跳动。
-     */
+    /** 指令面板：贴着输入框向上弹出。视图只建一次，之后复用；插件命令异步取。 */
     private void showCommandPicker() {
+        if (isFinishing() || (android.os.Build.VERSION.SDK_INT >= 17 && isDestroyed())) return;
         if (cmdPopup != null && cmdPopup.isShowing()) {
-            cmdPopup.dismiss();
+            try {
+                cmdPopup.dismiss();
+            } catch (Throwable ignored) {}
             return;
         }
+        if (cmdCard == null) buildCommandCard();
+        refreshCommandStates();
 
-        org.json.JSONArray cmds;
-        try {
-            cmds = com.dsh.android.plugins.js.JsHost.commands();
-        } catch (Throwable t) {
-            cmds = new org.json.JSONArray();
+        final View anchor = composerWrap;
+        anchor.post(new Runnable() {
+            public void run() {
+                if (isFinishing() || anchor.getWindowToken() == null) return;
+                int[] loc = new int[2];
+                anchor.getLocationOnScreen(loc);
+                int cardH = cmdCardHeight > 0 ? cmdCardHeight : dp(300);
+                int y = Math.max(dp(56), loc[1] - cardH - dp(8));
+                try {
+                    cmdPopup.showAtLocation(anchor, Gravity.TOP | Gravity.START, dp(16), y);
+                } catch (Throwable ignored) {
+                    // 窗口已不可用（比如刚好退出），放弃这次弹出即可，不能让应用崩
+                }
+            }
+        });
+
+        // 插件命令可能还在 JS 里，异步取一次，回来再补进列表
+        new Thread(new Runnable() {
+            public void run() {
+                final org.json.JSONArray got;
+                try {
+                    got = com.dsh.android.plugins.js.JsHost.commands();
+                } catch (Throwable t) {
+                    return;
+                }
+                if (got.length() == 0) return;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (isFinishing() || cmdPluginHost == null) return;
+                        fillPluginCommands(got);
+                    }
+                });
+            }
+        }, "cmd-list").start();
+    }
+
+    /** 构建一次，之后复用，避免每次点击都 inflate 一遍导致掉帧。 */
+    private void buildCommandCard() {
+        if (cmdCard != null && cmdPopup != null) return;   // 已建过，别重复
+        if (cmdPopup != null) {
+            try { cmdPopup.dismiss(); } catch (Throwable ignored) {}
+            cmdPopup = null;
         }
-
-        LinearLayout card = new LinearLayout(this);
+        cmdCard = new LinearLayout(this);
+        LinearLayout card = (LinearLayout) cmdCard;
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(Theme.round(Theme.panel(), 18, this));
+        card.setBackground(Theme.roundOutlined(Theme.panel(), 18, Theme.borderStrong(), this));
         card.setPadding(dp(6), dp(8), dp(6), dp(8));
 
-        // 内置指令
+        cmdStateViews.clear();
         String[][] builtin = {
-                {"\u232B", "/clear", "清空当前会话的所有消息", ""},
-                {"\u21F2", "/compact", "压缩对话历史为摘要", ""},
-                {"\u25CE", "/thinking", "深度思考",
-                        C.LEVEL_OFF.equals(C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM)))
-                                ? "已关闭 · 点击切换" : "已开启 · 点击切换"},
-                {"\u25C8", "/memory", "提示词预设",
-                        prefs().getBoolean("presets_on", true) ? "已开启 · 点击切换" : "已关闭 · 点击切换"},
-                {"?", "/help", "查看全部指令", ""},
+                {"\u232B", "/clear", "清空当前会话的所有消息"},
+                {"\u21F2", "/compact", "压缩对话历史为摘要"},
+                {"\u25CE", "/thinking", "深度思考"},
+                {"\u25C8", "/memory", "提示词预设"},
+                {"?", "/help", "查看全部指令"},
         };
         for (int i = 0; i < builtin.length; i++) {
-            card.addView(cmdRow(builtin[i][0], builtin[i][1], builtin[i][2], builtin[i][3]));
+            View row = cmdRow(builtin[i][0], builtin[i][1], builtin[i][2], true);
+            card.addView(row);
         }
 
-        // 插件指令
+        cmdPluginHost = new LinearLayout(this);
+        cmdPluginHost.setOrientation(LinearLayout.VERTICAL);
+        card.addView(cmdPluginHost);
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.setVerticalScrollBarEnabled(false);
+        sv.addView(card);
+
+        int width = getResources().getDisplayMetrics().widthPixels - dp(32);
+        // 建好就量一次：首次弹出时如果等布局完再量，高度还是 0，面板位置会跳
+        card.measure(View.MeasureSpec.makeMeasureSpec(width - dp(12), View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.makeMeasureSpec(dp(420), View.MeasureSpec.AT_MOST));
+        cmdCardHeight = Math.min(Math.max(card.getMeasuredHeight(), dp(120)), dp(420));
+
+        cmdPopup = new android.widget.PopupWindow(sv, width, cmdCardHeight, true);
+        cmdPopup.setBackgroundDrawable(null);
+        cmdPopup.setOutsideTouchable(true);
+    }
+
+    /** 开关类指令的状态文字（每次打开时刷新，不重建视图）。 */
+    private void refreshCommandStates() {
+        boolean thinking = !C.LEVEL_OFF.equals(
+                C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM)));
+        boolean presets = prefs().getBoolean("presets_on", true);
+        setCmdState("/thinking", thinking ? "已开启 · 点击切换" : "已关闭 · 点击切换", thinking);
+        setCmdState("/memory", presets ? "已开启 · 点击切换" : "已关闭 · 点击切换", presets);
+    }
+
+    private void setCmdState(String name, String text, boolean on) {
+        TextView sub = cmdStateViews.get(name);
+        if (sub != null) sub.setText(text);
+        TextView mark = cmdMarkViews.get(name);
+        if (mark != null) {
+            mark.setText(on ? "\u2713" : "\u2715");
+            mark.setTextColor(on ? Theme.link() : Theme.caption());
+        }
+    }
+
+    private void fillPluginCommands(org.json.JSONArray cmds) {
+        if (cmdPluginHost == null) return;
+        cmdPluginHost.removeAllViews();
         for (int i = 0; i < cmds.length(); i++) {
             org.json.JSONObject c = cmds.optJSONObject(i);
             if (c == null) continue;
@@ -805,42 +886,18 @@ public final class MainActivity extends Activity {
             if (name.length() == 0) continue;
             String desc = c.optString("desc", "");
             String plugin = c.optString("plugin", "");
-            card.addView(cmdRow("\u2318", "/" + name,
-                    desc.length() > 0 ? desc : "插件指令", plugin));
+            String sub = desc.length() > 0 ? desc : "插件指令";
+            if (plugin.length() > 0) sub = sub + "　·　" + plugin;
+            cmdPluginHost.addView(cmdRow("\u2318", "/" + name, sub, false));
         }
-
-        android.widget.ScrollView sv = new android.widget.ScrollView(this);
-        sv.setVerticalScrollBarEnabled(false);
-        sv.addView(card);
-
-        int width = getResources().getDisplayMetrics().widthPixels - dp(32);
-        final android.widget.PopupWindow pw = new android.widget.PopupWindow(
-                sv, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
-        pw.setBackgroundDrawable(null);
-        pw.setOutsideTouchable(true);
-        pw.setElevation(dp(16));
-        cmdPopup = pw;
-
-        // 先量出高度，再贴在输入框上方
-        card.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.AT_MOST),
-                View.MeasureSpec.makeMeasureSpec(dp(420), View.MeasureSpec.AT_MOST));
-        int cardH = Math.min(card.getMeasuredHeight(), dp(420));
-        pw.setHeight(cardH);
-
-        final View anchor = composerWrap;
-        anchor.post(new Runnable() {
-            public void run() {
-                int[] loc = new int[2];
-                anchor.getLocationOnScreen(loc);
-                int screenH = getResources().getDisplayMetrics().heightPixels;
-                int y = Math.max(dp(60), loc[1] - cardH - dp(8));
-                pw.showAtLocation(anchor, Gravity.TOP | Gravity.START, dp(16), y);
-            }
-        });
     }
 
-    /** 一行指令：图标 + 名称 + 说明 + 右侧状态。 */
-    private View cmdRow(String icon, String name, String desc, String state) {
+    /**
+     * 一行指令：图标 + 名称 + 说明，开关类右侧带状态点。
+     *
+     * @param toggle 是否是需要显示开关状态的内置指令
+     */
+    private View cmdRow(String icon, String name, String desc, boolean toggle) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -861,26 +918,27 @@ public final class MainActivity extends Activity {
         t.setTextSize(14);
         t.setTextColor(Theme.text());
         col.addView(t);
-        if (desc.length() > 0 || state.length() > 0) {
-            TextView st = new TextView(this);
-            st.setText(state.length() > 0 ? desc + " · " + state : desc);
-            st.setTextSize(11);
-            st.setTextColor(Theme.caption());
-            st.setPadding(0, dp(2), 0, 0);
-            col.addView(st);
-        }
+
+        TextView st = new TextView(this);
+        st.setText(desc);
+        st.setTextSize(11);
+        st.setTextColor(Theme.caption());
+        st.setPadding(0, dp(2), 0, 0);
+        col.addView(st);
+
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         clp.setMargins(dp(8), 0, 0, 0);
         row.addView(col, clp);
 
-        // 开关类指令右侧显示状态点
-        if (state.length() > 0) {
-            TextView dot = new TextView(this);
-            dot.setText(state.startsWith("已开启") ? "\u2713" : "\u2715");
-            dot.setTextSize(13);
-            dot.setTextColor(state.startsWith("已开启") ? Theme.link() : Theme.caption());
-            row.addView(dot);
+        if (toggle) {
+            TextView mark = new TextView(this);
+            mark.setText("\u2713");
+            mark.setTextSize(13);
+            mark.setTextColor(Theme.link());
+            row.addView(mark);
+            cmdStateViews.put(name, st);
+            cmdMarkViews.put(name, mark);
         }
 
         if ("/help".equals(name)) {
@@ -900,7 +958,6 @@ public final class MainActivity extends Activity {
                 }
             });
         }
-
         return row;
     }
 
@@ -1709,6 +1766,11 @@ public final class MainActivity extends Activity {
     private TextView jumpBottom;
     private LinearLayout composerWrap;
     private android.widget.PopupWindow cmdPopup;
+    private View cmdCard;
+    private int cmdCardHeight;
+    private LinearLayout cmdPluginHost;
+    private final java.util.Map<String, TextView> cmdStateViews = new java.util.HashMap<String, TextView>();
+    private final java.util.Map<String, TextView> cmdMarkViews = new java.util.HashMap<String, TextView>();
     /** 任务状态条：本轮跑了多久、调了几个工具。 */
     /** 当前正在流式输出的思考块。 */
     private ThinkingBlock liveThinking;
