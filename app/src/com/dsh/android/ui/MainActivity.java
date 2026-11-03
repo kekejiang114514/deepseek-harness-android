@@ -315,6 +315,19 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams attLp = new LinearLayout.LayoutParams(dp(32), dp(40));
         composer.addView(attachBtn, attLp);
 
+        // 指令入口：列出插件注册的命令，点选后填入输入框
+        TextView cmdBtn = new TextView(this);
+        cmdBtn.setText("/");
+        cmdBtn.setTextSize(19);
+        cmdBtn.setGravity(Gravity.CENTER);
+        cmdBtn.setTextColor(Theme.text2());
+        cmdBtn.setIncludeFontPadding(false);
+        cmdBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { showCommandPicker(); }
+        });
+        LinearLayout.LayoutParams cmdLp = new LinearLayout.LayoutParams(dp(30), dp(40));
+        composer.addView(cmdBtn, cmdLp);
+
         input = new EditText(this);
         input.setHint("给 DShAndroid 发消息");
         input.setHintTextColor(Theme.caption());
@@ -672,6 +685,76 @@ public final class MainActivity extends Activity {
                 Snack.show(this, "没有存储权限，保持工作区");
             }
         }
+    }
+
+    /** 列出插件注册的指令，点一条就填进输入框。 */
+    private void showCommandPicker() {
+        org.json.JSONArray cmds;
+        try {
+            cmds = com.dsh.android.plugins.js.JsHost.commands();
+        } catch (Throwable t) {
+            cmds = new org.json.JSONArray();
+        }
+        if (cmds.length() == 0) {
+            Snack.show(this, "还没有可用的指令。插件里用 ctx.command(名称, 说明, 处理函数) 注册。");
+            return;
+        }
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(2), dp(2), dp(2), dp(2));
+        for (int i = 0; i < cmds.length(); i++) {
+            final org.json.JSONObject c = cmds.optJSONObject(i);
+            if (c == null) continue;
+            final String name = c.optString("name", "");
+            if (name.length() == 0) continue;
+            String desc = c.optString("desc", "");
+            String plugin = c.optString("plugin", "");
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(dp(12), dp(10), dp(12), dp(10));
+
+            TextView t = new TextView(this);
+            t.setText("/" + name);
+            t.setTextSize(14);
+            t.setTextColor(Theme.text());
+            row.addView(t);
+
+            StringBuilder sub = new StringBuilder();
+            if (desc.length() > 0) sub.append(desc);
+            if (plugin.length() > 0) {
+                if (sub.length() > 0) sub.append("　·　");
+                sub.append(plugin);
+            }
+            if (sub.length() > 0) {
+                TextView st = new TextView(this);
+                st.setText(sub.toString());
+                st.setTextSize(11);
+                st.setTextColor(Theme.caption());
+                st.setPadding(0, dp(2), 0, 0);
+                row.addView(st);
+            }
+
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    input.setText("/" + name + " ");
+                    input.setSelection(input.getText().length());
+                    input.requestFocus();
+                    if (cmdDialog != null) cmdDialog.dismiss();
+                }
+            });
+            list.addView(row);
+            if (i < cmds.length() - 1) list.addView(dividerLine());
+        }
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(list);
+        cmdDialog = new AppDialog.Builder(this)
+                .setTitle("指令")
+                .setView(sv)
+                .setNegativeButton("关闭", null)
+                .show();
     }
 
     /** 执行插件命令；返回 false 表示没有匹配的命令（按普通消息发出去）。 */
@@ -1469,6 +1552,7 @@ public final class MainActivity extends Activity {
     /** 当前正在流式输出的思考块。 */
     private ThinkingBlock liveThinking;
     /** 最近一次工具调用的开始时间，用于面板里的耗时。 */
+    private android.app.Dialog cmdDialog;
     private long toolStartAt;
     private ComputerSheet.Step curStep;
 
