@@ -375,6 +375,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         r.setBackground(pressable());
 
         IconView iv = new IconView(this, icon, 20);
+        iv.setColor(Theme.text2());
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ilp.setMargins(0, 0, dp(14), 0);

@@ -28,7 +28,8 @@ public final class IconView extends View {
     private final RectF rect = new RectF();
 
     private int type;
-    private int color = 0xFF000000;
+    /** 默认跟随主题次文本色：深色模式浅、浅色模式深，不写死黑色。 */
+    private int color = Theme.text2();
     private final float dpSize;
 
     public IconView(Context c, int type, float dpSize) {
