@@ -112,7 +112,11 @@ public final class IconView extends View {
         canvas.translate((w - size) / 2f, (h - size) / 2f);
         canvas.scale(scale, scale);
 
-        paint.setStyle(Paint.Style.FILL);
+        // 描边绘制：线宽固定在 24 网格里的 2，缩放后与 monitor 图标完全一致
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(2f);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeJoin(Paint.Join.ROUND);
         paint.setColor(color);
         canvas.drawPath(pathOf(type), paint);
 
