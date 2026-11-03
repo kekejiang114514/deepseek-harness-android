@@ -103,8 +103,9 @@ public final class IconView extends View {
     protected void onDraw(Canvas canvas) {
         float w = getWidth();
         float h = getHeight();
-        // 统一按 24×24 视框等比缩放，取方形区域居中——不同容器尺寸下比例完全一致
-        float size = Math.min(w, h);
+        // 图形尺寸以 dpSize 为上限：点击区域可以由布局给得更大，图标本身不该跟着变大
+        float want = dpSize * getResources().getDisplayMetrics().density;
+        float size = Math.min(Math.min(w, h), want);
         if (size <= 0) return;
 
         float scale = size / 24f;

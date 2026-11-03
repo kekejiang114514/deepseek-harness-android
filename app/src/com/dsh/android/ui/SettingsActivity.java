@@ -1891,9 +1891,17 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             return;
         }
 
-        android.graphics.Bitmap shot = android.graphics.Bitmap.createBitmap(
-                w, h, android.graphics.Bitmap.Config.ARGB_8888);
-        content.draw(new android.graphics.Canvas(shot));
+        android.graphics.Bitmap shot = null;
+        try {
+            shot = android.graphics.Bitmap.createBitmap(w, h,
+                    android.graphics.Bitmap.Config.ARGB_8888);
+            content.draw(new android.graphics.Canvas(shot));
+        } catch (Throwable t) {
+            // 截不到旧画面就直接重建，绝不能因为动画失败而让主题看起来"没切换"
+            Theme.init(this);
+            setContentView(build());
+            return;
+        }
 
         Theme.init(this);
         setContentView(build());
