@@ -3,7 +3,7 @@ package com.dsh.android.ui;
 /**
  * 图标路径（Lucide，ISC 许可；24×24 网格、2px 圆头描边）。
  *
- * <p>全部按描边绘制，线宽与端点同 monitor 图标一致，视觉上完全同款。
+ * <p>每条子路径都以绝对 M 开头，多段拼接后不会因为相对坐标错位。
  */
 public final class Icons {
 
@@ -13,11 +13,11 @@ public final class Icons {
 
     public static final String PLUS = "M5 12h14M12 5v14";
 
-    public static final String SEND = "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11zm21.854 2.147-10.94 10.939";
+    public static final String SEND = "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11zM21.854 2.147-10.94 l10.939";
 
     public static final String TRASH = "M10 11v6M14 11v6M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2";
 
-    public static final String COMPACT = "m14 10 7-7M20 10h-6V4m3 21 7-7M4 14h6v6";
+    public static final String COMPACT = "M14 10 l7-7M20 10h-6V4M3 21 l7-7M4 14h6v6";
 
     public static final String THINKING = "M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4";
 
@@ -27,9 +27,9 @@ public final class Icons {
 
     public static final String PLUGIN = "M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z";
 
-    public static final String BACK = "m12 19-7-7 7-7M19 12H5";
+    public static final String BACK = "M12 19-7-7 l7-7M19 12H5";
 
-    public static final String CLOSE = "M18 6 6 18m6 6 12 12";
+    public static final String CLOSE = "M18 6 6 18M6 6 l12 12";
 
     public static final String MENU = "M4 5h16M4 12h16M4 19h16";
 
@@ -53,7 +53,7 @@ public final class Icons {
 
     public static final String WINDOW = "M4.00 3.00h16.00a2.00 2.00 0 0 1 2.00 2.00v10.00a2.00 2.00 0 0 1 -2.00 2.00h-16.00a2.00 2.00 0 0 1 -2.00 -2.00v-10.00a2.00 2.00 0 0 1 2.00 -2.00ZM8.00 21.00L16.00 21.00M12.00 17.00L12.00 21.00";
 
-    public static final String TERMINAL = "M12 19h8m4 17 6-6-6-6";
+    public static final String TERMINAL = "M12 19h8M4 17 l6-6-6-6";
 
     public static final String BAG = "M16 10a4 4 0 0 1-8 0M3.103 6.034h17.794M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z";
 
