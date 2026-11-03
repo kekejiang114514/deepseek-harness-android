@@ -687,7 +687,78 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** 列出插件注册的指令，点一条就填进输入框。 */
+    /** 内置指令：不依赖插件，随应用提供。 */
+    private static final String[][] BUILTIN_CMDS = {
+            {"/clear", "清空当前会话的所有消息"},
+            {"/compact", "压缩对话历史并生成摘要"},
+            {"/thinking", "切换深度思考（推理等级 off ↔ high）"},
+            {"/memory", "切换提示词预设是否注入"},
+            {"/help", "列出所有可用指令"},
+    };
+
+    /** 执行内置指令；返回 false 表示不是内置指令。 */
+    private boolean runBuiltinCommand(String text) {
+        String body = text.startsWith("/") ? text.substring(1).trim() : text.trim();
+        int sp = body.indexOf(' ');
+        String name = (sp < 0 ? body : body.substring(0, sp)).toLowerCase();
+
+        if ("clear".equals(name)) {
+            doClear();
+            return true;
+        }
+        if ("compact".equals(name)) {
+            doCompact();
+            return true;
+        }
+        if ("thinking".equals(name)) {
+            String cur = C.normalizeLevel(prefs().getString(C.KEY_REASONING, C.LEVEL_MEDIUM));
+            String next = C.LEVEL_OFF.equals(cur) ? C.LEVEL_HIGH : C.LEVEL_OFF;
+            prefs().edit().putString(C.KEY_REASONING, next).apply();
+            reloadClient();
+            refreshModelPill();
+            Snack.show(this, "深度思考：" + (C.LEVEL_OFF.equals(next) ? "关闭" : "开启"));
+            return true;
+        }
+        if ("memory".equals(name)) {
+            boolean on = prefs().getBoolean("presets_on", true);
+            prefs().edit().putBoolean("presets_on", !on).apply();
+            Snack.show(this, on ? "提示词预设：已停用" : "提示词预设：已启用");
+            return true;
+        }
+        if ("help".equals(name)) {
+            showCommandPicker();
+            return true;
+        }
+        return false;
+    }
+
+    private void doClear() {
+        String id = sessions.currentId();
+        sessions.saveHistory(id, new JSONArray());
+        messages.removeAllViews();
+        addWelcome();
+        Snack.show(this, "已清空当前会话");
+    }
+
+    private void doCompact() {
+        JSONArray hist = sessions.loadCurrentHistory();
+        if (hist.length() == 0) {
+            Snack.show(this, "当前会话还没有内容");
+            return;
+        }
+        HistoryCompactor.Report rep = HistoryCompactor.fit(hist, 24000, 14000);
+        sessions.saveHistory(sessions.currentId(), hist);
+        closeTextSegment();
+        if (rep.changed) {
+            addNotice("↻ " + rep.describe());
+            Snack.show(this, "已压缩对话历史");
+        } else {
+            Snack.show(this, "历史还没到需要压缩的长度");
+        }
+        scrollBottom();
+    }
+
+    /** 列出内置与插件指令，点一条就填进输入框。 */
     private void showCommandPicker() {
         org.json.JSONArray cmds;
         try {
@@ -695,14 +766,41 @@ public final class MainActivity extends Activity {
         } catch (Throwable t) {
             cmds = new org.json.JSONArray();
         }
-        if (cmds.length() == 0) {
-            Snack.show(this, "还没有可用的指令。插件里用 ctx.command(名称, 说明, 处理函数) 注册。");
-            return;
-        }
-
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(dp(2), dp(2), dp(2), dp(2));
+
+        for (int i = 0; i < BUILTIN_CMDS.length; i++) {
+            final String cmd = BUILTIN_CMDS[i][0];
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(dp(12), dp(10), dp(12), dp(10));
+
+            TextView t = new TextView(this);
+            t.setText(cmd);
+            t.setTextSize(14);
+            t.setTextColor(Theme.text());
+            row.addView(t);
+
+            TextView st = new TextView(this);
+            st.setText(BUILTIN_CMDS[i][1] + "　·　内置");
+            st.setTextSize(11);
+            st.setTextColor(Theme.caption());
+            st.setPadding(0, dp(2), 0, 0);
+            row.addView(st);
+
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    input.setText(cmd + " ");
+                    input.setSelection(input.getText().length());
+                    input.requestFocus();
+                    if (cmdDialog != null) cmdDialog.dismiss();
+                }
+            });
+            list.addView(row);
+            list.addView(dividerLine());
+        }
+
         for (int i = 0; i < cmds.length(); i++) {
             final org.json.JSONObject c = cmds.optJSONObject(i);
             if (c == null) continue;
@@ -1661,8 +1759,9 @@ public final class MainActivity extends Activity {
             sb.append("当用户问当前用的是什么模型时，回答：").append(model).append("。");
         } catch (Throwable ignored) {}
 
-        // 用户预先写好的背景与环境说明
-        String preset = com.dsh.android.kernel.Presets.activeText(this);
+        // 用户预先写好的背景与环境说明（/memory 可以整体关掉）
+        String preset = prefs().getBoolean("presets_on", true)
+                ? com.dsh.android.kernel.Presets.activeText(this) : "";
         if (preset.length() > 0) {
             sb.append("\n\n【用户设定的背景】以下是用户事先交代的工作环境与约定，回答时据此进行：\n");
             sb.append(preset);
@@ -1682,12 +1781,18 @@ public final class MainActivity extends Activity {
         // 允许「只发附件」：有附件时文本可以为空
         if (typed.length() == 0 && attaches.isEmpty()) return;
 
-        // 插件命令：以 / 开头，交给注册了该名字的插件处理
+        // 以 / 开头：先看内置指令，再看插件注册的指令
         if (typed.startsWith("/") && attaches.isEmpty()) {
+            if (runBuiltinCommand(typed)) {
+                input.setText("");
+                return;
+            }
             if (runPluginCommand(typed)) {
                 input.setText("");
                 return;
             }
+            Snack.show(this, "没有这条指令，输入 /help 看可用列表");
+            return;
         }
 
         if (messages.getChildCount() == 1) messages.removeAllViews();
