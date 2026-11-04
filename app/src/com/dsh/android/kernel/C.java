@@ -3,7 +3,7 @@ package com.dsh.android.kernel;
 /** 全局常量与配置。 */
 public final class C {
     public static final String APP_NAME = "DShAndroid";
-    public static final String VERSION = "1.4-beta3";
+    public static final String VERSION = "1.4-beta4";
 
     // DeepSeek 默认端点
     public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
@@ -70,6 +70,12 @@ public final class C {
 
     /** 无障碍操作总开关（随时开/关）。 */
     public static final String KEY_A11Y_ENABLED = "a11y_enabled";
+    /** 悬浮窗总开关 */
+    public static final String KEY_FLOAT = "float_window";
+    /** 等用户在系统页授权「显示在其他应用上层」后再启动 */
+    public static final String KEY_FLOAT_PENDING = "float_pending";
+    /** 后台常驻：只挂通知吊住进程，避免无障碍服务被系统回收 */
+    public static final String KEY_KEEPALIVE = "keep_alive";
 
     /** 插件：目录名与启用状态前缀。 */
     public static final String PLUGIN_DIR = "DShAndroid/plugins";

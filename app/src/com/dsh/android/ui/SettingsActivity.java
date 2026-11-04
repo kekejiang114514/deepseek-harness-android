@@ -131,6 +131,25 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         super.onResume();
         refreshValue("__a11y", false);
         refreshA11yHint();
+        // 从系统「显示在其他应用上层」页回来：授权了就补上启动
+        if (sp.getBoolean(C.KEY_FLOAT_PENDING, false) && FloatService.canOverlay(this)) {
+            sp.edit().putBoolean(C.KEY_FLOAT_PENDING, false)
+                    .putBoolean(C.KEY_FLOAT, true).apply();
+            FloatService.start(this);
+            if (floatToggle != null) floatToggle.setChecked(true);
+        }
+    }
+
+    private Toggle floatToggle;
+
+    private void openOverlayPermission() {
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        } catch (Throwable t) {
+            toast("请在系统设置里允许「显示在其他应用上层」");
+        }
     }
 
     /** 无障碍没开时在开关行下面常驻一段说明，开了就收起来。 */
@@ -566,6 +585,73 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         a11yHintHost = new LinearLayout(this);
         a11yHintHost.setOrientation(LinearLayout.VERTICAL);
         toolCard.addView(a11yHintHost);
+
+        // ---- 悬浮窗 ----
+        toolCard.addView(divider());
+        LinearLayout floatRow = new LinearLayout(this);
+        floatRow.setOrientation(LinearLayout.HORIZONTAL);
+        floatRow.setGravity(Gravity.CENTER_VERTICAL);
+        floatRow.setPadding(dp(16), dp(12), dp(16), dp(12));
+
+        LinearLayout floatCol = new LinearLayout(this);
+        floatCol.setOrientation(LinearLayout.VERTICAL);
+        TextView floatTitle = new TextView(this);
+        floatTitle.setText("悬浮窗");
+        floatTitle.setTextSize(15);
+        floatTitle.setTextColor(Theme.text());
+        floatCol.addView(floatTitle);
+        TextView floatSub = new TextView(this);
+        floatSub.setText("退到后台也能看到运行状态和最近的工具调用");
+        floatSub.setTextSize(12);
+        floatSub.setTextColor(Theme.caption());
+        floatSub.setPadding(0, dp(3), 0, 0);
+        floatCol.addView(floatSub);
+        floatRow.addView(floatCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        floatToggle = new Toggle(this);
+        floatToggle.setChecked(sp.getBoolean(C.KEY_FLOAT, false)
+                && FloatService.canOverlay(this));
+        floatToggle.setOnChangeListener(new Toggle.OnChange() {
+            public void onChanged(boolean on) {
+                if (on) {
+                    if (!FloatService.canOverlay(SettingsActivity.this)) {
+                        // 没授权就先记一笔，等用户从系统页回来再启动
+                        sp.edit().putBoolean(C.KEY_FLOAT_PENDING, true).apply();
+                        floatToggle.setChecked(false);
+                        toast("需要「显示在其他应用上层」权限");
+                        openOverlayPermission();
+                        return;
+                    }
+                    sp.edit().putBoolean(C.KEY_FLOAT, true).apply();
+                    FloatService.start(SettingsActivity.this);
+                } else {
+                    sp.edit().putBoolean(C.KEY_FLOAT, false).apply();
+                    // 还开着后台常驻的话，只把气泡去掉，别把进程一起放了
+                    if (sp.getBoolean(C.KEY_KEEPALIVE, false)) {
+                        FloatService.start(SettingsActivity.this, false);
+                    } else {
+                        FloatService.stop(SettingsActivity.this);
+                    }
+                }
+            }
+        });
+        floatRow.addView(floatToggle);
+        toolCard.addView(floatRow);
+
+        toolCard.addView(divider());
+        toolCard.addView(switchRow("后台常驻", "挂一条常驻通知吊住进程，避免系统把无障碍服务一起回收",
+                sp.getBoolean(C.KEY_KEEPALIVE, false),
+                new CompoundCallback() {
+                    public void onChanged(boolean on) {
+                        sp.edit().putBoolean(C.KEY_KEEPALIVE, on).apply();
+                        if (on) {
+                            FloatService.start(SettingsActivity.this, false);
+                        } else if (!sp.getBoolean(C.KEY_FLOAT, false)) {
+                            FloatService.stop(SettingsActivity.this);
+                        }
+                    }
+                }));
+
         body.addView(toolCard);
     }
 

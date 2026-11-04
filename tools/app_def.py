@@ -69,8 +69,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 80
-    a.version_name = '1.4-beta3'
+    a.version_code = 81
+    a.version_name = '1.4-beta4'
     a.min_sdk = 23
     a.target_sdk = 29
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
@@ -81,6 +81,10 @@ def build_dshandroid_app():
         'android.permission.POST_NOTIFICATIONS',
         # 应用内更新：下载完直接用系统安装器装
         'android.permission.REQUEST_INSTALL_PACKAGES',
+        # 悬浮窗：退到后台后显示 Agent 状态
+        'android.permission.SYSTEM_ALERT_WINDOW',
+        # 悬浮窗是个前台服务：常驻通知顺带让进程不那么容易被回收
+        'android.permission.FOREGROUND_SERVICE',
     ]
     # 允许在 Android 10 上以旧式存储访问 /sdcard（全局文件模式需要）
     a.extra_app_attrs = [
@@ -179,6 +183,11 @@ def build_dshandroid_app():
             ('meta-data', [('name', TYPE_STR, 'android.accessibilityservice'),
                            ('resource', TYPE_REF, 0x7F020000)], []),
         ],
+    ))
+    # 悬浮窗（前台服务）：不导出，只由本应用自己启动
+    a.components.append(ComponentDef(
+        'service', '.ui.FloatService', False,
+        attrs=[('stopWithTask', TYPE_BOOL, False)],
     ))
     a.resources.append(ResourceDef('mipmap', 'ic_launcher', 'res/mipmap/ic_launcher.png'))
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用
