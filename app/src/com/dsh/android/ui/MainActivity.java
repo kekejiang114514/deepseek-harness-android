@@ -960,7 +960,7 @@ public final class MainActivity extends Activity {
                 {Integer.valueOf(IconView.TRASH), "/clear", "清空当前会话的所有消息", "0"},
                 {Integer.valueOf(IconView.COMPACT), "/compact", "压缩对话历史为摘要", "0"},
                 {Integer.valueOf(IconView.THINKING), "/thinking", "输入 0-5 调整强度", "0"},
-                {Integer.valueOf(IconView.MEMORY), "/memory", "提示词预设", "1"},
+                {Integer.valueOf(IconView.BOOKMARK), "/memory", "提示词预设", "1"},
                 {Integer.valueOf(IconView.HELP), "/help", "查看全部指令", "0"},
         };
         for (int i = 0; i < builtin.length; i++) {

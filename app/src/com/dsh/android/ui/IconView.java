@@ -22,7 +22,7 @@ public final class IconView extends View {
     public static final int BACK = 10, CLOSE = 11, MENU = 12, GEAR = 13, STOP = 14;
     public static final int KEY = 15, WRENCH = 16, PALETTE = 17, GLOBE = 18;
     public static final int INFO = 19, LOCK = 20, DOC = 21, WINDOW = 22;
-    public static final int TERMINAL = 23, BAG = 24, PAUSE = 25, PLAY = 26;
+    public static final int TERMINAL = 23, BAG = 24, PAUSE = 25, PLAY = 26, BOOKMARK = 27;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
@@ -94,6 +94,7 @@ public final class IconView extends View {
             case TERMINAL: d = Icons.TERMINAL; break;
             case PAUSE: d = Icons.PAUSE; break;
             case PLAY: d = Icons.PLAY; break;
+            case BOOKMARK: d = Icons.BOOKMARK; break;
             case BAG: d = Icons.BAG; break;
             default: d = Icons.HELP; break;
         }
