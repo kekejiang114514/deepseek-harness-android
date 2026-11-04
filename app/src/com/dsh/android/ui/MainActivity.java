@@ -232,44 +232,77 @@ public final class MainActivity extends Activity {
     private void checkA11yHealth() {
         if (running || messages == null || a11yNotified) return;
         final android.content.SharedPreferences sp = getSharedPreferences("dsh", MODE_PRIVATE);
-        int state = com.dsh.android.a11y.A11yState.of(this);
+        final int state = com.dsh.android.a11y.A11yState.of(this);
         if (state == com.dsh.android.a11y.A11yState.READY) {
             sp.edit().putBoolean("a11y_was_on", true).apply();
+            autoKeepAlive();
             return;
         }
         if (!sp.getBoolean("a11y_was_on", false)) return;   // 从来没开过，不打扰
         a11yNotified = true;
 
-        String text = state == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED
-                ? "无障碍服务没连上 · 点此重试"
-                : "无障碍被系统关掉了 · 点此重新开启";
-        addIconNotice(IconView.WRENCH, text, new View.OnClickListener() {
+        // 有 root 就先自己修：这类「每次重开都要手动开一遍」的问题，写回设置就能省掉
+        if (com.dsh.android.a11y.A11yAdmin.hasRoot()) {
+            new Thread(new Runnable() {
+                public void run() {
+                    final String err = com.dsh.android.a11y.A11yAdmin.enableWithRoot(MainActivity.this);
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            if (err == null) {
+                                Snack.show(MainActivity.this, "无障碍已用 root 自动恢复");
+                            } else {
+                                addIconNotice(IconView.WRENCH, "无障碍没能自动恢复 · 点此手动开启",
+                                        manualA11yFix());
+                            }
+                        }
+                    });
+                }
+            }).start();
+            return;
+        }
+
+        // 没 root：弹出说明，比聊天里一行小字更容易被看见
+        addIconNotice(IconView.WRENCH,
+                state == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED
+                        ? "无障碍服务没连上 · 点此重试"
+                        : "无障碍被系统关掉了 · 点此重新开启",
+                manualA11yFix());
+        scrollBottom();
+    }
+
+    /**
+     * 无障碍连上之后，默认挂一条常驻通知把进程吊住。
+     *
+     * <p>「每次重开应用无障碍就没了」的根源是进程被回收，服务跟着走。
+     * 这个问题不解决，光提示用户去重开开关没有意义。只自动开一次，
+     * 用户在 设置 → 悬浮窗 里关掉之后就不再自动打开。
+     */
+    private void autoKeepAlive() {
+        android.content.SharedPreferences p = prefs();
+        if (p.contains(C.KEY_KEEPALIVE)) return;      // 用户已经表过态
+        p.edit().putBoolean(C.KEY_KEEPALIVE, true).apply();
+        if (!FloatService.isRunning()) FloatService.start(this, false);
+        Snack.show(this, "已开启后台常驻，用来保住无障碍连接（设置 → 悬浮窗 可关）", 2600);
+    }
+
+    private View.OnClickListener manualA11yFix() {
+        return new View.OnClickListener() {
             public void onClick(View v) {
                 a11yNotified = false;
-                if (com.dsh.android.a11y.A11yAdmin.hasRoot()) {
-                    new Thread(new Runnable() {
-                        public void run() {
-                            final String err = com.dsh.android.a11y.A11yAdmin.enableWithRoot(
-                                    MainActivity.this);
-                            runOnUiThread(new Runnable() {
-                                public void run() {
-                                    Snack.show(MainActivity.this, err == null
-                                            ? "已用 root 重新开启" : err);
-                                }
-                            });
-                        }
-                    }).start();
-                } else {
-                    com.dsh.android.ui.A11yGuide.openSettings(MainActivity.this);
-                }
+                com.dsh.android.ui.A11yGuide.showDialog(MainActivity.this, false);
             }
-        });
-        scrollBottom();
+        };
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        // 悬浮窗上的暂停/继续按钮通过它回调到这一页
+        com.dsh.android.kernel.RunStatus.setControl(new com.dsh.android.kernel.RunStatus.Control() {
+            public void pause() { runOnUiThread(new Runnable() { public void run() { pauseRun(); } }); }
+            public void resume() { runOnUiThread(new Runnable() { public void run() { continueRun(); } }); }
+            public boolean running() { return running; }
+        });
         String mode = Theme.mode(this);
         if (lastThemeMode != null && !lastThemeMode.equals(mode)) {
             // 设置页里改过主题：这里重建界面并用淡入遮盖，避免颜色错乱
@@ -294,6 +327,13 @@ public final class MainActivity extends Activity {
         ensureFloatService();
         // 从系统设置或其它应用回来：顺手看看无障碍还在不在
         checkA11yHealth();
+    }
+
+    @Override
+    protected void onDestroy() {
+        // 页面销毁后悬浮窗不能再回调过来
+        com.dsh.android.kernel.RunStatus.setControl(null);
+        super.onDestroy();
     }
 
     private void fadeInContent() {
