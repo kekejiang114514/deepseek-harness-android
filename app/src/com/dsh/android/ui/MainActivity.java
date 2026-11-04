@@ -2121,6 +2121,7 @@ public final class MainActivity extends Activity {
         streamingView = null;
         liveThinking = null;
         scrollBottom();
+        loop.setAutoCompact(prefs().getBoolean(C.KEY_AUTO_COMPACT, true));
         loop.setSystemPrompt(buildSystemPrompt());
         running = true;
         com.dsh.android.kernel.RunStatus.begin(com.dsh.android.kernel.RunStatus.THINKING, "");
@@ -2211,6 +2212,7 @@ public final class MainActivity extends Activity {
         liveThinking = null;
         scrollBottom();
 
+        loop.setAutoCompact(prefs().getBoolean(C.KEY_AUTO_COMPACT, true));
         loop.setSystemPrompt(buildSystemPrompt());
         running = true;
         com.dsh.android.kernel.RunStatus.begin(com.dsh.android.kernel.RunStatus.THINKING, "");

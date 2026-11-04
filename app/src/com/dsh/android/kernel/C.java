@@ -3,7 +3,7 @@ package com.dsh.android.kernel;
 /** 全局常量与配置。 */
 public final class C {
     public static final String APP_NAME = "DShAndroid";
-    public static final String VERSION = "1.4-beta8";
+    public static final String VERSION = "1.4-beta9";
 
     // DeepSeek 默认端点
     public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
@@ -76,6 +76,8 @@ public final class C {
     public static final String KEY_FLOAT_PENDING = "float_pending";
     /** 后台常驻：只挂通知吊住进程，避免无障碍服务被系统回收 */
     public static final String KEY_KEEPALIVE = "keep_alive";
+    /** 上下文接近上限时自动压缩（默认开） */
+    public static final String KEY_AUTO_COMPACT = "auto_compact";
 
     /** 插件：目录名与启用状态前缀。 */
     public static final String PLUGIN_DIR = "DShAndroid/plugins";
