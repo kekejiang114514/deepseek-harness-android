@@ -20,6 +20,9 @@ public final class AgentLoop {
 
         /** 上下文被压缩时回调，用于在界面上提示用户。 */
         default void onCompact(HistoryCompactor.Report r) {}
+
+        /** 用户中途暂停：半截内容已保存，界面应给出「继续」入口。 */
+        default void onPaused() {}
     }
 
     /** 触发压缩的阈值（估算 token）。留足余量给系统提示词和本轮输出。 */
@@ -33,6 +36,8 @@ public final class AgentLoop {
     private final com.dsh.android.tools.ToolRuntime tools;
     private String systemPrompt;
     private volatile boolean cancelled = false;
+    /** 这次中断是「暂停」而不是「停止」：保留半截内容，允许接着写。 */
+    private volatile boolean paused = false;
 
     public AgentLoop(LlmClient client, com.dsh.android.tools.ToolRuntime tools, String systemPrompt) {
         this.client = client;
@@ -65,8 +70,21 @@ public final class AgentLoop {
         return false;
     }
 
-    /** 请求中断当前回合。 */
-    public void cancel() { cancelled = true; }
+    /** 请求中断当前回合（彻底停止，不提供继续）。 */
+    public void cancel() {
+        paused = false;
+        cancelled = true;
+        client.abort();
+    }
+
+    /** 暂停当前回合：保留已收到的半截内容，之后可以接着写。 */
+    public void pause() {
+        paused = true;
+        cancelled = true;
+        client.abort();
+    }
+
+    public boolean isPaused() { return paused; }
 
     public boolean isCancelled() { return cancelled; }
 
@@ -78,12 +96,21 @@ public final class AgentLoop {
      * history 是完整对话历史（不含本轮 user），会被原地追加。
      */
     public void run(JSONArray history, String userMessage, Sink sink) {
+        run(history, userMessage, sink, false);
+    }
+
+    /**
+     * @param hidden 这条 user 消息只是给模型的提示（比如「接着写」），不在界面上显示
+     */
+    public void run(JSONArray history, String userMessage, Sink sink, boolean hidden) {
         try {
             cancelled = false;
+            paused = false;
             ensureSystem(history);
             JSONObject u = new JSONObject();
             u.put("role", "user");
             u.put("content", userMessage);
+            if (hidden) u.put("hidden", true);
             history.put(u);
 
             JSONArray toolSchemas = tools.schemas();
@@ -100,22 +127,28 @@ public final class AgentLoop {
             // 防止原地打转靠下面的「相同调用 + 相同结果」检测，以及用户随时可点停止。
             emit("turn/start", null);
             while (true) {
-                if (cancelled) { sink.onError("已停止"); return; }
+                // 暂停发生在两步之间：没有半截内容可存，但界面照样要拿到「继续」入口
+                if (cancelled) { stopWithPartial(history, null, null, sink); return; }
                 final boolean[] gotToolCall = {false};
                 final StringBuilder textBuf = new StringBuilder();
+                final StringBuilder reasonBuf = new StringBuilder();
 
                 // 每步请求前压一次：工具结果是最容易把上下文撑爆的地方，
                 // 一步步累积下来，到这一步才发现发不出去就晚了
                 compact(history, CTX_SOFT, CTX_TARGET, sink);
 
-                LlmClient.Result r = requestWithRetry(history, toolSchemas, sink,
+                LlmClient.Result r;
+                try {
+                    r = requestWithRetry(history, toolSchemas, sink,
                         new LlmClient.StreamSink() {
                             public void onDelta(String delta) {
                                 textBuf.append(delta);
                                 sink.onDelta(delta);
                             }
                             public void onReasoning(String delta) {
-                                // 思考过程是逐块流出来的，必须转发给界面，否则只存不显
+                                // 思考过程是逐块流出来的，必须转发给界面，否则只存不显。
+                                // 这里同时攒一份，暂停时半截的思考过程才存得下来
+                                reasonBuf.append(delta);
                                 sink.onReasoning(delta);
                             }
                             public void onToolCallStart(int index, String id, String name) {
@@ -125,6 +158,11 @@ public final class AgentLoop {
                                 // 参数增量：不打断文本流，累积在 r.toolCalls 中
                             }
                         });
+                } catch (LlmClient.Cancelled c) {
+                    // 暂停/停止发生在流的中途：已经流出来的内容不能丢
+                    stopWithPartial(history, textBuf.toString(), reasonBuf.toString(), sink);
+                    return;
+                }
 
                 if (r.hasToolCalls()) {
                     appendAssistantToolCalls(history, r);
@@ -189,16 +227,11 @@ public final class AgentLoop {
                 }
 
                 if (cancelled) {
-                    // 用户点了停止：已经流出来的文字不能丢，落进历史再说
                     String partial = textBuf.length() > 0 ? textBuf.toString()
                             : (r.content == null ? "" : r.content);
-                    if (partial.length() > 0) {
-                        JSONObject a = new JSONObject();
-                        a.put("role", "assistant");
-                        a.put("content", partial);
-                        history.put(a);
-                    }
-                    sink.onError("已停止");
+                    String reason = reasonBuf.length() > 0 ? reasonBuf.toString()
+                            : (r.reasoning == null ? "" : r.reasoning);
+                    stopWithPartial(history, partial, reason, sink);
                     return;
                 }
 
@@ -217,6 +250,36 @@ public final class AgentLoop {
         } catch (Exception e) {
             sink.onError("错误: " + e.getMessage());
         }
+    }
+
+    /** 交给 LlmClient 的中断探针：读流的每一行前都会问一次。 */
+    private LlmClient.Stopper stopProbe() {
+        return new LlmClient.Stopper() {
+            public boolean stopped() { return cancelled; }
+        };
+    }
+
+    /**
+     * 中途停下：把已经收到的半截内容写进历史。
+     *
+     * <p>暂停时打上 interrupted 标记，界面据此显示「继续」；停止则不标记——
+     * 停止意味着这段回答作废，不该再让人接着写。
+     */
+    private void stopWithPartial(JSONArray history, String content, String reasoning, Sink sink) {
+        boolean hasText = (content != null && content.length() > 0)
+                || (reasoning != null && reasoning.length() > 0);
+        if (hasText) {
+            try {
+                JSONObject a = new JSONObject();
+                a.put("role", "assistant");
+                a.put("content", content == null ? "" : content);
+                if (reasoning != null && reasoning.length() > 0) a.put("reasoning", reasoning);
+                if (paused) a.put("interrupted", true);
+                history.put(a);
+            } catch (Exception ignored) {}
+        }
+        if (paused) sink.onPaused();
+        else sink.onError("已停止");
     }
 
     // ------------------------------------------------------------ 插件事件
@@ -281,7 +344,7 @@ public final class AgentLoop {
         int attempt = 0;
         while (true) {
             try {
-                return client.chatStream(history, toolSchemas, streamSink);
+                return client.chatStream(history, toolSchemas, streamSink, stopProbe());
             } catch (Exception e) {
                 String msg = e.getMessage() == null ? "" : e.getMessage();
 
@@ -290,7 +353,7 @@ public final class AgentLoop {
                     HistoryCompactor.Report rep = HistoryCompactor.fit(history, 1, CTX_EMERGENCY);
                     if (!rep.changed) throw e;
                     sink.onCompact(rep);
-                    return client.chatStream(history, toolSchemas, streamSink);
+                    return client.chatStream(history, toolSchemas, streamSink, stopProbe());
                 }
 
                 // 网络/限流类错误：指数退避重试，最多三次

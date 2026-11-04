@@ -56,6 +56,11 @@ public final class Icons {
 
     public static final String TERMINAL = "M12 19h8M4 17 l6-6-6-6";
 
+    public static final String PAUSE = "M15 4h2a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM7 4h2a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z";
+
+    /** 继续：实心三角。 */
+    public static final String PLAY = "M6 3l14 9-14 9Z";
+
     public static final String BAG = "M16 10a4 4 0 0 1-8 0M3.103 6.034h17.794M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z";
 
 }

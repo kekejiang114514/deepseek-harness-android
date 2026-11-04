@@ -15,6 +15,7 @@ Pure Java on top of the Android platform APIs — **zero third-party dependencie
 ### Conversation
 
 - Streaming output with live Markdown rendering (headings, emphasis, code blocks, lists, quotes, tables)
+- **Pause and continue** — the send button becomes a pause button while a reply is streaming; pausing keeps the half-written text and the model is told it was interrupted, so the continue button picks up mid-sentence instead of starting over. Long-press the button to stop outright.
 - Long-press a message to copy or regenerate
 - Session management with automatic titles from the first message
 - Dark / light / follow-system, with a circular-reveal transition

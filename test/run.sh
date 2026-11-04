@@ -45,7 +45,8 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$HERE/PluginTest.java" \
     "$HERE/PluginJsTest.java" \
     "$HERE/TgzTest.java" \
-    "$HERE/LevelTest.java"
+    "$HERE/LevelTest.java" \
+    "$HERE/PauseTest.java"
 
 echo "[2/2] 运行"
 java -cp "$OUT:$JSON_JAR" CompactTest
@@ -55,3 +56,4 @@ java -cp "$OUT:$JSON_JAR" PluginTest
 java -cp "$OUT:$JSON_JAR" PluginJsTest
 java -cp "$OUT:$JSON_JAR" TgzTest
 java -cp "$OUT:$JSON_JAR" LevelTest
+java -cp "$OUT:$JSON_JAR" PauseTest

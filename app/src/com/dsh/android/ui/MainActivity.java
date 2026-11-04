@@ -66,6 +66,14 @@ public final class MainActivity extends Activity {
     private LinearLayout drawerList;
 
     private volatile boolean running = false;
+    /** 本轮是被「暂停」结束的：半截内容还在，可以接着写。 */
+    private volatile boolean pausedNow = false;
+
+    private static final int MODE_SEND = 0, MODE_PAUSE = 1, MODE_CONTINUE = 2;
+
+    /** 给「继续」用的隐藏提示：模型由此知道自己被打断过。 */
+    private static final String CONTINUE_NOTE =
+            "（你上一条回答在输出中途被我打断了。请从中断处接着写，不要重复已经写过的内容，也不要重新开头。）";
     private AiBlock streamingView;    // 当前正在流式输出的气泡
     private StringBuilder streamingBuf = new StringBuilder();
     private String lastThemeMode = null;
@@ -357,7 +365,21 @@ public final class MainActivity extends Activity {
         sendIcon.setColor(Theme.onPrimary());
         sendBtn.addView(sendIcon, new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
         sendBtn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { onSend(); }
+            public void onClick(View v) {
+                if (running) pauseRun();
+                else if (sendMode == MODE_CONTINUE && input.getText().toString().trim().length() == 0) continueRun();
+                else onSend();
+            }
+        });
+        // 长按：彻底停止（不保留继续入口）
+        sendBtn.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View v) {
+                if (!running) return false;
+                loop.cancel();
+                AskBridge.cancelPending("用户已停止");
+                Snack.show(MainActivity.this, "已停止");
+                return true;
+            }
         });
         LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(dp(40), dp(40));
         sendLp.setMargins(dp(6), 0, dp(2), 0);
@@ -1391,6 +1413,8 @@ public final class MainActivity extends Activity {
             String role = o.optString("role");
             String content = o.optString("content", "");
             if ("user".equals(role)) {
+                // hidden 是给模型的提示（比如「接着写」），不占界面位置
+                if (o.optBoolean("hidden", false)) continue;
                 addUserBubble(content);
                 shown++;
             } else if ("assistant".equals(role) && content.length() > 0) {
@@ -1407,6 +1431,9 @@ public final class MainActivity extends Activity {
                     messages.addView(tb);
                 }
                 addAssistantBubble(content);
+                if (o.optBoolean("interrupted", false)) {
+                    addNotice("⏸ 这段回答被暂停过 · 点右下 ▶ 接着写");
+                }
                 shown++;
             }
             // 这条 assistant 消息里若调用过 ui.ask，卡片补在它下面
@@ -1419,6 +1446,7 @@ public final class MainActivity extends Activity {
             }
         }
         if (shown == 0) addWelcome();
+        refreshSendMode();
         scrollBottom();
     }
 
@@ -1912,12 +1940,85 @@ public final class MainActivity extends Activity {
         return sb.toString();
     }
 
+    /** 暂停：断开请求，保留已经收到的内容，稍后可以接着写。 */
+    private void pauseRun() {
+        if (!running) return;
+        pausedNow = true;
+        loop.pause();
+        // 工具线程可能正卡在「等你选」上，一并放行，否则会干等到超时
+        AskBridge.cancelPending("已暂停");
+        Snack.show(this, "已暂停，点 ▶ 继续");
+    }
+
+    /** 历史里最后一条 assistant 是不是被暂停中断的（中间没有新提问就算）。 */
+    private static boolean tailInterrupted(JSONArray hist) {
+        for (int i = hist.length() - 1; i >= 0; i--) {
+            JSONObject o = hist.optJSONObject(i);
+            if (o == null) continue;
+            String role = o.optString("role");
+            if ("assistant".equals(role)) return o.optBoolean("interrupted", false);
+            if ("user".equals(role)) return false;   // 后面已经有新提问，不再算「被中断的回答」
+        }
+        return false;
+    }
+
+    /** 打开会话时按历史决定按钮是「发送」还是「继续」。 */
+    private void refreshSendMode() {
+        if (running || sendBtn == null) return;
+        boolean inter = tailInterrupted(sessions.loadCurrentHistory());
+        pausedNow = inter;
+        setSendMode(inter ? MODE_CONTINUE : MODE_SEND);
+    }
+
+    /** 接着上次被暂停的回答继续写。 */
+    private void continueRun() {
+        if (running) return;
+        final JSONArray hist = sessions.loadCurrentHistory();
+        boolean interrupted = tailInterrupted(hist);
+        if (!interrupted) {
+            setSendMode(MODE_SEND);
+            Snack.show(this, "没有可继续的回答");
+            return;
+        }
+
+        pausedNow = false;
+        streamingBuf.setLength(0);
+        streamingView = null;
+        liveThinking = null;
+        scrollBottom();
+        loop.setSystemPrompt(buildSystemPrompt());
+        running = true;
+        setSendMode(MODE_PAUSE);
+        startTaskBar();
+
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    loop.run(hist, CONTINUE_NOTE, sink(), true);
+                    sessions.saveHistory(sessions.currentId(), hist);
+                } catch (final Throwable t) {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            addAssistantBubble("请求失败：" + t.getMessage());
+                            scrollBottom();
+                        }
+                    });
+                } finally {
+                    runOnUiThread(new Runnable() {
+                        public void run() { finishRun(); }
+                    });
+                }
+            }
+        }).start();
+    }
+
     private void onSend() {
         if (running) {
-            loop.cancel();
-            // 工具线程可能正卡在「等你选」上，一并放行，否则会干等到超时
-            AskBridge.cancelPending("用户已停止");
-            Snack.show(this, "正在停止…");
+            pauseRun();
+            return;
+        }
+        if (sendMode == MODE_CONTINUE && input.getText().toString().trim().length() == 0) {
+            continueRun();
             return;
         }
         final String typed = input.getText().toString().trim();
@@ -1976,7 +2077,7 @@ public final class MainActivity extends Activity {
 
         loop.setSystemPrompt(buildSystemPrompt());
         running = true;
-        setSendMode(true);
+        sendMode = MODE_PAUSE; setSendMode(MODE_PAUSE);
         startTaskBar();
 
         new Thread(new Runnable() {
@@ -2368,17 +2469,35 @@ public final class MainActivity extends Activity {
         return sb.toString();
     }
 
-    /** 发送按钮在「发送 ↑」与「停止 ■」之间切换（仿 Minis）。 */
-    private void setSendMode(boolean stop) {
+    /**
+     * 发送按钮三态：发送 ↑ / 暂停 ⏸ / 继续 ▶。
+     *
+     * <p>运行中给的是暂停而不是停止——思考到一半按下不该把这段回答判死刑，
+     * 想彻底停下可以长按。
+     */
+    private void setSendMode(int mode) {
         if (sendBtn == null || sendIcon == null) return;
-        if (stop) {
-            sendIcon.setType(IconView.STOP);
-            sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
-        } else {
-            sendIcon.setType(IconView.SEND);
-            sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
+        switch (mode) {
+            case MODE_PAUSE:
+                sendIcon.setType(IconView.PAUSE);
+                sendIcon.setColor(Theme.onPrimary());
+                sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
+                break;
+            case MODE_CONTINUE:
+                sendIcon.setType(IconView.PLAY);
+                sendIcon.setColor(Theme.onPrimary());
+                sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
+                break;
+            default:
+                sendIcon.setType(IconView.SEND);
+                sendIcon.setColor(Theme.onPrimary());
+                sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
+                break;
         }
+        sendMode = mode;
     }
+
+    private int sendMode = MODE_SEND;
 
     /** 用户消息长按：仅复制。 */
     private void enableCopyText(TextView tv, final String text) {
@@ -2477,7 +2596,7 @@ public final class MainActivity extends Activity {
         liveThinking = null;
         scrollBottom();
         running = true;
-        setSendMode(true);
+        sendMode = MODE_PAUSE; setSendMode(MODE_PAUSE);
         startTaskBar();
 
         new Thread(new Runnable() {
@@ -2503,7 +2622,9 @@ public final class MainActivity extends Activity {
     /** 收尾：恢复按钮、补最后一次完整渲染。 */
     private void finishRun() {
         running = false;
-        setSendMode(false);
+        // 历史已经落盘，按钮状态按「最后一条回答是不是被打断的」来定：
+        // 一个字都没收到就暂停的情况不该留一个点了没用的继续键
+        refreshSendMode();
         closeTextSegment();
         scrollBottom();
         stopTaskBar();
@@ -2608,6 +2729,18 @@ public final class MainActivity extends Activity {
                     }
                 });
             }
+            @Override
+            public void onPaused() {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        pausedNow = true;
+                        closeTextSegment();
+                        addNotice("⏸ 已暂停 · 点右下 ▶ 继续");
+                        scrollBottom();
+                    }
+                });
+            }
+
             public void onError(final String msg) {
                 runOnUiThread(new Runnable() {
                     public void run() {
