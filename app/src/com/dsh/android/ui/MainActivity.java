@@ -1432,7 +1432,7 @@ public final class MainActivity extends Activity {
                 }
                 addAssistantBubble(content);
                 if (o.optBoolean("interrupted", false)) {
-                    addNotice("⏸ 这段回答被暂停过 · 点右下 ▶ 接着写");
+                    addIconNotice(IconView.PAUSE, "这段回答被暂停过 · 点右下继续");
                 }
                 shown++;
             }
@@ -1761,6 +1761,31 @@ public final class MainActivity extends Activity {
      * 居中细灰字提示（不参与对话语义，只做状态说明）。
      * 上下文压缩、无障碍未开启这类「系统层」变化用这个展示。
      */
+    /** 带自绘图标的一行提示：符号也走 IconView，不依赖字体里有没有对应的 emoji。 */
+    private void addIconNotice(int iconType, String text) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER);
+
+        IconView ic = new IconView(this, iconType, 11);
+        ic.setColor(Theme.text3());
+        row.addView(ic, new LinearLayout.LayoutParams(dp(11), dp(11)));
+
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(11);
+        tv.setTextColor(Theme.text3());
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tlp.leftMargin = dp(5);
+        row.addView(tv, tlp);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(8), 0, dp(8));
+        messages.addView(row, lp);
+    }
+
     private void addNotice(String text) {
         TextView tv = new TextView(this);
         tv.setText(text);
@@ -1947,7 +1972,7 @@ public final class MainActivity extends Activity {
         loop.pause();
         // 工具线程可能正卡在「等你选」上，一并放行，否则会干等到超时
         AskBridge.cancelPending("已暂停");
-        Snack.show(this, "已暂停，点 ▶ 继续");
+        Snack.show(this, "已暂停，点右下继续");
     }
 
     /** 历史里最后一条 assistant 是不是被暂停中断的（中间没有新提问就算）。 */
@@ -2470,7 +2495,7 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * 发送按钮三态：发送 ↑ / 暂停 ⏸ / 继续 ▶。
+     * 发送按钮三态：发送箭头 / 暂停双杠 / 继续三角，三者都是自绘路径。
      *
      * <p>运行中给的是暂停而不是停止——思考到一半按下不该把这段回答判死刑，
      * 想彻底停下可以长按。
@@ -2735,7 +2760,7 @@ public final class MainActivity extends Activity {
                     public void run() {
                         pausedNow = true;
                         closeTextSegment();
-                        addNotice("⏸ 已暂停 · 点右下 ▶ 继续");
+                        addIconNotice(IconView.PAUSE, "已暂停 · 点右下继续");
                         scrollBottom();
                     }
                 });
