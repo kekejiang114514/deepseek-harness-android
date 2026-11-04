@@ -672,6 +672,23 @@ public final class ToolRuntime {
         A11yService svc = A11yService.get();
 
         if (C.A11Y_DUMP.equals(type)) return "{\"ok\":true,\"pkg\":\"" + escJson(svc.foregroundPackage()) + "\",\"nodes\":" + svc.dump() + "}";
+        if ("a11y.screen".equals(type)) {
+            String outline = svc.outline(a.optInt("limit", 80));
+            if (outline.length() == 0) return "{\"ok\":false,\"error\":\"当前窗口没有可读节点\"}";
+            return "{\"ok\":true,\"app\":" + svc.appInfo() + ",\"outline\":\"" + escJson(outline) + "\"}";
+        }
+        if ("a11y.app".equals(type)) {
+            String info = svc.appInfo();
+            if (info.length() == 0) return "{\"ok\":false,\"error\":\"没有前台窗口\"}";
+            return "{\"ok\":true,\"app\":" + info + "}";
+        }
+        if ("a11y.wait".equals(type)) {
+            String q = a.optString("text", "");
+            if (q.length() == 0) return err("need text");
+            int idx = svc.waitForText(q, a.optInt("timeout_ms", 5000));
+            if (idx < 0) return "{\"ok\":false,\"error\":\"超时未出现\",\"query\":\"" + escJson(q) + "\"}";
+            return "{\"ok\":true,\"index\":" + idx + "}";
+        }
         if (C.A11Y_CLICK.equals(type)) {
             int idx = a.optInt("index", -1);
             if (idx < 0) return err("need index");

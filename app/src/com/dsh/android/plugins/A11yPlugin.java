@@ -22,8 +22,22 @@ public final class A11yPlugin extends Plugin {
                 "读取当前屏幕的无障碍节点树（文本、可点击/可编辑/可滚动、边界坐标）。这是了解当前界面内容的第一步。",
                 "{\"type\":\"object\",\"properties\":{}}");
 
+            add(t, "a11y.screen", "a11y.screen",
+                "当前屏幕的紧凑摘要：一行一个控件，含编号、文字、可点/可输入/可滚动、位置与尺寸。"
+                + "比 a11y.dump 省很多 token，先看这个，需要精确信息再 dump。",
+                "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"最多多少行，默认 80\"}}}");
+
+            add(t, "a11y.app", "a11y.app",
+                "当前前台应用的包名、窗口标题和屏幕分辨率。",
+                "{\"type\":\"object\",\"properties\":{}}");
+
+            add(t, "a11y.wait", "a11y.wait",
+                "等待某段文字出现（点完之后等新页面加载时用），返回它的索引；超时返回 -1。",
+                "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"timeout_ms\":{\"type\":\"integer\"}},\"required\":[\"text\"]}");
+
             add(t, "a11y.click", "a11y.click",
-                "点击指定索引的节点（索引来自 a11y.dump）。",
+                "点击指定索引的节点（索引来自 a11y.dump 或 a11y.screen）。"
+                + "节点本身不可点时自动找最近的可点击祖先，都点不到才退回坐标点击。",
                 "{\"type\":\"object\",\"properties\":{\"index\":{\"type\":\"integer\"}},\"required\":[\"index\"]}");
 
             add(t, "a11y.longclick", "a11y.longclick",
@@ -59,7 +73,7 @@ public final class A11yPlugin extends Plugin {
                 "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}");
 
             add(t, "a11y.settext", "a11y.settext",
-                "在指定索引的可编辑字段输入文本（覆盖原内容）。",
+                "在指定索引的输入框输入文本（覆盖原内容）。给定文字节点时会自动找它所在的可输入框。",
                 "{\"type\":\"object\",\"properties\":{\"index\":{\"type\":\"integer\"},\"text\":{\"type\":\"string\"}},\"required\":[\"index\",\"text\"]}");
 
             add(t, "a11y.cleartext", "a11y.cleartext",

@@ -75,6 +75,12 @@ Attachments appear as cards above the input (type badge, name, size, remove); ta
 
 With the service enabled, the model can read the screen, tap, swipe and type.
 
+Two entry points for reading: `a11y.screen` prints a compact one-line-per-control outline with the same indices `a11y.dump` uses, which is what the model usually needs; `a11y.dump` returns the full JSON tree when exact attributes matter. `a11y.app` says which app is in front, and `a11y.wait` blocks until a piece of text shows up, so a tap can be followed by "wait for the next screen" instead of a fixed sleep.
+
+Actions degrade rather than fail: clicking a text node walks up to the nearest clickable ancestor, typing walks up to the nearest editable field, and scrolling falls back to a gesture inside the node's bounds when no scrollable container is found.
+
+The service itself is declared with a name and a description, so the system settings list shows what it is instead of a bare package name. It is also marked `stopWithTask="false"`, keeps the configuration the system hands it (rather than replacing it wholesale), and subscribes only to window-state/scroll events — the previous build asked for every event type, which is pointless when nothing consumes them. If the service is ever found off while the app is open, the chat shows a one-tap prompt to turn it back on.
+
 Android does not allow an app to grant itself accessibility — the user must enable it manually:
 
 - The settings entry deep-links straight to this app's accessibility page

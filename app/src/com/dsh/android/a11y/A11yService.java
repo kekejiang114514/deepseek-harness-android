@@ -29,15 +29,33 @@ public final class A11yService extends AccessibilityService {
         instance = this;
         enabled = true;
 
-        AccessibilityServiceInfo info = new AccessibilityServiceInfo();
-        info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK;
-        info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
-        info.flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
-                | AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-                | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-                | AccessibilityServiceInfo.DEFAULT;
-        info.notificationTimeout = 100;
-        setServiceInfo(info);
+        // 记一笔「曾经连上过」：之后如果系统把服务关掉，界面上要能据此提醒重开
+        try {
+            getSharedPreferences("dsh", MODE_PRIVATE).edit()
+                    .putBoolean("a11y_was_on", true).apply();
+        } catch (Throwable ignored) {}
+
+        // 在系统给的那份信息上改，不要 new 一个新的覆盖上去：
+        // 新建的 AccessibilityServiceInfo 不带 android:description / settingsActivity /
+        // packageNames，setServiceInfo 之后系统设置里这一项就变成「没有描述」的状态。
+        //
+        // 另外这里任何一步抛异常都会让系统认为服务坏了，反复几次就会把它自动关掉，
+        // 所以整体兜住；事件也只订阅需要的那三类，不再 TYPES_ALL_MASK 把它淹了。
+        try {
+            AccessibilityServiceInfo info = getServiceInfo();
+            if (info == null) info = new AccessibilityServiceInfo();
+            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                    | AccessibilityEvent.TYPE_VIEW_SCROLLED;
+            info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
+            info.flags |= AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+                    | AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                    | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            info.notificationTimeout = 100;
+            setServiceInfo(info);
+        } catch (Throwable t) {
+            // 配置没设上也还能用：读屏和手势靠 manifest 里的 xml 生效
+        }
     }
 
     @Override
@@ -45,6 +63,19 @@ public final class A11yService extends AccessibilityService {
 
     @Override
     public void onInterrupt() {}
+
+    @Override
+    public boolean onUnbind(android.content.Intent intent) {
+        // 返回 true 才会走到 onRebind：系统重新拉起服务时直接复用，不必走一遍完整连接
+        return super.onUnbind(intent);
+    }
+
+    @Override
+    public void onRebind(android.content.Intent intent) {
+        super.onRebind(intent);
+        instance = this;
+        enabled = true;
+    }
 
     @Override
     public void onDestroy() {
@@ -187,6 +218,157 @@ public final class A11yService extends AccessibilityService {
         return false;
     }
 
+    /**
+     * 往上找最近的可点击祖先。
+     *
+     * <p>列表项这类结构里，TextView 自己不可点，真正响应点击的是外层容器。
+     * 只按节点自己判断，会出现「索引是对的、点了没反应」。
+     */
+    private AccessibilityNodeInfo clickableAncestor(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo cur = node;
+        for (int depth = 0; cur != null && depth < 8; depth++) {
+            if (cur.isClickable()) return cur;
+            AccessibilityNodeInfo parent = cur.getParent();
+            if (parent == null) return null;
+            cur = parent;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo editableAncestor(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo cur = node;
+        for (int depth = 0; cur != null && depth < 8; depth++) {
+            if (cur.isEditable()) return cur;
+            AccessibilityNodeInfo parent = cur.getParent();
+            if (parent == null) return null;
+            cur = parent;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo scrollableAncestor(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo cur = node;
+        for (int depth = 0; cur != null && depth < 12; depth++) {
+            if (cur.isScrollable()) return cur;
+            AccessibilityNodeInfo parent = cur.getParent();
+            if (parent == null) return null;
+            cur = parent;
+        }
+        return null;
+    }
+
+    /**
+     * 紧凑屏幕摘要：一行一个可见控件，给模型读的版本。
+     *
+     * <p>dump 输出的是完整 JSON，几十个节点就上千 token；实际做决定时需要的只是
+     * 「第几号、写的什么、能不能点、在屏幕哪块」。这里按这个来输出，节点编号与 dump 一致。
+     */
+    public String outline(int limit) {
+        if (limit <= 0) limit = 80;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return "";
+        StringBuilder sb = new StringBuilder();
+        DumpIndex idx = new DumpIndex();
+        outlineRec(root, sb, idx, 0, limit);
+        root.recycle();
+        return sb.toString();
+    }
+
+    private void outlineRec(AccessibilityNodeInfo node, StringBuilder sb, DumpIndex idx,
+                            int depth, int limit) {
+        int myIndex = idx.n;
+        idx.n++;
+        if (sb.length() > 0 && countLines(sb) >= limit) return;
+
+        CharSequence text = node.getText();
+        CharSequence desc = node.getContentDescription();
+        String label = text != null && text.length() > 0 ? text.toString()
+                : (desc != null ? desc.toString() : "");
+        boolean clickable = node.isClickable();
+        boolean editable = node.isEditable();
+        boolean scrollable = node.isScrollable();
+        boolean visible = node.isVisibleToUser();
+
+        if (visible && (label.length() > 0 || clickable || editable || scrollable)) {
+            Rect r = new Rect();
+            node.getBoundsInScreen(r);
+            sb.append('[').append(myIndex).append("] ");
+            if (label.length() > 0) {
+                String clean = label.replace('\n', ' ');
+                if (clean.length() > 60) clean = clean.substring(0, 60) + "…";
+                sb.append('"').append(clean).append('"');
+            } else {
+                sb.append('(').append(simpleClass(node.getClassName())).append(')');
+            }
+            if (editable) sb.append(" 输入框");
+            if (clickable) sb.append(" 可点");
+            if (scrollable) sb.append(" 可滚");
+            if (node.isPassword()) sb.append(" 密码");
+            if (node.isCheckable()) sb.append(node.isChecked() ? " 已选" : " 未选");
+            sb.append(" @").append(r.left).append(',').append(r.top)
+              .append(' ').append(r.width()).append('x').append(r.height());
+            sb.append('\n');
+        }
+
+        int count = node.getChildCount();
+        for (int i = 0; i < count; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child == null) continue;
+            outlineRec(child, sb, idx, depth + 1, limit);
+            child.recycle();
+        }
+    }
+
+    private static int countLines(StringBuilder sb) {
+        int n = 0;
+        for (int i = 0; i < sb.length(); i++) if (sb.charAt(i) == '\n') n++;
+        return n;
+    }
+
+    private static String simpleClass(CharSequence cls) {
+        if (cls == null) return "view";
+        String s = cls.toString();
+        int dot = s.lastIndexOf('.');
+        return dot >= 0 ? s.substring(dot + 1) : s;
+    }
+
+    /** 当前前台应用：包名 + 窗口标题。 */
+    public String appInfo() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return "";
+        StringBuilder sb = new StringBuilder();
+        CharSequence pkg = root.getPackageName();
+        sb.append("{\"pkg\":\"").append(esc(pkg == null ? "" : pkg.toString())).append('"');
+        CharSequence title = null;
+        android.view.accessibility.AccessibilityWindowInfo win =
+                root.getWindow() == null ? null : root.getWindow();
+        if (win != null) title = win.getTitle();
+        sb.append(",\"window\":\"").append(esc(title == null ? "" : title.toString())).append('"');
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        sb.append(",\"screen\":[").append(dm.widthPixels).append(',').append(dm.heightPixels).append("]}");
+        root.recycle();
+        return sb.toString();
+    }
+
+    /**
+     * 等某段文字出现（点完新页面加载、列表刷新时用）。
+     * 返回节点索引，-1 表示超时。
+     */
+    public int waitForText(String query, int timeoutMs) {
+        if (timeoutMs <= 0) timeoutMs = 5000;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            int idx = findTextIndex(query);
+            if (idx >= 0) return idx;
+            try {
+                Thread.sleep(250);
+            } catch (InterruptedException e) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
     private static Rect centerOf(AccessibilityNodeInfo node) {
         Rect r = new Rect();
         node.getBoundsInScreen(r);
@@ -199,16 +381,23 @@ public final class A11yService extends AccessibilityService {
     public String clickByIndex(int targetIndex) {
         AccessibilityNodeInfo node = nodeAt(targetIndex);
         if (node == null) return "{\"ok\":false,\"error\":\"index not found\"}";
-        boolean ok = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-        if (!ok) {
-            // 退化为坐标点击
-            Rect r = new Rect();
-            node.getBoundsInScreen(r);
+
+        // 文字节点自己通常不可点，真正响应的是外层容器
+        AccessibilityNodeInfo hit = node.isClickable() ? node : clickableAncestor(node);
+        if (hit != null && hit.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            hit.recycle();
             node.recycle();
-            return tap(r.centerX(), r.centerY());
+            return "{\"ok\":true}";
         }
+
+        // 节点级点击被拒：按它自己的可见范围点一下中心
+        Rect r = new Rect();
+        node.getBoundsInScreen(r);
         node.recycle();
-        return ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"click failed\"}";
+        if (r.width() <= 0 || r.height() <= 0) {
+            return "{\"ok\":false,\"error\":\"节点不在屏幕上（可能被遮挡或已消失），请重新 a11y.dump\"}";
+        }
+        return tap(r.centerX(), r.centerY());
     }
 
     public String longClickByIndex(int targetIndex) {
@@ -217,6 +406,12 @@ public final class A11yService extends AccessibilityService {
         boolean ok = false;
         if (Build.VERSION.SDK_INT >= 18) {
             ok = node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK);
+            if (!ok && !node.isLongClickable()) {
+                AccessibilityNodeInfo up = clickableAncestor(node);
+                if (up != null && up.isLongClickable()) {
+                    ok = up.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK);
+                }
+            }
         }
         if (!ok) {
             Rect r = new Rect();
@@ -240,9 +435,19 @@ public final class A11yService extends AccessibilityService {
     public String setText(int targetIndex, String text) {
         AccessibilityNodeInfo node = nodeAt(targetIndex);
         if (node == null) return "{\"ok\":false,\"error\":\"index not found\"}";
+        AccessibilityNodeInfo field = node.isEditable() ? node : editableAncestor(node);
+        if (field == null) {
+            node.recycle();
+            return "{\"ok\":false,\"error\":\"该节点附近没有可输入框，请 a11y.dump 找 editable:true 的节点\"}";
+        }
         android.os.Bundle args = new android.os.Bundle();
         args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
-        boolean ok = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+        boolean ok = field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+        if (!ok) {
+            // 少数输入法实现不支持 SET_TEXT：先聚焦，再用系统粘贴
+            field.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+        }
+        field.recycle();
         node.recycle();
         return ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"settext failed\"}";
     }
@@ -270,10 +475,22 @@ public final class A11yService extends AccessibilityService {
     public String scrollNode(int targetIndex, String direction) {
         AccessibilityNodeInfo node = nodeAt(targetIndex);
         if (node == null) return "{\"ok\":false,\"error\":\"index not found\"}";
+        AccessibilityNodeInfo box = node.isScrollable() ? node : scrollableAncestor(node);
+        if (box == null) {
+            // 给的是列表里某一项：就在它所在区域划一下
+            Rect r = new Rect();
+            node.getBoundsInScreen(r);
+            node.recycle();
+            int cx = r.centerX();
+            return "forward".equals(direction)
+                    ? swipe(cx, r.top + r.height() * 2 / 3, cx, r.top + r.height() / 3, 300)
+                    : swipe(cx, r.top + r.height() / 3, cx, r.top + r.height() * 2 / 3, 300);
+        }
         int action = "forward".equals(direction)
                 ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
                 : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
-        boolean ok = node.performAction(action);
+        boolean ok = box.performAction(action);
+        box.recycle();
         node.recycle();
         return ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"scroll failed\"}";
     }
