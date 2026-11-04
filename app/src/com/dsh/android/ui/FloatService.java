@@ -410,10 +410,14 @@ public final class FloatService extends Service {
     /** 工具名太长会把胶囊撑满屏幕，取最后一段并且截断。 */
     private static String shortTool(String name) {
         if (name == null || name.length() == 0) return "工具";
+        // 标签已经是人话了，只做长度裁剪；没有标签的裸工具名才取尾段
+        if (name.indexOf(' ') > 0) {
+            return name.length() > 20 ? name.substring(0, 20) + "…" : name;
+        }
         String n = name;
         int dot = n.lastIndexOf('.');
         if (dot >= 0 && dot < n.length() - 1) n = n.substring(dot + 1);
-        if (n.length() > 8) n = n.substring(0, 8) + "…";
+        if (n.length() > 12) n = n.substring(0, 12) + "…";
         return n;
     }
 

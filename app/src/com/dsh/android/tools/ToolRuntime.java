@@ -1007,6 +1007,79 @@ public final class ToolRuntime {
     }
 
     /** 执行一次工具调用。 */
+    /**
+     * 把一次工具调用翻译成一句人话，喂给悬浮窗。
+     *
+     * <p>悬浮窗只有一行字的位置，「browser.read」这种名字说明不了什么；
+     * 显示成「浏览 zhihu.com」「点击 .submit」「命令 ls -la」才有意义。
+     */
+    private static String describe(String name, String argsJson) {
+        JSONObject a;
+        try {
+            a = argsJson == null || argsJson.length() == 0
+                    ? new JSONObject() : new JSONObject(argsJson);
+        } catch (Exception e) {
+            a = new JSONObject();
+        }
+        try {
+            if (name.startsWith("browser.")) {
+                String url = a.optString("url", "");
+                String host = hostOf(url);
+                if (name.equals("browser.read") || name.equals("browser.js")) {
+                    return host.length() > 0 ? "浏览 " + host : "浏览网页";
+                }
+                if (name.equals("browser.click")) return "点击 " + clip(a.optString("selector", "元素"), 14);
+                if (name.equals("browser.type")) return "输入 " + clip(a.optString("text", ""), 14);
+                if (name.equals("browser.find")) return "查找 " + clip(a.optString("selector", ""), 14);
+                if (name.equals("browser.info")) return "读取页面信息";
+                if (name.equals("browser.screenshot")) return "截图";
+                if (name.equals("browser.cookies")) return "查看 Cookie";
+                return "浏览器";
+            }
+            if (name.startsWith("web.")) {
+                String host = hostOf(a.optString("url", ""));
+                return host.length() > 0 ? "联网 " + host : "联网请求";
+            }
+            if (name.startsWith("a11y.")) {
+                String t = name.substring(5);
+                if (t.equals("dump") || t.equals("screen")) return "读取屏幕";
+                if (t.equals("click")) return "点击屏幕";
+                if (t.equals("settext")) return "输入文字";
+                if (t.equals("scroll")) return "滚动屏幕";
+                if (t.equals("wait")) return "等待界面";
+                if (t.equals("app")) return "识别应用";
+                return "屏幕操作";
+            }
+            if (name.startsWith("shell")) {
+                String cmd = a.optString("command", a.optString("cmd", ""));
+                return cmd.length() > 0 ? "命令 " + clip(cmd, 18) : "执行命令";
+            }
+            if (name.equals("ask")) return "等待选择";
+        } catch (Throwable ignored) {}
+        return name;
+    }
+
+    private static String hostOf(String url) {
+        if (url == null || url.length() == 0) return "";
+        try {
+            String u = url;
+            int p = u.indexOf("://");
+            if (p >= 0) u = u.substring(p + 3);
+            int slash = u.indexOf('/');
+            if (slash >= 0) u = u.substring(0, slash);
+            if (u.startsWith("www.")) u = u.substring(4);
+            return u;
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    private static String clip(String s, int max) {
+        if (s == null) return "";
+        String v = s.replace('\n', ' ').trim();
+        return v.length() > max ? v.substring(0, max) + "…" : v;
+    }
+
     /** 把 a11y.tap 转成 API 允许的 a11y__tap。 */
     private String safeName(String internal) {
         String pub = internal.replace(".", "__");
@@ -1026,14 +1099,24 @@ public final class ToolRuntime {
         name = internalName(name);
         ToolDef def = registry.get(name);
         if (def == null) return err("unknown tool: " + name);
-        // 悬浮窗靠这里知道「现在在跑哪个工具」
-        com.dsh.android.kernel.RunStatus.toolStart(name);
+        // 悬浮窗靠这里知道「现在在跑哪个工具、在浏览什么」
+        com.dsh.android.kernel.RunStatus.toolStart(name, describe(name, argsJson));
         boolean ok = true;
         try {
             JSONObject args = argsJson == null || argsJson.length() == 0
                     ? new JSONObject() : new JSONObject(argsJson);
             String out = def.executor.execute(args);
             ok = out == null || !out.contains("\"ok\":false");
+            // 浏览类工具返回里通常带标题：把「浏览 zhihu.com」补成实际页面名
+            if (ok && name.startsWith("browser.") && out != null) {
+                try {
+                    JSONObject o = new JSONObject(out);
+                    String title = o.optString("title", "");
+                    if (title.length() > 0) {
+                        com.dsh.android.kernel.RunStatus.updateDetail("浏览 " + clip(title, 16));
+                    }
+                } catch (Throwable ignored) {}
+            }
             return out;
         } catch (Exception e) {
             ok = false;
