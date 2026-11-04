@@ -34,28 +34,12 @@ public final class A11yService extends AccessibilityService {
             getSharedPreferences("dsh", MODE_PRIVATE).edit()
                     .putBoolean("a11y_was_on", true).apply();
         } catch (Throwable ignored) {}
+        logA11y("connected");
 
-        // 在系统给的那份信息上改，不要 new 一个新的覆盖上去：
-        // 新建的 AccessibilityServiceInfo 不带 android:description / settingsActivity /
-        // packageNames，setServiceInfo 之后系统设置里这一项就变成「没有描述」的状态。
-        //
-        // 另外这里任何一步抛异常都会让系统认为服务坏了，反复几次就会把它自动关掉，
-        // 所以整体兜住；事件也只订阅需要的那三类，不再 TYPES_ALL_MASK 把它淹了。
-        try {
-            AccessibilityServiceInfo info = getServiceInfo();
-            if (info == null) info = new AccessibilityServiceInfo();
-            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                    | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                    | AccessibilityEvent.TYPE_VIEW_SCROLLED;
-            info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
-            info.flags |= AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
-                    | AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-                    | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
-            info.notificationTimeout = 100;
-            setServiceInfo(info);
-        } catch (Throwable t) {
-            // 配置没设上也还能用：读屏和手势靠 manifest 里的 xml 生效
-        }
+        // 这里不再调用 setServiceInfo：
+        // 能力、事件类型、flag 全部写在 res/xml/accessibility_service_config.xml 里，
+        // 运行时再覆盖一遍只会多一个出错点（系统给的 info 被替换、或某些 ROM 上抛异常），
+        // 而异常会被判定为「服务坏了」，反复几次就被自动关闭。
     }
 
     @Override
@@ -66,8 +50,9 @@ public final class A11yService extends AccessibilityService {
 
     @Override
     public boolean onUnbind(android.content.Intent intent) {
+        logA11y("unbind");
         // 返回 true 才会走到 onRebind：系统重新拉起服务时直接复用，不必走一遍完整连接
-        return super.onUnbind(intent);
+        return true;
     }
 
     @Override
@@ -75,13 +60,32 @@ public final class A11yService extends AccessibilityService {
         super.onRebind(intent);
         instance = this;
         enabled = true;
+        logA11y("rebind");
     }
 
     @Override
     public void onDestroy() {
+        logA11y("destroy");
         enabled = false;
         instance = null;
         super.onDestroy();
+    }
+
+    /**
+     * 记一条连接日志（filesDir/a11y.log，超过 64KB 自动清空）。
+     *
+     * <p>服务什么时候断的、是 unbind 还是 destroy，光看现象猜不出来，
+     * 有这一行就能判断是系统回收、用户关闭，还是应用自己退出了。
+     */
+    private void logA11y(String what) {
+        try {
+            java.io.File f = new java.io.File(getFilesDir(), "a11y.log");
+            if (f.length() > 64 * 1024) f.delete();
+            java.io.FileWriter w = new java.io.FileWriter(f, true);
+            w.write(new java.text.SimpleDateFormat("MM-dd HH:mm:ss",
+                    java.util.Locale.US).format(new java.util.Date()) + " " + what + "\n");
+            w.close();
+        } catch (Throwable ignored) {}
     }
 
     // ================= 读屏 =================
