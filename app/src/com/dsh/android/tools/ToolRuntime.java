@@ -1026,12 +1026,20 @@ public final class ToolRuntime {
         name = internalName(name);
         ToolDef def = registry.get(name);
         if (def == null) return err("unknown tool: " + name);
+        // 悬浮窗靠这里知道「现在在跑哪个工具」
+        com.dsh.android.kernel.RunStatus.toolStart(name);
+        boolean ok = true;
         try {
             JSONObject args = argsJson == null || argsJson.length() == 0
                     ? new JSONObject() : new JSONObject(argsJson);
-            return def.executor.execute(args);
+            String out = def.executor.execute(args);
+            ok = out == null || !out.contains("\"ok\":false");
+            return out;
         } catch (Exception e) {
+            ok = false;
             return err(String.valueOf(e.getMessage()));
+        } finally {
+            com.dsh.android.kernel.RunStatus.toolEnd(name, ok);
         }
     }
 }

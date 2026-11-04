@@ -87,6 +87,17 @@ Android does not allow an app to grant itself accessibility — the user must en
 - Diagnostics report component declaration, intent-filter, meta-data parsing, and whether the system lists the service
 - On rooted devices the app can write the setting directly, appending rather than overwriting
 
+### Floating window
+
+An optional overlay shows what the agent is doing while you are in another app — useful precisely because accessibility work happens outside this app.
+
+- A round bubble sits at the screen edge; drag it anywhere, it snaps back to the nearest side when released
+- While a turn is running the bubble breathes and shows a badge with the tool count
+- Tap it for a panel with the current phase, elapsed time and the last six tool calls
+- The overlay is a foreground service, so a low-priority notification stays in the shade; that same notification keeps the process alive, which is what stops the system from taking the accessibility service down with it
+
+There is a second, separate switch — **后台常驻** — that runs the foreground service without the bubble, for people who want the keep-alive but not the overlay. Turning it off brings the toggle to the same decision point as the bubble: one of them running keeps the process (and the accessibility connection) up.
+
 ### Plugins
 
 Two kinds share one directory, `/sdcard/DShAndroid/plugins/`, distinguished by their entry file.

@@ -211,6 +211,15 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void ensureFloatService() {
+        boolean bubble = prefs().getBoolean(C.KEY_FLOAT, false)
+                && FloatService.canOverlay(this);
+        boolean keep = prefs().getBoolean(C.KEY_KEEPALIVE, false);
+        if ((bubble || keep) && !FloatService.isRunning()) {
+            FloatService.start(this, bubble);
+        }
+    }
+
     /** 每次启动只提醒一次「无障碍被系统关掉了」，别反复弹。 */
     private boolean a11yNotified = false;
 
@@ -281,6 +290,8 @@ public final class MainActivity extends Activity {
         if (titleView != null) titleView.setText(currentTitle());
         // 设置页可能改过模型/等级，回来刷新胶囊上的字
         refreshModelPill();
+        // 悬浮窗开关开着就保证服务在跑（进程被杀后重开应用能自己恢复）
+        ensureFloatService();
         // 从系统设置或其它应用回来：顺手看看无障碍还在不在
         checkA11yHealth();
     }
@@ -2027,6 +2038,7 @@ public final class MainActivity extends Activity {
     private void pauseRun() {
         if (!running) return;
         pausedNow = true;
+        com.dsh.android.kernel.RunStatus.pause();
         loop.pause();
         // 工具线程可能正卡在「等你选」上，一并放行，否则会干等到超时
         AskBridge.cancelPending("已暂停");
@@ -2071,6 +2083,7 @@ public final class MainActivity extends Activity {
         scrollBottom();
         loop.setSystemPrompt(buildSystemPrompt());
         running = true;
+        com.dsh.android.kernel.RunStatus.begin(com.dsh.android.kernel.RunStatus.THINKING, "");
         setSendMode(MODE_PAUSE);
         startTaskBar();
 
@@ -2160,6 +2173,7 @@ public final class MainActivity extends Activity {
 
         loop.setSystemPrompt(buildSystemPrompt());
         running = true;
+        com.dsh.android.kernel.RunStatus.begin(com.dsh.android.kernel.RunStatus.THINKING, "");
         sendMode = MODE_PAUSE; setSendMode(MODE_PAUSE);
         startTaskBar();
 
@@ -2705,6 +2719,7 @@ public final class MainActivity extends Activity {
     /** 收尾：恢复按钮、补最后一次完整渲染。 */
     private void finishRun() {
         running = false;
+        com.dsh.android.kernel.RunStatus.reset();
         // 历史已经落盘，按钮状态按「最后一条回答是不是被打断的」来定：
         // 一个字都没收到就暂停的情况不该留一个点了没用的继续键
         refreshSendMode();
