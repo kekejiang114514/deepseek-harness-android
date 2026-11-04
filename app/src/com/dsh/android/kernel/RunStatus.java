@@ -84,11 +84,26 @@ public final class RunStatus {
 
     /** 工具开始：phase 切到 TOOL，记一笔。 */
     public static synchronized void toolStart(String name) {
+        toolStart(name, name);
+    }
+
+    /**
+     * @param label 给人看的一句话（「浏览 zhihu.com」「点击 .submit」），悬浮窗直接显示它
+     */
+    public static synchronized void toolStart(String name, String label) {
         phase = TOOL;
-        detail = name;
+        detail = label == null || label.length() == 0 ? name : label;
         toolCount++;
-        recent.add(0, name);
+        recent.add(0, detail);
         while (recent.size() > HISTORY) recent.remove(recent.size() - 1);
+        notifyAll_();
+    }
+
+    /** 更新当前动作的说明（比如拿到了页面标题，把「浏览 zhihu.com」换成标题）。 */
+    public static synchronized void updateDetail(String label) {
+        if (label == null || label.length() == 0) return;
+        detail = label;
+        if (!recent.isEmpty()) recent.set(0, label);
         notifyAll_();
     }
 
