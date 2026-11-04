@@ -327,8 +327,14 @@ public final class AgentLoop {
         } catch (Exception ignored) {}
     }
 
+    /** 是否允许主动压缩（关掉后仍会在「上下文过长」被拒时应急压缩一次）。 */
+    private volatile boolean autoCompact = true;
+
+    public void setAutoCompact(boolean on) { autoCompact = on; }
+
     /** 超预算就压缩，并把结果告诉界面。 */
     private void compact(JSONArray history, int soft, int target, Sink sink) {
+        if (!autoCompact) return;
         try {
             HistoryCompactor.Report rep = HistoryCompactor.fit(history, soft, target);
             if (rep.changed) sink.onCompact(rep);

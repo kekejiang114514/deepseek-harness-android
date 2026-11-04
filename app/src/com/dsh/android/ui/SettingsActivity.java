@@ -249,8 +249,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         bodyBox.removeAllViews();
         if (page == 0) pageRoot(bodyBox);
         else if (page == 1) pageApi(bodyBox);
-        else if (page == 2) pageTools(bodyBox);
-        else if (page == 13) pageFloat(bodyBox);
+        else if (page == 2) pageFeatures(bodyBox);
         else if (page == 3) pagePlugins(bodyBox);
         else if (page == 4) pageAppearance(bodyBox);
         else if (page == 6) pageLicense(bodyBox);
@@ -270,7 +269,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         LinearLayout c = card();
         c.addView(menuRow(IconView.KEY, Texts.t(this, "endpoint"), Texts.t(this, "sub_endpoint"), 1));
         c.addView(divider());
-        c.addView(menuRow(IconView.WRENCH, Texts.t(this, "tools"), Texts.t(this, "sub_tools"), 2));
+        c.addView(menuRow(IconView.WRENCH, "功能设置", "悬浮窗、无障碍、上下文记忆", 2));
         c.addView(divider());
         c.addView(menuRow(IconView.PLUGIN, Texts.t(this, "plugins"), Texts.t(this, "sub_plugins"), 3));
         c.addView(divider());
@@ -284,7 +283,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(divider());
         c.addView(menuRow(IconView.TERMINAL, Texts.t(this, "terminal"), "在应用内执行系统命令", 10));
         c.addView(divider());
-        c.addView(menuRow(IconView.WINDOW, "悬浮窗", "运行状态气泡与后台常驻", 13));
         c.addView(menuRow(IconView.WINDOW, "内置虚拟机", "实时画面与截图", 12));
         c.addView(divider());
         c.addView(menuRow(IconView.BAG, Texts.t(this, "browser"), "查看 AI 正在访问的页面", 11));
@@ -553,19 +551,27 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     // ------------------------------------------------------------ 工具能力
 
-    private void pageTools(LinearLayout body) {
-        // ---- 工具能力 ----
-        body.addView(sectionLabel("工具能力"));
-        LinearLayout toolCard = card();
-        toolCard.addView(switchRow("屏幕操作（无障碍）", "允许 Agent 读取和操作屏幕",
+    // ------------------------------------------------------------ 功能设置
+
+    /**
+     * 功能设置：把「要开/要关的能力」集中在一页。
+     *
+     * <p>以前这些散在「工具能力」和「悬浮窗」两页里，找一个开关要翻两层。
+     * 现在按能力分组：屏幕操作、悬浮窗、上下文记忆，以后新增的能力也加在这里。
+     */
+    private void pageFeatures(LinearLayout body) {
+        // ---- 屏幕操作 ----
+        body.addView(sectionLabel("屏幕操作"));
+        LinearLayout a11yCard = card();
+        a11yCard.addView(switchRow("屏幕操作（无障碍）", "允许 Agent 读取和操作屏幕",
                 sp.getBoolean(C.KEY_A11Y_ENABLED, true),
                 new CompoundCallback() {
                     public void onChanged(boolean checked) {
                         sp.edit().putBoolean(C.KEY_A11Y_ENABLED, checked).apply();
                     }
                 }));
-        toolCard.addView(divider());
-        toolCard.addView(row("开启屏幕操作", "__a11y",
+        a11yCard.addView(divider());
+        a11yCard.addView(row("开启屏幕操作", "__a11y",
                 new Fmt() {
                     public String get() {
                         return com.dsh.android.a11y.A11yState.describe(SettingsActivity.this);
@@ -586,46 +592,37 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 }, true));
         a11yHintHost = new LinearLayout(this);
         a11yHintHost.setOrientation(LinearLayout.VERTICAL);
-        toolCard.addView(a11yHintHost);
-        toolCard.addView(divider());
-        toolCard.addView(actionRow("悬浮窗与后台常驻", new View.OnClickListener() {
-            public void onClick(View v) { gotoPage(13); }
-        }));
+        a11yCard.addView(a11yHintHost);
+        body.addView(a11yCard);
 
-        body.addView(toolCard);
-    }
-
-    // ------------------------------------------------------------ 悬浮窗
-
-    private void pageFloat(LinearLayout body) {
+        // ---- 悬浮窗 ----
         body.addView(sectionLabel("悬浮窗"));
-        LinearLayout card = card();
-
+        LinearLayout floatCard = card();
         final boolean can = FloatService.canOverlay(this);
-        card.addView(hintRow(can
+        floatCard.addView(hintRow(can
                 ? "已获得「显示在其他应用上层」权限。"
                 : "需要先在系统设置里允许「显示在其他应用上层」，否则气泡不会出现。"));
 
-        card.addView(divider());
+        floatCard.addView(divider());
         LinearLayout floatRow = new LinearLayout(this);
         floatRow.setOrientation(LinearLayout.HORIZONTAL);
         floatRow.setGravity(Gravity.CENTER_VERTICAL);
         floatRow.setPadding(dp(16), dp(12), dp(16), dp(12));
 
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        TextView t = new TextView(this);
-        t.setText("显示悬浮窗");
-        t.setTextSize(15);
-        t.setTextColor(Theme.text());
-        col.addView(t);
-        TextView sub = new TextView(this);
-        sub.setText("退到后台也能看到运行状态和最近的工具调用");
-        sub.setTextSize(12);
-        sub.setTextColor(Theme.caption());
-        sub.setPadding(0, dp(3), 0, 0);
-        col.addView(sub);
-        floatRow.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout floatCol = new LinearLayout(this);
+        floatCol.setOrientation(LinearLayout.VERTICAL);
+        TextView floatTitle = new TextView(this);
+        floatTitle.setText("显示悬浮窗");
+        floatTitle.setTextSize(15);
+        floatTitle.setTextColor(Theme.text());
+        floatCol.addView(floatTitle);
+        TextView floatSub = new TextView(this);
+        floatSub.setText("任务运行时显示一个贴边胶囊：在干什么、多久、可暂停");
+        floatSub.setTextSize(12);
+        floatSub.setTextColor(Theme.caption());
+        floatSub.setPadding(0, dp(3), 0, 0);
+        floatCol.addView(floatSub);
+        floatRow.addView(floatCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         floatToggle = new Toggle(this);
         floatToggle.setChecked(sp.getBoolean(C.KEY_FLOAT, false) && can);
@@ -640,7 +637,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                     }
                     sp.edit().putBoolean(C.KEY_FLOAT, true).apply();
                     FloatService.start(SettingsActivity.this);
-                    toast("悬浮窗已开启");
                 } else {
                     sp.edit().putBoolean(C.KEY_FLOAT, false).apply();
                     if (sp.getBoolean(C.KEY_KEEPALIVE, false)) {
@@ -652,10 +648,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             }
         });
         floatRow.addView(floatToggle);
-        card.addView(floatRow);
+        floatCard.addView(floatRow);
 
-        card.addView(divider());
-        card.addView(switchRow("后台常驻", "挂一条常驻通知吊住进程，避免系统把无障碍服务一起回收",
+        floatCard.addView(divider());
+        floatCard.addView(switchRow("后台常驻", "挂一条常驻通知吊住进程，避免系统把无障碍服务一起回收",
                 sp.getBoolean(C.KEY_KEEPALIVE, false),
                 new CompoundCallback() {
                     public void onChanged(boolean on) {
@@ -668,26 +664,59 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                     }
                 }));
 
-        card.addView(divider());
-        card.addView(actionRow("授予悬浮窗权限", new View.OnClickListener() {
+        floatCard.addView(divider());
+        floatCard.addView(actionRow("授予悬浮窗权限", new View.OnClickListener() {
             public void onClick(View v) { openOverlayPermission(); }
         }));
-        card.addView(actionRow("立即启动悬浮窗", new View.OnClickListener() {
+        body.addView(floatCard);
+
+        // ---- 上下文记忆 ----
+        body.addView(sectionLabel("上下文记忆"));
+        LinearLayout memCard = card();
+        memCard.addView(switchRow("自动压缩上下文", "接近上限时把较早的对话压成摘要，避免请求被拒",
+                sp.getBoolean(C.KEY_AUTO_COMPACT, true),
+                new CompoundCallback() {
+                    public void onChanged(boolean on) {
+                        sp.edit().putBoolean(C.KEY_AUTO_COMPACT, on).apply();
+                    }
+                }));
+        memCard.addView(divider());
+        memCard.addView(row("当前会话", "__ctx",
+                new Fmt() {
+                    public String get() {
+                        try {
+                            com.dsh.android.kernel.SessionStore st = new com.dsh.android.kernel.SessionStore(SettingsActivity.this);
+                            org.json.JSONArray hist = st.loadCurrentHistory();
+                            int n = hist.length();
+                            int tok = com.dsh.android.llm.HistoryCompactor.estimate(hist);
+                            return n + " 条消息 · 约 " + tok + " token";
+                        } catch (Throwable t) {
+                            return "—";
+                        }
+                    }
+                },
+                new View.OnClickListener() {
+                    public void onClick(View v) { toast("这是当前会话的上下文占用估算"); }
+                }, true));
+        memCard.addView(divider());
+        memCard.addView(actionRow("立即压缩当前会话", new View.OnClickListener() {
             public void onClick(View v) {
-                if (!FloatService.canOverlay(SettingsActivity.this)) {
-                    openOverlayPermission();
-                    return;
+                try {
+                    com.dsh.android.kernel.SessionStore st =
+                            new com.dsh.android.kernel.SessionStore(SettingsActivity.this);
+                    org.json.JSONArray hist = st.loadCurrentHistory();
+                    com.dsh.android.llm.HistoryCompactor.Report rep =
+                            com.dsh.android.llm.HistoryCompactor.fit(hist, 1, 14000);
+                    st.saveHistory(st.currentId(), hist);
+                    toast(rep.changed
+                            ? "已压缩：" + rep.tokensBefore + " → " + rep.tokensAfter + " token"
+                            : "当前不需要压缩");
+                } catch (Throwable t) {
+                    toast("压缩失败：" + t.getMessage());
                 }
-                sp.edit().putBoolean(C.KEY_FLOAT, true).apply();
-                FloatService.start(SettingsActivity.this);
-                if (floatToggle != null) floatToggle.setChecked(true);
-                toast("已启动，回到桌面就能看到");
             }
         }));
-
-        body.addView(card);
-        body.addView(hintRow("悬浮窗是一个前台服务：通知栏会留一条低优先级通知，"
-                + "它同时也是无障碍服务不被系统回收的关键。"));
+        body.addView(memCard);
     }
 
     // ------------------------------------------------------------ 插件
