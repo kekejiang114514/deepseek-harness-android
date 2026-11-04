@@ -35,6 +35,18 @@ public final class RunStatus {
     private static final CopyOnWriteArrayList<Listener> listeners =
             new CopyOnWriteArrayList<Listener>();
 
+    /** 悬浮窗上的暂停/继续按钮借这个回调到聊天页；页面不在了就为空。 */
+    public interface Control {
+        void pause();
+        void resume();
+        boolean running();
+    }
+
+    private static volatile Control control;
+
+    public static void setControl(Control c) { control = c; }
+    public static Control control() { return control; }
+
     private RunStatus() {}
 
     public static void addListener(Listener l) {

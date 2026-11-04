@@ -89,14 +89,14 @@ Android does not allow an app to grant itself accessibility — the user must en
 
 ### Floating window
 
-An optional overlay shows what the agent is doing while you are in another app — useful precisely because accessibility work happens outside this app.
+An optional overlay shows what the agent is doing, but only while a turn is actually running — an idle bubble is just something in the way.
 
-- A round bubble sits at the screen edge; drag it anywhere, it snaps back to the nearest side when released
-- While a turn is running the bubble breathes and shows a badge with the tool count
-- Tap it for a panel with the current phase, elapsed time and the last six tool calls
-- The overlay is a foreground service, so a low-priority notification stays in the shade; that same notification keeps the process alive, which is what stops the system from taking the accessibility service down with it
+- A capsule at the screen edge: status icon, what it is doing ("思考中 · 12s", or the tool name and elapsed time), and a pause/continue button on the right
+- Drag it anywhere; on release it snaps back to the nearest side
+- Tap the capsule to return to the app, long-press to hide it until the next turn
+- It never appears while the app itself is in the foreground
 
-There is a second, separate switch — **后台常驻** — that runs the foreground service without the bubble, for people who want the keep-alive but not the overlay. Turning it off brings the toggle to the same decision point as the bubble: one of them running keeps the process (and the accessibility connection) up.
+It is a foreground service, so a low-priority notification sits in the shade; that same notification keeps the process alive, which is what stops the system from taking the accessibility service down with it. There is a separate **后台常驻** switch that runs the same service without the bubble.
 
 ### Plugins
 

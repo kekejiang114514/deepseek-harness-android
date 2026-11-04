@@ -587,6 +587,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         a11yHintHost = new LinearLayout(this);
         a11yHintHost.setOrientation(LinearLayout.VERTICAL);
         toolCard.addView(a11yHintHost);
+        toolCard.addView(divider());
+        toolCard.addView(actionRow("悬浮窗与后台常驻", new View.OnClickListener() {
+            public void onClick(View v) { gotoPage(13); }
+        }));
 
         body.addView(toolCard);
     }
