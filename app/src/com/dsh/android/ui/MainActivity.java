@@ -211,6 +211,53 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** 每次启动只提醒一次「无障碍被系统关掉了」，别反复弹。 */
+    private boolean a11yNotified = false;
+
+    /**
+     * 无障碍自检：连上过、现在却掉了，就给一条可点的提示。
+     *
+     * <p>不少 ROM 在应用被划掉、或被内存清理时会把无障碍开关一起关掉。
+     * 用户不会去翻系统设置，所以这里主动告诉他，并且一点就能重开。
+     */
+    private void checkA11yHealth() {
+        if (running || messages == null || a11yNotified) return;
+        final android.content.SharedPreferences sp = getSharedPreferences("dsh", MODE_PRIVATE);
+        int state = com.dsh.android.a11y.A11yState.of(this);
+        if (state == com.dsh.android.a11y.A11yState.READY) {
+            sp.edit().putBoolean("a11y_was_on", true).apply();
+            return;
+        }
+        if (!sp.getBoolean("a11y_was_on", false)) return;   // 从来没开过，不打扰
+        a11yNotified = true;
+
+        String text = state == com.dsh.android.a11y.A11yState.ON_NOT_CONNECTED
+                ? "无障碍服务没连上 · 点此重试"
+                : "无障碍被系统关掉了 · 点此重新开启";
+        addIconNotice(IconView.WRENCH, text, new View.OnClickListener() {
+            public void onClick(View v) {
+                a11yNotified = false;
+                if (com.dsh.android.a11y.A11yAdmin.hasRoot()) {
+                    new Thread(new Runnable() {
+                        public void run() {
+                            final String err = com.dsh.android.a11y.A11yAdmin.enableWithRoot(
+                                    MainActivity.this);
+                            runOnUiThread(new Runnable() {
+                                public void run() {
+                                    Snack.show(MainActivity.this, err == null
+                                            ? "已用 root 重新开启" : err);
+                                }
+                            });
+                        }
+                    }).start();
+                } else {
+                    com.dsh.android.ui.A11yGuide.openSettings(MainActivity.this);
+                }
+            }
+        });
+        scrollBottom();
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -234,6 +281,8 @@ public final class MainActivity extends Activity {
         if (titleView != null) titleView.setText(currentTitle());
         // 设置页可能改过模型/等级，回来刷新胶囊上的字
         refreshModelPill();
+        // 从系统设置或其它应用回来：顺手看看无障碍还在不在
+        checkA11yHealth();
     }
 
     private void fadeInContent() {
@@ -1763,6 +1812,10 @@ public final class MainActivity extends Activity {
      */
     /** 带自绘图标的一行提示：符号也走 IconView，不依赖字体里有没有对应的 emoji。 */
     private void addIconNotice(int iconType, String text) {
+        addIconNotice(iconType, text, null);
+    }
+
+    private void addIconNotice(int iconType, String text, View.OnClickListener onClick) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(android.view.Gravity.CENTER);
@@ -1780,6 +1833,11 @@ public final class MainActivity extends Activity {
         tlp.leftMargin = dp(5);
         row.addView(tv, tlp);
 
+        if (onClick != null) {
+            row.setOnClickListener(onClick);
+            row.setBackground(Theme.round(Theme.surface2(), 8f, this));
+            row.setPadding(dp(10), dp(6), dp(10), dp(6));
+        }
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, dp(8), 0, dp(8));
