@@ -69,8 +69,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 81
-    a.version_name = '1.4-beta4'
+    a.version_code = 82
+    a.version_name = '1.4-beta5'
     a.min_sdk = 23
     a.target_sdk = 29
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
@@ -172,7 +172,6 @@ def build_dshandroid_app():
             # 系统「无障碍」列表里显示的名字与说明：没有 label 会退化成应用名，
             # 没有 description 那栏就是空的，用户不知道开的是什么东西
             ('label', TYPE_STR, 'AI 屏幕操作'),
-            ('description', TYPE_REF, 0x7F030000),
             # 从最近任务里划掉应用时不要连带停掉服务（默认值在部分 ROM 上并不一致）
             ('stopWithTask', TYPE_BOOL, False),
         ],
@@ -193,11 +192,7 @@ def build_dshandroid_app():
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用
     a.resources.append(ResourceDef('xml', 'accessibility_service_config',
                                    'res/xml/accessibility_service_config.xml'))
-    # 服务说明（0x7F030000）：系统无障碍列表里那行小字。
-    # 只写一个字符串资源，由系统按引用读取，不做多语言——见 README 已知边界。
-    a.resources.append(ResourceDef('string', 'a11y_service_desc',
-        'Reads on-screen text and controls, and can tap, swipe and type in other apps on your behalf. '
-        '读取屏幕上的文字与控件，并代替你点击、滑动和输入。'))
+
 
     return a
 

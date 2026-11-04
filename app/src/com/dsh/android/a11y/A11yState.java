@@ -86,6 +86,26 @@ public final class A11yState {
         ComponentName cn = new ComponentName(ctx, A11yService.class);
 
         sb.append("包名：").append(ctx.getPackageName()).append('\n');
+        // 服务连接日志：能看出是 unbind 还是 destroy，即「系统回收」还是「应用退出」
+        try {
+            java.io.File log = new java.io.File(ctx.getFilesDir(), "a11y.log");
+            if (log.exists() && log.length() > 0) {
+                java.io.BufferedReader r = new java.io.BufferedReader(
+                        new java.io.FileReader(log));
+                java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
+                String ln;
+                while ((ln = r.readLine()) != null) lines.add(ln);
+                r.close();
+                sb.append("连接日志（最近 8 条）：\n");
+                for (int i = Math.max(0, lines.size() - 8); i < lines.size(); i++) {
+                    sb.append("  ").append(lines.get(i)).append('\n');
+                }
+            } else {
+                sb.append("连接日志：无（服务从未连上过）\n");
+            }
+        } catch (Throwable t) {
+            sb.append("读取连接日志失败：").append(t.getClass().getSimpleName()).append('\n');
+        }
         sb.append("组件：").append(cn.flattenToString()).append('\n');
         sb.append("应用版本：").append(com.dsh.android.kernel.C.VERSION).append('\n');
 

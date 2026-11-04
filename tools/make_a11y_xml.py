@@ -18,8 +18,10 @@ import axml_build as B
 
 PUBLIC_XML = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'public.xml')
 
-# AccessibilityEvent.TYPES_ALL_MASK
-EVENT_TYPES_ALL = -1            # 0xFFFFFFFF
+# 只订阅真正会用到的三类事件：
+# TYPE_WINDOW_STATE_CHANGED(0x20) | TYPE_WINDOW_CONTENT_CHANGED(0x800) | TYPE_VIEW_SCROLLED(0x100000)
+# 以前是 TYPES_ALL_MASK，屏幕上一有变化就唤醒进程，纯粹是耗电
+EVENT_TYPES_ALL = 0x20 | 0x800 | 0x100000
 # AccessibilityServiceInfo.FEEDBACK_GENERIC
 FEEDBACK_GENERIC = 0x10
 # flagDefault(0x1) | flagIncludeNotImportantViews(0x2)
