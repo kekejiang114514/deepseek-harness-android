@@ -3,7 +3,7 @@ package com.dsh.android.kernel;
 /** 全局常量与配置。 */
 public final class C {
     public static final String APP_NAME = "DShAndroid";
-    public static final String VERSION = "1.4";
+    public static final String VERSION = "1.4.1";
 
     // DeepSeek 默认端点
     public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
@@ -53,14 +53,43 @@ public final class C {
             {LEVEL_MAX, "最大强度，耗时明显"},
     };
 
-    /** 等级 → max_tokens。DeepSeek 接口上限 8192，再高会被拒，所以高档位并列在 8192。 */
+    /**
+     * 等级 → 输出上限（max_tokens）。
+     *
+     * <p>DeepSeek 的输出上限是 384K，早先那句「接口上限 8192」是错的，已作废。
+     * 这里不需要贴着上限：思考链也算在输出里，档位越高留的余量越大。
+     */
     public static int maxTokensFor(String level) {
         String l = normalizeLevel(level);
-        if (LEVEL_OFF.equals(l)) return 1024;
-        if (LEVEL_LOW.equals(l)) return 2048;
-        if (LEVEL_MEDIUM.equals(l)) return 4096;
-        if (LEVEL_HIGH.equals(l)) return 6144;
-        return 8192;
+        if (LEVEL_OFF.equals(l)) return 4096;
+        if (LEVEL_LOW.equals(l)) return 8192;
+        if (LEVEL_MEDIUM.equals(l)) return 16384;
+        if (LEVEL_HIGH.equals(l)) return 32768;
+        if (LEVEL_XHIGH.equals(l)) return 49152;
+        return 65536;
+    }
+
+    /**
+     * 等级 → 真正发给接口的推理强度 {@code reasoning_effort}。
+     *
+     * <p>接口只认 low / high / max 三档（官方「Thinking Mode」文档的参数表）。
+     * 六档到三档的映射与文档里的映射表一致，没有信息丢失：
+     * 文档中 medium 与 xhigh 实际都映射到 high。
+     *
+     * @return null 表示不显式指定（off 档改为关闭思考模式，见 {@link #thinkingOff}）
+     */
+    public static String reasoningEffortFor(String level) {
+        String l = normalizeLevel(level);
+        if (LEVEL_OFF.equals(l)) return null;
+        if (LEVEL_LOW.equals(l)) return "low";
+        if (LEVEL_MAX.equals(l)) return "max";
+        // medium / high / xhigh：文档映射表显示这三档实际都是 high
+        return "high";
+    }
+
+    /** 该等级是否要明确关闭思考模式。 */
+    public static boolean thinkingOff(String level) {
+        return LEVEL_OFF.equals(normalizeLevel(level));
     }
 
     /** 文件作用域：workspace = 只能碰自己的工作区；device = 整个设备。 */

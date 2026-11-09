@@ -36,13 +36,13 @@ public class LevelTest {
         eq(C.normalizeLevel("turbo"), C.LEVEL_MEDIUM, "未知值 → medium");
 
         System.out.println("t4 max_tokens 映射");
-        ok(C.maxTokensFor(C.LEVEL_OFF) == 1024, "off = 1024");
-        ok(C.maxTokensFor(C.LEVEL_LOW) == 2048, "low = 2048");
-        ok(C.maxTokensFor(C.LEVEL_MEDIUM) == 4096, "medium = 4096");
-        ok(C.maxTokensFor(C.LEVEL_HIGH) == 6144, "high = 6144");
-        ok(C.maxTokensFor(C.LEVEL_XHIGH) == 8192, "xhigh = 8192");
-        ok(C.maxTokensFor(C.LEVEL_MAX) == 8192, "max = 8192（接口上限）");
-        ok(C.maxTokensFor("deep") == 6144, "旧值 deep 也走新映射");
+        ok(C.maxTokensFor(C.LEVEL_OFF) == 4096, "off = 4096");
+        ok(C.maxTokensFor(C.LEVEL_LOW) == 8192, "low = 8192");
+        ok(C.maxTokensFor(C.LEVEL_MEDIUM) == 16384, "medium = 16384");
+        ok(C.maxTokensFor(C.LEVEL_HIGH) == 32768, "high = 32768");
+        ok(C.maxTokensFor(C.LEVEL_XHIGH) == 49152, "xhigh = 49152");
+        ok(C.maxTokensFor(C.LEVEL_MAX) == 65536, "max = 65536");
+        ok(C.maxTokensFor("deep") == 32768, "旧值 deep 也走新映射");
 
         System.out.println("t5 单调不减");
         int prev = 0;

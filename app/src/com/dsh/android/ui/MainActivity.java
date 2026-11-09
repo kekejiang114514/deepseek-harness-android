@@ -711,7 +711,7 @@ public final class MainActivity extends Activity {
         desc.setTextColor(Theme.text3());
         desc.setPadding(dp(14), dp(2), dp(14), dp(8));
         desc.setText(com.dsh.android.ui.ReasoningSlider.descOf(curLevel)
-                + "\u3000输出上限 " + C.maxTokensFor(curLevel) + " tokens");
+                + "\u3000强度 " + effortLabel(curLevel));
         box.addView(slider);
         box.addView(desc);
 
@@ -763,7 +763,7 @@ public final class MainActivity extends Activity {
                 refreshModelPill();
                 headValue.setText(com.dsh.android.ui.ReasoningSlider.labelOf(key));
                 desc.setText(com.dsh.android.ui.ReasoningSlider.descOf(key)
-                        + "\u3000输出上限 " + C.maxTokensFor(key) + " tokens");
+                        + "\u3000强度 " + effortLabel(key));
                 desc.setAlpha(0f);
                 desc.animate().alpha(1f).setDuration(180).start();
             }
@@ -2013,6 +2013,19 @@ public final class MainActivity extends Activity {
 
     // ------------------------------------------------------------ 发送
 
+    /**
+     * 强度档位在界面上的显示名。
+     *
+     * <p>显示的是真正发给接口的取值，避免界面写着「最大强度」而请求里其实没带参数
+     * 这种对不上的情况。
+     */
+    private static String effortLabel(String level) {
+        String l = C.normalizeLevel(level);
+        if (C.LEVEL_OFF.equals(l)) return "关闭思考";
+        String e = C.reasoningEffortFor(l);
+        return e == null ? "默认" : e;
+    }
+
     private void reloadClient() {
         SharedPreferences sp = getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
         String base = sp.getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
@@ -2023,6 +2036,8 @@ public final class MainActivity extends Activity {
         int maxTokens = C.maxTokensFor(level);
 
         client = new LlmClient(this, base, key, model, maxTokens);
+        // 强度不是「输出多长」，是「想多深」。要真的发给接口才算数。
+        client.setReasoningLevel(level);
         com.dsh.android.kernel.UsageStats.addRequest(this);
         loop = new AgentLoop(client, tools, buildSystemPrompt());
     }

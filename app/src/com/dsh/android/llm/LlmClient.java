@@ -49,6 +49,8 @@ public final class LlmClient {
     private final String apiKey;
     private final String model;
     private final int maxTokens;
+    /** 推理强度档位（六档之一），决定发给接口的 reasoning_effort。 */
+    private String reasoningLevel = com.dsh.android.kernel.C.LEVEL_MEDIUM;
 
     /** 记录用量需要 Context；为空时统计跳过，不影响对话。 */
     private android.content.Context ctx;
@@ -63,6 +65,11 @@ public final class LlmClient {
     }
 
     public String getModel() { return model; }
+
+    /** 设置推理强度档位（六档之一）。 */
+    public void setReasoningLevel(String level) {
+        this.reasoningLevel = com.dsh.android.kernel.C.normalizeLevel(level);
+    }
 
     /**
      * 验证 API Key 并拉取可用模型列表。
@@ -228,37 +235,9 @@ public final class LlmClient {
     }
 
     private JSONObject buildBody(JSONArray messages, JSONArray tools, boolean stream) throws Exception {
-        JSONObject body = new JSONObject();
-        body.put("model", model);
-        // 历史里可能混有界面专用的记录（role 不是标准角色），
-        // 直接发过去会被服务端当成非法格式整单拒绝，这里先筛一遍
-        JSONArray safe = new JSONArray();
-        for (int i = 0; i < messages.length(); i++) {
-            JSONObject m = messages.optJSONObject(i);
-            if (m == null) continue;
-            String role = m.optString("role", "");
-            if ("system".equals(role) || "user".equals(role)
-                    || "assistant".equals(role) || "tool".equals(role)) {
-                // 只保留接口认识的字段：历史里还存着 reasoning / interrupted / hidden
-                // 这些界面自用标记，混进请求里某些服务端会直接整单拒绝
-                JSONObject clean = new JSONObject();
-                clean.put("role", role);
-                if (m.has("content")) clean.put("content", m.opt("content"));
-                if (m.has("tool_calls")) clean.put("tool_calls", m.opt("tool_calls"));
-                if (m.has("tool_call_id")) clean.put("tool_call_id", m.opt("tool_call_id"));
-                if (m.has("name")) clean.put("name", m.opt("name"));
-                safe.put(clean);
-            }
-        }
-        body.put("messages", safe);
-        // DeepSeek 的 reasoner 模型不接受 temperature，统一改用 max_tokens 控制输出规模
-        body.put("max_tokens", maxTokens);
-        if (tools != null && tools.length() > 0) {
-            body.put("tools", tools);
-            body.put("tool_choice", "auto");
-        }
-        body.put("stream", stream);
-        return body;
+        return ChatBody.build(model, messages, tools, stream, maxTokens,
+                com.dsh.android.kernel.C.reasoningEffortFor(reasoningLevel),
+                com.dsh.android.kernel.C.thinkingOff(reasoningLevel));
     }
 
     /** 把响应里的 usage 累加到本地统计；没有就跳过。 */

@@ -27,6 +27,7 @@ mkdir -p "$OUT"
 echo "[1/2] 编译"
 javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/com/dsh/android/llm/HistoryCompactor.java" \
+    "$ROOT/app/src/com/dsh/android/llm/ChatBody.java" \
     "$ROOT/app/src/com/dsh/android/ui/AskLog.java" \
     "$ROOT/app/src/com/dsh/android/kernel/C.java" \
     "$ROOT/app/src/com/dsh/android/kernel/Version.java" \
@@ -46,6 +47,7 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$HERE/PluginJsTest.java" \
     "$HERE/TgzTest.java" \
     "$HERE/LevelTest.java" \
+    "$HERE/ChatBodyTest.java" \
     "$HERE/PauseTest.java"
 
 echo "[2/2] 运行"
@@ -56,4 +58,5 @@ java -cp "$OUT:$JSON_JAR" PluginTest
 java -cp "$OUT:$JSON_JAR" PluginJsTest
 java -cp "$OUT:$JSON_JAR" TgzTest
 java -cp "$OUT:$JSON_JAR" LevelTest
+java -cp "$OUT:$JSON_JAR" ChatBodyTest
 java -cp "$OUT:$JSON_JAR" PauseTest
