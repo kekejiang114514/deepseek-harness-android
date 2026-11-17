@@ -337,6 +337,33 @@ public final class MainActivity extends Activity {
         checkA11yHealth();
     }
 
+    /**
+     * 返回键：先关抽屉，再退回聊天页，最后才交给系统。
+     *
+     * <p>抽屉是自绘的（不是 DrawerLayout），系统不知道它开着，
+     * 所以必须自己拦一下，否则按返回会直接退出应用，
+     * 看起来就像「一下子退了很多层」。
+     */
+    @Override
+    public void onBackPressed() {
+        if (drawer != null && drawer.getVisibility() == View.VISIBLE) {
+            closeDrawer();
+            return;
+        }
+        if (scrim != null && scrim.getVisibility() == View.VISIBLE) {
+            scrim.setVisibility(View.GONE);
+            return;
+        }
+        if (running) {
+            // 正在生成时，返回先停掉生成，而不是把页面退掉
+            loop.cancel();
+            AskBridge.cancelPending("用户已停止");
+            Snack.show(this, "已停止生成，再按一次返回");
+            return;
+        }
+        super.onBackPressed();
+    }
+
     @Override
     protected void onDestroy() {
         // 页面销毁后悬浮窗不能再回调过来

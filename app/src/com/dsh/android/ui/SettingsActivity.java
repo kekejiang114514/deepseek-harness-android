@@ -636,6 +636,21 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         return r;
     }
 
+    /**
+     * 返回键：先回上一级页面，已经在根页面才退出。
+     *
+     * <p>之前没有接管返回，按一下就直接把整个设置页关掉，
+     * 哪怕正停在三层菜单里。
+     */
+    @Override
+    public void onBackPressed() {
+        if (page != 0) {
+            gotoPage(0);
+            return;
+        }
+        super.onBackPressed();
+    }
+
     private void gotoPage(int target) {
         page = target;
         if (titleView != null) titleView.setText(pageTitle());
