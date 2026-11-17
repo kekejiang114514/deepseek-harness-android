@@ -1903,8 +1903,10 @@ public final class MainActivity extends Activity {
                     shown++;
                 }
             }
-            // 每条消息下面都有一排操作：分支切换 / 复制 / 从这里分支 / 重新生成
-            if (nodeId.length() > 0) {
+            // 只有这条消息真的画出了内容，才在它下面加操作行；
+            // 否则会出现「上面没有文字，下面却挂着一排按钮」。
+            boolean rendered = messages.getChildCount() > before;
+            if (nodeId.length() > 0 && (rendered || (sibs != null && sibs.size() > 1))) {
                 addActionRow(nodeId, role, sibs);
                 for (int k = before; k < messages.getChildCount(); k++) {
                     attachBranchMenu(messages.getChildAt(k), nodeId);
@@ -1919,19 +1921,20 @@ public final class MainActivity extends Activity {
     /**
      * 每条消息下方的操作行。
      *
-     * <p>参照主流客户端的做法放在气泡下面而不是藏进长按菜单：
-     * 有分支时显示 `‹ n/m ›`，然后是复制、从这里分支，助手消息再带一个重新生成。
+     * <p>用文字而不是图标：图标在部分机型上会画不出来，最后变成一条空行；
+     * 文字按钮在任何字体与主题下都可见。
+     * 有兄弟节点时最前面是 `‹ n/m ›`，用来在原回答与重新生成的回答之间切换。
      */
     private void addActionRow(final String nodeId, String role, final java.util.List<String> sibs) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(2), dp(2), 0, dp(8));
+        row.setPadding(dp(2), dp(1), dp(2), dp(9));
 
         if (sibs != null && sibs.size() > 1) {
             final int idx = sibs.indexOf(nodeId);
             if (idx >= 0) {
-                row.addView(actionIcon(IconView.CHEVRON_LEFT, true, new View.OnClickListener() {
+                row.addView(actionText("\u2039", idx > 0, new View.OnClickListener() {
                     public void onClick(View v) {
                         if (idx > 0) jumpBranch(sibs.get(idx - 1));
                     }
@@ -1940,47 +1943,63 @@ public final class MainActivity extends Activity {
                 label.setText((idx + 1) + "/" + sibs.size());
                 label.setTextSize(11);
                 label.setTextColor(Theme.caption());
-                label.setPadding(dp(2), 0, dp(2), 0);
                 row.addView(label);
-                row.addView(actionIcon(IconView.CHEVRON_RIGHT, false, new View.OnClickListener() {
+                row.addView(actionText("\u203A", idx < sibs.size() - 1, new View.OnClickListener() {
                     public void onClick(View v) {
                         if (idx < sibs.size() - 1) jumpBranch(sibs.get(idx + 1));
                     }
                 }));
-                View gap = new View(this);
-                gap.setLayoutParams(new LinearLayout.LayoutParams(dp(10), 1));
-                row.addView(gap);
             }
         }
 
-        row.addView(actionIcon(IconView.COPY, true, new View.OnClickListener() {
+        row.addView(actionText("选择文本", true, new View.OnClickListener() {
+            public void onClick(View v) { selectText(nodeId); }
+        }));
+        row.addView(actionText("复制", true, new View.OnClickListener() {
             public void onClick(View v) { copyNode(nodeId); }
         }));
-        row.addView(actionIcon(IconView.BRANCH, true, new View.OnClickListener() {
-            public void onClick(View v) { startBranchFrom(nodeId); }
-        }));
         if ("assistant".equals(role)) {
-            row.addView(actionIcon(IconView.REFRESH, true, new View.OnClickListener() {
+            row.addView(actionText("重新生成", true, new View.OnClickListener() {
                 public void onClick(View v) { regenerateNode(nodeId); }
             }));
         }
         messages.addView(row);
     }
 
-    /**
-     * 一个可点的图标按钮。
-     *
-     * @param enabled  false 时画淡且不响应点击（分支到头了就是这样）
-     */
-    private View actionIcon(int icon, boolean enabled, final View.OnClickListener click) {
-        IconView v = new IconView(this, icon, 18);
-        v.setColor(enabled ? Theme.text2() : Theme.caption());
-        v.setAlpha(enabled ? 1f : 0.45f);
-        int pad = dp(6);
-        v.setPadding(pad, dp(4), pad, dp(4));
-        v.setLayoutParams(new LinearLayout.LayoutParams(dp(30), dp(30)));
-        if (enabled) v.setOnClickListener(click);
-        return v;
+    /** 操作行里的文字按钮。 */
+    private TextView actionText(String label, boolean enabled, final View.OnClickListener click) {
+        TextView t = new TextView(this);
+        t.setText(label);
+        t.setTextSize(12);
+        t.setTextColor(enabled ? Theme.text2() : Theme.caption());
+        t.setAlpha(enabled ? 1f : 0.45f);
+        t.setPadding(dp(8), dp(4), dp(8), dp(4));
+        if (enabled) t.setOnClickListener(click);
+        return t;
+    }
+
+    /** 选择文本：交给系统选择器（可拖动选择手柄、复制）。 */
+    private void selectText(String nodeId) {
+        JSONArray all = sessions.loadHistory(sessions.currentId());
+        int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
+        if (i < 0) return;
+        String content = all.optJSONObject(i).optString("content", "");
+        if (content.length() == 0) return;
+
+        android.widget.TextView tv = new android.widget.TextView(this);
+        tv.setText(content);
+        tv.setTextSize(15);
+        tv.setTextColor(Theme.text());
+        tv.setTextIsSelectable(true);          // 系统原生的选择手柄与复制
+        tv.setPadding(dp(16), dp(12), dp(16), dp(12));
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+        new AppDialog.Builder(this)
+                .setTitle("选择文本")
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .show();
     }
 
     /** 切到某条分支：leaf 移到它的末端后整页重绘。 */
@@ -1996,14 +2015,19 @@ public final class MainActivity extends Activity {
         renderHistory();
     }
 
-    /** 重新生成某条助手回答：回到它对应的提问，再答一次（会自然长出新分支）。 */
+    /**
+     * 重新生成某条助手回答。
+     *
+     * <p>把 leaf 退回这条回答对应的提问，然后**不追加**用户消息直接再生成一次。
+     * 之前复用 resend()，结果同一个问题被写进历史两遍，还多出一个用户气泡。
+     */
     private void regenerateNode(String nodeId) {
         if (running) {
             Snack.show(this, "正在生成，先停止");
             return;
         }
-        String sessId = sessions.currentId();
-        JSONArray all = sessions.loadHistory(sessId);
+        final String sessId = sessions.currentId();
+        final JSONArray all = sessions.loadHistory(sessId);
         int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
         if (i < 0) return;
         JSONObject node = all.optJSONObject(i);
@@ -2012,54 +2036,76 @@ public final class MainActivity extends Activity {
             Snack.show(this, "这条没有对应的提问，无法重新生成");
             return;
         }
-        int pi = com.dsh.android.kernel.Conversation.indexOf(all, parent);
-        JSONObject pnode = pi < 0 ? null : all.optJSONObject(pi);
-        String question = pnode == null ? "" : pnode.optString("content", "");
-        if (question.length() == 0) {
-            Snack.show(this, "上一条不是文本提问，无法重新生成");
-            return;
-        }
-        JSONArray path = com.dsh.android.kernel.Conversation.path(all, parent);
+        final String startLeaf = parent;
+        final JSONArray hist = com.dsh.android.kernel.Conversation.path(all, parent);
+        final int pathFrom = hist.length();
         sessions.setLeaf(sessId, parent);
         renderHistory();
-        resend(question, path);
+
+        streamingBuf.setLength(0);
+        streamingView = null;
+        liveThinking = null;
+        running = true;
+        sendMode = MODE_PAUSE;
+        setSendMode(MODE_PAUSE);
+        startTaskBar();
+        scrollBottom();
+
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    loop.run(hist, null, sink(), false, true);
+                    commitPath(sessId, all, hist, pathFrom, startLeaf);
+                } catch (final Throwable t) {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            addAssistantBubble("请求失败：" + t.getMessage());
+                        }
+                    });
+                } finally {
+                    runOnUiThread(new Runnable() {
+                        public void run() { finishRun(); }
+                    });
+                }
+            }
+        }).start();
     }
 
-    /** 长按消息：从这条继续写，或复制内容。 */
-    private void attachBranchMenu(View v, final String nodeId) {
+    /** 长按消息：右键式小菜单。 */
+    private void attachBranchMenu(final View v, final String nodeId) {
         if (v == null) return;
         v.setOnLongClickListener(new View.OnLongClickListener() {
             public boolean onLongClick(View view) {
-                LinearLayout box = new LinearLayout(MainActivity.this);
-                box.setOrientation(LinearLayout.VERTICAL);
-                box.addView(menuItem("从这条继续（新建分支）", new View.OnClickListener() {
-                    public void onClick(View v) {
-                        dismissDialog();
-                        startBranchFrom(nodeId);
-                    }
+                JSONArray all = sessions.loadHistory(sessions.currentId());
+                int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
+                if (i < 0) return false;
+                String role = all.optJSONObject(i).optString("role", "");
+                String content = all.optJSONObject(i).optString("content", "");
+
+                List<MiniMenu.Item> items = new java.util.ArrayList<MiniMenu.Item>();
+                if (content.length() > 0) {
+                    items.add(MiniMenu.Item.of("选择文本", new Runnable() {
+                        public void run() { selectText(nodeId); }
+                    }));
+                    items.add(MiniMenu.Item.of("复制", new Runnable() {
+                        public void run() { copyNode(nodeId); }
+                    }));
+                }
+                if ("assistant".equals(role)) {
+                    items.add(MiniMenu.Item.of("重新生成", new Runnable() {
+                        public void run() { regenerateNode(nodeId); }
+                    }));
+                }
+                items.add(MiniMenu.Item.of("从这里继续（分支）", new Runnable() {
+                    public void run() { startBranchFrom(nodeId); }
                 }));
-                box.addView(menuItem("复制这条消息", new View.OnClickListener() {
-                    public void onClick(View v) {
-                        dismissDialog();
-                        copyNode(nodeId);
-                    }
-                }));
-                nodeMenu = new AppDialog.Builder(MainActivity.this)
-                        .setTitle("这条消息")
-                        .setView(box)
-                        .setNegativeButton("取消", null)
-                        .show();
+                if (items.isEmpty()) return false;
+                lastMenu = MiniMenu.show(MainActivity.this, view, null, items);
                 return true;
             }
         });
     }
 
-    /**
-     * 从某条消息往下继续。
-     *
-     * <p>把 leaf 指到这条消息上，下一条消息就会作为它的子节点写入——
-     * 原来的后续内容不受影响，于是自然形成一条新分支。
-     */
     private void startBranchFrom(final String nodeId) {
         if (running) {
             Snack.show(this, "正在生成，先停止再从这条继续");

@@ -103,15 +103,26 @@ public final class AgentLoop {
      * @param hidden 这条 user 消息只是给模型的提示（比如「接着写」），不在界面上显示
      */
     public void run(JSONArray history, String userMessage, Sink sink, boolean hidden) {
+        run(history, userMessage, sink, hidden, false);
+    }
+
+    /**
+     * @param skipUser true 表示不追加 user 消息，直接在现有历史末尾继续生成。
+     *                 重新生成某条回答时用这个：提问已经在历史里了，
+     *                 再追加一次会变成「同一个问题问两遍」。
+     */
+    public void run(JSONArray history, String userMessage, Sink sink, boolean hidden, boolean skipUser) {
         try {
             cancelled = false;
             paused = false;
             ensureSystem(history);
-            JSONObject u = new JSONObject();
-            u.put("role", "user");
-            u.put("content", userMessage);
-            if (hidden) u.put("hidden", true);
-            history.put(u);
+            if (!skipUser) {
+                JSONObject u = new JSONObject();
+                u.put("role", "user");
+                u.put("content", userMessage);
+                if (hidden) u.put("hidden", true);
+                history.put(u);
+            }
 
             JSONArray toolSchemas = tools.schemas();
 
