@@ -50,6 +50,73 @@ public final class ChatImport {
         }
     }
 
+    /**
+     * 从原始字节解析：先看是不是 zip，是就逐个解出里面的 json 再解析。
+     *
+     * <p>DeepSeek 的「导出数据」给的是一个 zip，里面才有聊天记录 json；
+     * ChatGPT / Claude 的导出同样是 zip。所以导入的入口必须是字节，
+     * 不能先当成文本读——那样二进制会被当 UTF-8 解成乱码，直接报「认不出」。
+     */
+    public static Result parseBytes(byte[] data) throws Exception {
+        if (data == null || data.length == 0) throw new Exception("文件是空的");
+        if (!isZip(data)) {
+            return parse(stripBom(new String(data, "UTF-8")));
+        }
+        Result out = new Result();
+        out.format = "ZIP";
+        java.util.zip.ZipInputStream zin =
+                new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(data));
+        int handled = 0;
+        java.util.zip.ZipEntry e;
+        byte[] buf = new byte[8192];
+        while ((e = zin.getNextEntry()) != null) {
+            String name = e.getName() == null ? "" : e.getName();
+            String lower = name.toLowerCase(java.util.Locale.US);
+            if (e.isDirectory()) continue;
+            // 只处理可能的文本条目，图片之类的直接跳过
+            if (!(lower.endsWith(".json") || lower.endsWith(".jsonl") || lower.endsWith(".txt"))) continue;
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            int n;
+            while ((n = zin.read(buf)) > 0) {
+                bo.write(buf, 0, n);
+                if (bo.size() > 64 * 1024 * 1024) break;
+            }
+            zin.closeEntry();
+            String text = stripBom(new String(bo.toByteArray(), "UTF-8")).trim();
+            if (text.length() == 0) continue;
+            try {
+                Result one = parse(text);
+                if (one.sessions.isEmpty()) continue;
+                out.sessions.addAll(one.sessions);
+                if (one.warning.length() > 0) {
+                    out.warning = out.warning.length() == 0
+                            ? one.warning : out.warning + "；" + one.warning;
+                }
+                if (one.format.length() > 0 && !"ZIP".equals(one.format)) {
+                    out.format = "ZIP · " + one.format;
+                }
+                handled++;
+            } catch (Exception ignored) {
+                // 这个条目不是聊天记录，继续看下一个
+            }
+        }
+        zin.close();
+        if (handled == 0 || out.sessions.isEmpty()) {
+            throw new Exception("zip 里没有找到聊天记录（找过 .json / .jsonl / .txt 条目）");
+        }
+        return out;
+    }
+
+    private static boolean isZip(byte[] d) {
+        return d.length > 4 && d[0] == 'P' && d[1] == 'K'
+                && (d[2] == 3 || d[2] == 5 || d[2] == 7);
+    }
+
+    private static String stripBom(String s) {
+        if (s != null && s.length() > 0 && s.charAt(0) == '\uFEFF') return s.substring(1);
+        return s == null ? "" : s;
+    }
+
     public static Result parse(String raw) throws Exception {
         if (raw == null) throw new Exception("文件是空的");
         String text = raw.trim();

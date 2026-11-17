@@ -233,7 +233,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }));
         importCard.addView(divider());
         importCard.addView(hintRow("支持 DeepSeek、ChatGPT、Claude 导出的文件，"
-                + "以及本应用自己导出的包。DeepSeek 的导出包解开后是 json 文件，选它即可。"
+                + "以及本应用自己导出的包。这些服务的导出多为 zip，选 zip 即可，"
+                + "应用会自己解压并挑出里面的聊天记录，不需要你先解压。"
                 + "导入总是新建会话，不会覆盖现有记录。"));
         importCard.addView(divider());
         importCard.addView(actionRow("导出全部对话记录", new View.OnClickListener() {
@@ -273,7 +274,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         i.addCategory(android.content.Intent.CATEGORY_OPENABLE);
         i.setType("*/*");
         i.putExtra(android.content.Intent.EXTRA_MIME_TYPES,
-                new String[]{"application/json", "text/plain", "application/octet-stream"});
+                new String[]{"application/json", "text/plain", "application/octet-stream",
+                        "application/zip", "application/x-zip-compressed", "*/*"});
         try {
             startActivityForResult(i, REQ_IMPORT);
         } catch (Throwable t) {
@@ -307,11 +309,11 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     private void doImport(final android.net.Uri uri) {
         new Thread(new Runnable() {
             public void run() {
-                String text = null;
+                byte[] data = null;
                 try {
-                    text = readText(uri);
+                    data = readBytes(uri);
                 } catch (Throwable ignored) {}
-                if (text == null) {
+                if (data == null) {
                     final String msg = "读不到这个文件";
                     runOnUiThread(new Runnable() {
                         public void run() { toast(msg); }
@@ -323,7 +325,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 String format = "";
                 try {
                     com.dsh.android.kernel.ChatImport.Result r =
-                            com.dsh.android.kernel.ChatImport.parse(text);
+                            com.dsh.android.kernel.ChatImport.parseBytes(data);
                     format = r.format;
                     com.dsh.android.kernel.SessionStore st =
                             new com.dsh.android.kernel.SessionStore(SettingsActivity.this);
@@ -345,7 +347,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                             new AppDialog.Builder(SettingsActivity.this)
                                     .setTitle("导入失败")
                                     .setMessage(err + "\n\n能识别的格式：DeepSeek 导出、ChatGPT 导出、"
-                                            + "Claude 导出、本应用的导出包，以及含 role/content 的 JSON 或 JSONL。")
+                                            + "Claude 导出（zip 直读）、本应用的导出包，以及含 role/content 的 JSON 或 JSONL。")
                                     .setPositiveButton("知道了", null)
                                     .show();
                             return;
@@ -397,7 +399,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }).start();
     }
 
-    private String readText(android.net.Uri uri) {
+    private byte[] readBytes(android.net.Uri uri) {
         try {
             java.io.InputStream in = getContentResolver().openInputStream(uri);
             if (in == null) return null;
@@ -406,10 +408,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             int n;
             while ((n = in.read(buf)) > 0) {
                 bo.write(buf, 0, n);
-                if (bo.size() > 40 * 1024 * 1024) break;   // 40MB 上限，防止选错文件把内存吃光
+                if (bo.size() > 64 * 1024 * 1024) break;   // 64MB 上限，防止选错文件把内存吃光
             }
             in.close();
-            return new String(bo.toByteArray(), "UTF-8");
+            return bo.toByteArray();
         } catch (Throwable t) {
             return null;
         }

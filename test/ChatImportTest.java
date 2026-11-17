@@ -9,6 +9,17 @@ public final class ChatImportTest {
         else { fail++; System.out.println("  FAIL  " + what); }
     }
 
+    /** 造一个 zip：条目名 → 内容，用来验证「DeepSeek 导出是 zip」这条路径。 */
+    static byte[] zip(String name, String text) throws Exception {
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        java.util.zip.ZipOutputStream zo = new java.util.zip.ZipOutputStream(bo);
+        zo.putNextEntry(new java.util.zip.ZipEntry(name));
+        zo.write(text.getBytes("UTF-8"));
+        zo.closeEntry();
+        zo.close();
+        return bo.toByteArray();
+    }
+
     public static void main(String[] a) throws Exception {
         System.out.println("t1 DeepSeek 导出");
         String deepseek = "{\"chat_sessions\":[{\"id\":\"s1\",\"title\":\"部署问题\"}],"
@@ -89,6 +100,29 @@ public final class ChatImportTest {
         ok("user".equals(ChatImport.mapRole("human")), "human → user");
         ok("assistant".equals(ChatImport.mapRole("AI")), "AI → assistant");
         ok("".equals(ChatImport.mapRole("narrator")), "不认识的角色返回空，由调用方跳过");
+
+        System.out.println("t10 zip 里的 DeepSeek 导出");
+        String dse = "{\"chat_sessions\":[{\"id\":\"s1\",\"title\":\"压缩包里的会话\"}],"
+                + "\"chat_messages\":[{\"chat_session_id\":\"s1\",\"role\":\"user\",\"content\":\"来自 zip\"}]}";
+        ChatImport.Result z = ChatImport.parseBytes(zip("export/chat.json", dse));
+        ok(z.sessions.size() == 1, "zip 解出 1 个会话");
+        ok(z.format.startsWith("ZIP"), "来源标为 ZIP");
+        ok("来自 zip".equals(z.sessions.get(0).messages.getJSONObject(0).optString("content")), "内容正确");
+        ok("压缩包里的会话".equals(z.sessions.get(0).title), "标题取会话表");
+
+        System.out.println("t11 zip 里没有聊天记录要报错");
+        boolean zipThrew = false;
+        try {
+            ChatImport.parseBytes(zip("readme.txt", "这不是聊天记录"));
+        } catch (Exception e) {
+            zipThrew = true;
+        }
+        ok(zipThrew, "zip 里没有聊天记录时明确报错");
+
+        System.out.println("t12 非 zip 的纯 JSON 字节仍走文本解析");
+        ChatImport.Result plain = ChatImport.parseBytes(dse.getBytes("UTF-8"));
+        ok(plain.sessions.size() == 1, "普通 json 字节也能导入");
+        ok(plain.format.contains("DeepSeek"), "仍识别为 DeepSeek");
 
         System.out.println("==== " + pass + " passed, " + fail + " failed ====");
         if (fail > 0) System.exit(1);

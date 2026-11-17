@@ -226,6 +226,8 @@ public final class MainActivity extends Activity {
 
     /** 长按消息弹出的菜单；点选项后要关掉它 */
     private android.app.Dialog nodeMenu;
+    /** 右键式小菜单（长按会话 / 分组时出现） */
+    private android.widget.PopupWindow lastMenu;
 
     /**
      * 无障碍自检：连上过、现在却掉了，就给一条可点的提示。
@@ -1512,7 +1514,7 @@ public final class MainActivity extends Activity {
                     });
                     head.setOnLongClickListener(new View.OnLongClickListener() {
                         public boolean onLongClick(View v) {
-                            showFolderMenu(groupName);
+                            showFolderMenu(groupName, v);
                             return true;
                         }
                     });
@@ -1571,7 +1573,7 @@ public final class MainActivity extends Activity {
                 });
                 item.setOnLongClickListener(new View.OnLongClickListener() {
                     public boolean onLongClick(View v) {
-                        showGroupMenu(m);
+                        showGroupMenu(m, v);
                         return true;
                     }
                 });
@@ -1616,13 +1618,11 @@ public final class MainActivity extends Activity {
         refreshDrawer();
     }
 
-    /** 长按分组：重命名 / 删除。 */
-    private void showFolderMenu(final String group) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(menuItem("重命名分组", new View.OnClickListener() {
-            public void onClick(View v) {
-                dismissDialog();
+    /** 长按分组：右键式小菜单。 */
+    private void showFolderMenu(final String group, final View anchor) {
+        List<MiniMenu.Item> items = new java.util.ArrayList<MiniMenu.Item>();
+        items.add(MiniMenu.Item.of("重命名分组", new Runnable() {
+            public void run() {
                 promptForName("重命名分组", group, new NameSink() {
                     public void done(String name) {
                         sessions.renameGroup(group, name);
@@ -1631,55 +1631,79 @@ public final class MainActivity extends Activity {
                 });
             }
         }));
-        box.addView(menuItem("删除分组", new View.OnClickListener() {
-            public void onClick(View v) {
-                dismissDialog();
+        items.add(MiniMenu.Item.of("删除分组", new Runnable() {
+            public void run() {
                 confirmDeleteGroup(group);
             }
         }));
-        nodeMenu = new AppDialog.Builder(this)
-                .setTitle(group)
-                .setView(box)
-                .setNegativeButton("取消", null)
-                .show();
+        lastMenu = MiniMenu.show(this, anchor, group, items);
     }
 
-    /** 长按会话：移动到分组 / 移出分组。 */
-    private void showGroupMenu(final SessionMeta m) {
+    /** 长按会话：弹出右键式小菜单，「移到分组」再展开三级列表。 */
+    private void showGroupMenu(final SessionMeta m, final View anchor) {
         final List<String> groups = sessions.listGroups();
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        for (int i = 0; i < groups.size(); i++) {
-            final String g = groups.get(i);
-            if (g.equals(m.group)) continue;
-            box.addView(menuItem("移到「" + g + "」", new View.OnClickListener() {
-                public void onClick(View v) {
-                    dismissDialog();
-                    sessions.setGroup(m.id, g);
-                    refreshDrawer();
-                }
-            }));
-        }
+        List<MiniMenu.Item> items = new java.util.ArrayList<MiniMenu.Item>();
+        items.add(MiniMenu.Item.of("重命名", new Runnable() {
+            public void run() {
+                promptForName("重命名会话", m.title, new NameSink() {
+                    public void done(String name) {
+                        sessions.renameSession(m.id, name);
+                        refreshDrawer();
+                    }
+                });
+            }
+        }));
+        items.add(MiniMenu.Item.sub("移到分组  \u203A", new Runnable() {
+            public void run() {
+                showMoveToGroup(m, groups, anchor);
+            }
+        }));
         if (m.group != null && m.group.length() > 0) {
-            box.addView(menuItem("移出分组", new View.OnClickListener() {
-                public void onClick(View v) {
-                    dismissDialog();
+            items.add(MiniMenu.Item.of("移出分组", new Runnable() {
+                public void run() {
                     sessions.setGroup(m.id, "");
                     refreshDrawer();
                 }
             }));
         }
-        box.addView(menuItem("新建分组并放入", new View.OnClickListener() {
-            public void onClick(View v) {
-                dismissDialog();
-                promptNewGroupFor(m);
+        items.add(MiniMenu.Item.sep());
+        items.add(MiniMenu.Item.of("删除会话", new Runnable() {
+            public void run() {
+                confirmDelete(m);
             }
         }));
-        nodeMenu = new AppDialog.Builder(this)
-                .setTitle(m.title == null || m.title.length() == 0 ? "新对话" : m.title)
-                .setView(box)
-                .setNegativeButton("取消", null)
-                .show();
+        lastMenu = MiniMenu.show(this, anchor, m.title, items);
+    }
+
+    /** 三级菜单：列出所有分组，最后一项是新建分组并移入。 */
+    private void showMoveToGroup(final SessionMeta m, List<String> groups, final View anchor) {
+        List<MiniMenu.Item> items = new java.util.ArrayList<MiniMenu.Item>();
+        for (int i = 0; i < groups.size(); i++) {
+            final String g = groups.get(i);
+            if (g.equals(m.group)) {
+                items.add(MiniMenu.Item.dim(g + "  \u2713"));
+            } else {
+                items.add(MiniMenu.Item.of(g, new Runnable() {
+                    public void run() {
+                        sessions.setGroup(m.id, g);
+                        refreshDrawer();
+                    }
+                }));
+            }
+        }
+        if (!items.isEmpty()) items.add(MiniMenu.Item.sep());
+        items.add(MiniMenu.Item.of("新建分组并移入…", new Runnable() {
+            public void run() {
+                promptForName("新建分组", "", new NameSink() {
+                    public void done(String name) {
+                        sessions.addGroup(name);
+                        sessions.setGroup(m.id, name);
+                        refreshDrawer();
+                    }
+                });
+            }
+        }));
+        lastMenu = MiniMenu.show(this, anchor, "移到分组", items);
     }
 
     private void promptNewGroup() {
@@ -1725,7 +1749,12 @@ public final class MainActivity extends Activity {
         et.setText(preset);
         et.setSingleLine(true);
         et.setHint("分组名");
-        et.setPadding(dp(18), dp(10), dp(18), dp(10));
+        // 不显式设颜色的话，EditText 用系统默认的深色字，深色模式下就是黑底黑字
+        et.setTextColor(Theme.text());
+        et.setHintTextColor(Theme.caption());
+        et.setTextSize(15);
+        et.setPadding(dp(14), dp(12), dp(14), dp(12));
+        et.setBackground(Theme.round(Theme.surface2(), Theme.R_LG, this));
         new AppDialog.Builder(this)
                 .setTitle(title)
                 .setView(et)
