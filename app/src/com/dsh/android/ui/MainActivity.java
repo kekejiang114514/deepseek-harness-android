@@ -50,6 +50,8 @@ public final class MainActivity extends Activity {
     private AgentLoop loop;
 
     private LinearLayout messages;
+    /** 节点 id → 这条消息画出来的视图（「选择文本」用它就地进入选择模式） */
+    private final java.util.Map<String, View> nodeViews = new java.util.HashMap<String, View>();
     private ScrollView messageScroll;
     private EditText input;
     private FrameLayout sendBtn;
@@ -1911,12 +1913,19 @@ public final class MainActivity extends Activity {
             // 用户消息的操作走长按菜单，位置不再跳动。
             boolean rendered = messages.getChildCount() > before;
             if (nodeId.length() > 0) {
+                if (rendered) nodeViews.put(nodeId, messages.getChildAt(before));
                 if ("assistant".equals(role) && rendered) {
-                    addActionRow(nodeId, role, sibs);
-                } else if ("user".equals(role) && rendered && sibs != null && sibs.size() > 1) {
-                    // 提问本身分过支：只补一个小小的 ‹ n/m ›，不挂整排按钮，
-                    // 否则又会出现「按钮夹在提问和回答之间」的观感。
-                    addBranchSwitcherCompact(nodeId, sibs);
+                    addActionRow(nodeId, role);
+                }
+                // 分叉点在这里：这条消息有多个子节点，才放切换条。
+                // 挂在分叉点上而不是挂在各个兄弟上，位置就固定了，
+                // 也不会在提问和回答之间来回跳。
+                java.util.List<String> kids = com.dsh.android.kernel.Conversation
+                        .childrenOf(allNodes, nodeId);
+                if (rendered && kids.size() > 1) {
+                    String nextOnPath = (i + 1 < hist.length())
+                            ? hist.optJSONObject(i + 1).optString("id", "") : "";
+                    addForkSwitcher(kids, nextOnPath);
                 }
                 for (int k = before; k < messages.getChildCount(); k++) {
                     attachBranchMenu(messages.getChildAt(k), nodeId);
@@ -1929,42 +1938,16 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * 每条消息下方的操作行：图标按钮，不是文字。
+     * 助手消息下方的操作行：图标按钮。
      *
-     * <p>每个按钮都带一块淡色圆角底，这样即使字形路径有问题，
-     * 按钮本身仍然可见、可点，不会整行消失。
+     * <p>分支切换不在这里——它挂在分叉点上（见 addForkSwitcher），
+     * 否则同一条分支上的每条消息都带一个 1/2，位置自然飘。
      */
-    private void addActionRow(final String nodeId, String role, final java.util.List<String> sibs) {
+    private void addActionRow(final String nodeId, String role) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(2), dp(2), dp(2), dp(8));
-
-        if (sibs != null && sibs.size() > 1) {
-            final int idx = sibs.indexOf(nodeId);
-            if (idx >= 0) {
-                row.addView(iconButton(IconView.CHEVRON_LEFT, idx > 0, new View.OnClickListener() {
-                    public void onClick(View v) {
-                        if (idx > 0) jumpBranch(sibs.get(idx - 1));
-                    }
-                }));
-                TextView label = new TextView(this);
-                label.setText((idx + 1) + "/" + sibs.size());
-                label.setTextSize(11);
-                label.setTextColor(Theme.text2());
-                label.setPadding(dp(2), 0, dp(2), 0);
-                row.addView(label);
-                row.addView(iconButton(IconView.CHEVRON_RIGHT, idx < sibs.size() - 1,
-                        new View.OnClickListener() {
-                            public void onClick(View v) {
-                                if (idx < sibs.size() - 1) jumpBranch(sibs.get(idx + 1));
-                            }
-                        }));
-                View gap = new View(this);
-                gap.setLayoutParams(new LinearLayout.LayoutParams(dp(6), 1));
-                row.addView(gap);
-            }
-        }
 
         row.addView(iconButton(IconView.BRANCH, true, new View.OnClickListener() {
             public void onClick(View v) { startBranchFrom(nodeId); }
@@ -1972,36 +1955,40 @@ public final class MainActivity extends Activity {
         row.addView(iconButton(IconView.COPY, true, new View.OnClickListener() {
             public void onClick(View v) { copyNode(nodeId); }
         }));
-        if ("assistant".equals(role)) {
-            row.addView(iconButton(IconView.REFRESH, true, new View.OnClickListener() {
-                public void onClick(View v) { regenerateNode(nodeId); }
-            }));
-        }
+        row.addView(iconButton(IconView.REFRESH, true, new View.OnClickListener() {
+            public void onClick(View v) { regenerateNode(nodeId); }
+        }));
         messages.addView(row);
     }
 
-    /** 只有分支切换的紧凑条，用在用户消息下方。 */
-    private void addBranchSwitcherCompact(final String nodeId, final java.util.List<String> sibs) {
-        final int idx = sibs.indexOf(nodeId);
-        if (idx < 0) return;
+    /**
+     * 分叉点上的切换条：`‹ 1/3 ›`。
+     *
+     * <p>它只出现在「有多条子分支」的那条消息下面，因此位置固定；
+     * 左右切换的是子分支，切过去会落到该分支的末端。
+     */
+    private void addForkSwitcher(final java.util.List<String> kids, String nextOnPath) {
+        final int idx = Math.max(0, kids.indexOf(nextOnPath));
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(4), dp(0), dp(2), dp(6));
+        row.setPadding(dp(2), dp(0), dp(2), dp(8));
+
         row.addView(iconButton(IconView.CHEVRON_LEFT, idx > 0, new View.OnClickListener() {
             public void onClick(View v) {
-                if (idx > 0) jumpBranch(sibs.get(idx - 1));
+                if (idx > 0) jumpBranch(kids.get(idx - 1));
             }
         }));
         TextView label = new TextView(this);
-        label.setText((idx + 1) + "/" + sibs.size());
+        label.setText("分支 " + (idx + 1) + "/" + kids.size());
         label.setTextSize(11);
         label.setTextColor(Theme.text2());
+        label.setPadding(dp(2), 0, dp(2), 0);
         row.addView(label);
-        row.addView(iconButton(IconView.CHEVRON_RIGHT, idx < sibs.size() - 1,
+        row.addView(iconButton(IconView.CHEVRON_RIGHT, idx < kids.size() - 1,
                 new View.OnClickListener() {
                     public void onClick(View v) {
-                        if (idx < sibs.size() - 1) jumpBranch(sibs.get(idx + 1));
+                        if (idx < kids.size() - 1) jumpBranch(kids.get(idx + 1));
                     }
                 }));
         messages.addView(row);
@@ -2032,28 +2019,39 @@ public final class MainActivity extends Activity {
         return box;
     }
 
-    /** 选择文本：交给系统选择器（可拖动选择手柄、复制）。 */
+    /**
+     * 选择文本：直接在原文里进入系统选择模式，不弹对话框。
+     *
+     * <p>做法是把这条消息里的 TextView 变成可选中，再触发一次长按——
+     * 系统的选择手柄与复制菜单就出现了，和你长按气泡本身的效果一致。
+     */
     private void selectText(String nodeId) {
-        JSONArray all = sessions.loadHistory(sessions.currentId());
-        int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
-        if (i < 0) return;
-        String content = all.optJSONObject(i).optString("content", "");
-        if (content.length() == 0) return;
+        View root = nodeViews.get(nodeId);
+        android.widget.TextView tv = findTextView(root);
+        if (tv == null) {
+            Snack.show(this, "这条消息没有可选择的文字");
+            return;
+        }
+        tv.setTextIsSelectable(true);
+        tv.requestFocus();
+        tv.performLongClick();
+    }
 
-        android.widget.TextView tv = new android.widget.TextView(this);
-        tv.setText(content);
-        tv.setTextSize(15);
-        tv.setTextColor(Theme.text());
-        tv.setTextIsSelectable(true);          // 系统原生的选择手柄与复制
-        tv.setPadding(dp(16), dp(12), dp(16), dp(12));
-
-        android.widget.ScrollView sv = new android.widget.ScrollView(this);
-        sv.addView(tv);
-        new AppDialog.Builder(this)
-                .setTitle("选择文本")
-                .setView(sv)
-                .setPositiveButton("关闭", null)
-                .show();
+    /** 在视图树里找第一个有文字的 TextView。 */
+    private android.widget.TextView findTextView(View v) {
+        if (v == null) return null;
+        if (v instanceof android.widget.TextView) {
+            android.widget.TextView t = (android.widget.TextView) v;
+            if (t.getText() != null && t.getText().length() > 0) return t;
+        }
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.widget.TextView t = findTextView(g.getChildAt(i));
+                if (t != null) return t;
+            }
+        }
+        return null;
     }
 
     /** 切到某条分支：leaf 移到它的末端后整页重绘。 */
