@@ -72,8 +72,13 @@ public final class Icons {
     /** 分支：一条线在中间分叉成两条。 */
     public static final String BRANCH = "M3 12h7l4-6h7M10 12l4 6h7";
 
-    /** 重新生成：圆形箭头（贝塞尔近似圆，不用圆弧指令）。 */
-    public static final String REFRESH = "M12 5C15.9 5 19 8.1 19 12C19 15.9 15.9 19 12 19C8.1 19 5 15.9 5 12C5 8.1 8.1 5 12 5M19 3.5v5h-5";
+    /**
+     * 重新生成：顺时针环形箭头。
+     *
+     * <p>用圆弧指令（A）而不是我自己拼的贝塞尔近似——上一版手拼的曲线
+     * 不对称，看起来像个缺口的圆圈加一根钩子。
+     */
+    public static final String REFRESH = "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5";
 
     /** 分组：文件夹。 */
     public static final String FOLDER = "M3 7c0-1.1.9-2 2-2h4l2 2h8c1.1 0 2 .9 2 2v9c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2z";

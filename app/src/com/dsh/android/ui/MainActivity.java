@@ -2777,7 +2777,10 @@ public final class MainActivity extends Activity {
         boolean device = tools.isDeviceScope();
         boolean a11y = tools.isA11yEnabled() && A11yService.isReady();
         StringBuilder sb = new StringBuilder();
-        sb.append("你是运行在 Android 手机上的 AI 助手 DShAndroid。用简洁准确的中文回答。\n\n");
+        // 跟随用户的语言：写「用中文回答」会让英文提问也回中文
+        sb.append("你是运行在 Android 手机上的 AI 助手 DShAndroid。"
+                + "用简洁准确的语言回答，并跟随用户当前使用的语言："
+                + "用户用英文提问就用英文回答，用中文提问才用中文。\n\n");
         sb.append("【文件作用域】当前是")
           .append(device ? "「全局」模式，可访问整个设备文件" : "「工作区」模式，只能访问应用私有工作区")
           .append("。用 fs.* 工具读写；")
