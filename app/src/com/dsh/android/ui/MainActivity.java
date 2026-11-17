@@ -1903,11 +1903,21 @@ public final class MainActivity extends Activity {
                     shown++;
                 }
             }
-            // 只有这条消息真的画出了内容，才在它下面加操作行；
-            // 否则会出现「上面没有文字，下面却挂着一排按钮」。
+            // 操作行只挂在助手消息下面，而且必须是这条消息真的画出了内容。
+            //
+            // 之前两个问题都出在这里：
+            //  · 用户消息下面也挂一行，于是那一行夹在提问和回答之间，看起来「跑到上面去了」；
+            //  · 空消息（只有工具轮）也挂一行，就出现「没有文字的地方有一排按钮」。
+            // 用户消息的操作走长按菜单，位置不再跳动。
             boolean rendered = messages.getChildCount() > before;
-            if (nodeId.length() > 0 && (rendered || (sibs != null && sibs.size() > 1))) {
-                addActionRow(nodeId, role, sibs);
+            if (nodeId.length() > 0) {
+                if ("assistant".equals(role) && rendered) {
+                    addActionRow(nodeId, role, sibs);
+                } else if ("user".equals(role) && rendered && sibs != null && sibs.size() > 1) {
+                    // 提问本身分过支：只补一个小小的 ‹ n/m ›，不挂整排按钮，
+                    // 否则又会出现「按钮夹在提问和回答之间」的观感。
+                    addBranchSwitcherCompact(nodeId, sibs);
+                }
                 for (int k = before; k < messages.getChildCount(); k++) {
                     attachBranchMenu(messages.getChildAt(k), nodeId);
                 }
@@ -1967,6 +1977,33 @@ public final class MainActivity extends Activity {
                 public void onClick(View v) { regenerateNode(nodeId); }
             }));
         }
+        messages.addView(row);
+    }
+
+    /** 只有分支切换的紧凑条，用在用户消息下方。 */
+    private void addBranchSwitcherCompact(final String nodeId, final java.util.List<String> sibs) {
+        final int idx = sibs.indexOf(nodeId);
+        if (idx < 0) return;
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(4), dp(0), dp(2), dp(6));
+        row.addView(iconButton(IconView.CHEVRON_LEFT, idx > 0, new View.OnClickListener() {
+            public void onClick(View v) {
+                if (idx > 0) jumpBranch(sibs.get(idx - 1));
+            }
+        }));
+        TextView label = new TextView(this);
+        label.setText((idx + 1) + "/" + sibs.size());
+        label.setTextSize(11);
+        label.setTextColor(Theme.text2());
+        row.addView(label);
+        row.addView(iconButton(IconView.CHEVRON_RIGHT, idx < sibs.size() - 1,
+                new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (idx < sibs.size() - 1) jumpBranch(sibs.get(idx + 1));
+                    }
+                }));
         messages.addView(row);
     }
 
