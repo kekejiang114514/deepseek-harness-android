@@ -124,6 +124,71 @@ public final class ChatImportTest {
         ok(plain.sessions.size() == 1, "普通 json 字节也能导入");
         ok(plain.format.contains("DeepSeek"), "仍识别为 DeepSeek");
 
+        System.out.println("t13 未知结构：通用扫描要能认出来（sender/text 命名）");
+        String unknown = "{\"data\":{\"conversations\":[{\"name\":\"导出测试\",\"items\":["
+                + "{\"sender\":\"human\",\"text\":\"你好\"},"
+                + "{\"sender\":\"ai\",\"text\":\"你好，有什么可以帮你\"}]}]}}";
+        ChatImport.Result u = ChatImport.parse(unknown);
+        ok(u.sessions.size() == 1, "递归扫描找到 1 个会话");
+        ok("导出测试".equals(u.sessions.get(0).title), "标题取最近的 name 字段");
+        ok(u.sessions.get(0).messages.length() == 2, "2 条消息");
+        ok("user".equals(u.sessions.get(0).messages.getJSONObject(0).optString("role")), "human → user");
+
+        System.out.println("t14 未知结构：from/body 命名也能认");
+        String unknown2 = "[{\"topic\":\"另一份导出\",\"lines\":["
+                + "{\"from\":\"user\",\"body\":\"a\"},{\"from\":\"assistant\",\"body\":\"b\"}]}]";
+        ChatImport.Result u2 = ChatImport.parse(unknown2);
+        ok(u2.sessions.size() == 1, "找到 1 个会话");
+        ok("另一份导出".equals(u2.sessions.get(0).title), "标题取 topic");
+
+        System.out.println("t15 真的认不出时，报错要带上结构");
+        boolean shapeThrew = false;
+        String shapeMsg = "";
+        try {
+            ChatImport.parse("{\"foo\":1,\"bar\":{\"baz\":2}}");
+        } catch (Exception e) {
+            shapeThrew = true;
+            shapeMsg = e.getMessage() == null ? "" : e.getMessage();
+        }
+        ok(shapeThrew, "抛异常");
+        ok(shapeMsg.contains("foo") && shapeMsg.contains("bar"), "报错里列出顶层字段名");
+
+        System.out.println("t16 DeepSeek 导出结构（fragments / parent_id / THINK）");
+        String ds = "{\"id\":\"s1\",\"title\":\"带分支的会话\",\"current_message_id\":4,"
+                + "\"messages\":["
+                + "{\"id\":1,\"parent_id\":null,\"role\":\"USER\",\"fragments\":["
+                + "{\"type\":\"REQUEST\",\"content\":\"问题一\"}]},"
+                + "{\"id\":2,\"parent_id\":1,\"role\":\"ASSISTANT\",\"fragments\":["
+                + "{\"type\":\"THINK\",\"content\":\"想一想\"},"
+                + "{\"type\":\"TOOL_SEARCH\",\"queries\":[\"q\"]},"
+                + "{\"type\":\"RESPONSE\",\"content\":\"回答一\"},"
+                + "{\"type\":\"CONTENT_RISK\",\"content\":\"AI 生成\"}]},"
+                + "{\"id\":3,\"parent_id\":2,\"role\":\"USER\",\"fragments\":["
+                + "{\"type\":\"REQUEST\",\"content\":\"问题二\"}]},"
+                + "{\"id\":4,\"parent_id\":3,\"role\":\"ASSISTANT\",\"fragments\":["
+                + "{\"type\":\"RESPONSE\",\"content\":\"回答二\"}]}]}";
+        ChatImport.Result dr = ChatImport.parse(ds);
+        ok(dr.sessions.size() == 1, "识别为 1 个会话");
+        ok("DeepSeek 导出".equals(dr.format), "来源记为 DeepSeek 导出");
+        ok("带分支的会话".equals(dr.sessions.get(0).title), "标题正确");
+        org.json.JSONArray dm = dr.sessions.get(0).messages;
+        ok(dm.length() == 4, "4 条消息（工具轮与免责声明不算）");
+        ok("user".equals(dm.getJSONObject(0).optString("role")), "USER → user");
+        ok("回答一".equals(dm.getJSONObject(1).optString("content")), "正文取 RESPONSE");
+        ok("想一想".equals(dm.getJSONObject(1).optString("reasoning")), "思考取 THINK");
+        ok("m1".equals(dm.getJSONObject(1).optString("parent")), "parent_id 转成父节点");
+        ok(dm.getJSONObject(1).optString("content").indexOf("AI 生成") < 0, "免责声明不进正文");
+
+        System.out.println("t17 父节点被跳过的消息要接到上一条，不能断链");
+        String orphan = "{\"title\":\"断链\",\"messages\":["
+                + "{\"id\":1,\"parent_id\":null,\"role\":\"USER\",\"fragments\":[{\"type\":\"REQUEST\",\"content\":\"a\"}]},"
+                + "{\"id\":2,\"parent_id\":1,\"role\":\"ASSISTANT\",\"fragments\":[{\"type\":\"TOOL_OPEN\",\"url\":\"x\"}]},"
+                + "{\"id\":3,\"parent_id\":2,\"role\":\"USER\",\"fragments\":[{\"type\":\"REQUEST\",\"content\":\"c\"}]}]}";
+        ChatImport.Result or = ChatImport.parse(orphan);
+        org.json.JSONArray om = or.sessions.get(0).messages;
+        ok(om.length() == 2, "只有工具活动的消息被丢掉");
+        ok("m1".equals(om.getJSONObject(1).optString("parent")), "断掉的父节点接到上一条");
+
         System.out.println("==== " + pass + " passed, " + fail + " failed ====");
         if (fail > 0) System.exit(1);
     }

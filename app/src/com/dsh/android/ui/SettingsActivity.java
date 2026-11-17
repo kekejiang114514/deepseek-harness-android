@@ -232,9 +232,10 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             public void onClick(View v) { pickImport(); }
         }));
         importCard.addView(divider());
-        importCard.addView(hintRow("支持 DeepSeek、ChatGPT、Claude 导出的文件，"
-                + "以及本应用自己导出的包。这些服务的导出多为 zip，选 zip 即可，"
-                + "应用会自己解压并挑出里面的聊天记录，不需要你先解压。"
+        importCard.addView(hintRow("直接选导出的 zip 即可，不用先解压。\n"
+                + "已支持：DeepSeek 导出（chat_sessions 内的会话文件）、ChatGPT、"
+                + "Claude、本应用的导出包，以及任何「带角色与正文的消息列表」的 JSON。\n"
+                + "思考过程会一并保留；工具调用记录与免责声明不会导入。\n"
                 + "导入总是新建会话，不会覆盖现有记录。"));
         importCard.addView(divider());
         importCard.addView(actionRow("导出全部对话记录", new View.OnClickListener() {

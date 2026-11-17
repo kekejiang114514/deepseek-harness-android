@@ -34,6 +34,14 @@ public final class ChatImport {
         public String title = "";
         public String group = "";
         public JSONArray messages = new JSONArray();
+
+        public Imported() {}
+
+        public Imported(String title, String group, JSONArray messages) {
+            this.title = title == null ? "" : title;
+            this.group = group == null ? "" : group;
+            this.messages = messages == null ? new JSONArray() : messages;
+        }
     }
 
     /** 一次导入的结果。 */
@@ -151,6 +159,12 @@ public final class ChatImport {
     // ------------------------------------------------------------ 各种结构
 
     private static Result parseObject(JSONObject o, Result r) throws Exception {
+        // 必须排在「有 messages 就当通用格式」之前：DeepSeek 的会话文件
+        // 也有 messages 字段，但正文在 fragments 里，按通用格式读会是空的。
+        if (looksLikeDeepSeekSession(o)) {
+            parseDeepSeekSession(o, r);
+            return r;
+        }
         if (o.has("app") && "DShAndroid".equals(o.optString("app"))) return parseOwn(o, r);
         if (o.has("chat_sessions") || o.has("chat_messages")) return parseDeepSeek(o, r);
         if (o.has("conversations")) {
@@ -178,7 +192,226 @@ public final class ChatImport {
             JSONArray ss = o.optJSONArray("sessions");
             if (ss != null) return parseArray(ss, r);
         }
-        throw new Exception("认不出这种 JSON 结构，没有找到聊天消息");
+        // 已知格式都不匹配：退回通用扫描。导出的结构会变，
+        // 这里不强求认识它的字段名，只找「一堆带角色和正文的对象」。
+        Result generic = new Result();
+        generic.format = "通用扫描";
+        scan(o, "", generic);
+        if (!generic.sessions.isEmpty()) return generic;
+
+        throw new Exception("认不出这种 JSON 结构。这份文件的结构是："
+                + describe(o) + "\n\n没有任何数组包含带 role/sender 与 content/text 的对象。");
+    }
+
+    /** 是否是 DeepSeek 导出的单个会话文件。 */
+    static boolean looksLikeDeepSeekSession(JSONObject o) {
+        JSONArray ms = o.optJSONArray("messages");
+        if (ms == null || ms.length() == 0) return false;
+        JSONObject m0 = ms.optJSONObject(0);
+        return m0 != null && m0.optJSONArray("fragments") != null;
+    }
+
+    /**
+     * 解析 DeepSeek 导出的会话文件。
+     *
+     * <p>消息正文不在 content 里，而在 fragments 数组：
+     * REQUEST = 用户提问，RESPONSE = 助手回答，THINK = 思考过程（对应 reasoning），
+     * TOOL_SEARCH / TOOL_OPEN / FILE / READ_LINK = 工具活动，没有正文，跳过，
+     * CONTENT_RISK = 免责声明，也跳过。parent_id 构成分支，这里原样保留。
+     */
+    static void parseDeepSeekSession(JSONObject o, Result r) {
+        JSONArray ms = o.optJSONArray("messages");
+        JSONArray ours = new JSONArray();
+        java.util.Set<String> ids = new java.util.LinkedHashSet<String>();
+        try {
+            for (int i = 0; i < ms.length(); i++) {
+                JSONObject m = ms.optJSONObject(i);
+                if (m == null) continue;
+                String role = "USER".equalsIgnoreCase(m.optString("role")) ? "user" : "assistant";
+                StringBuilder text = new StringBuilder();
+                StringBuilder think = new StringBuilder();
+                JSONArray frs = m.optJSONArray("fragments");
+                if (frs != null) {
+                    for (int k = 0; k < frs.length(); k++) {
+                        JSONObject fr = frs.optJSONObject(k);
+                        if (fr == null) continue;
+                        String type = fr.optString("type", "");
+                        String content = fr.optString("content", "");
+                        if (content.length() == 0) continue;
+                        if ("REQUEST".equals(type) || "RESPONSE".equals(type)) {
+                            if (text.length() > 0) text.append('\n');
+                            text.append(content);
+                        } else if ("THINK".equals(type)) {
+                            if (think.length() > 0) think.append('\n');
+                            think.append(content);
+                        }
+                    }
+                }
+                // 只有工具活动、没有正文的消息不保留，否则会出现空气泡
+                if (text.length() == 0) continue;
+
+                JSONObject one = new JSONObject();
+                one.put("role", role);
+                one.put("content", text.toString());
+                if (think.length() > 0) one.put("reasoning", think.toString());
+                String mid = "m" + m.optString("id");
+                one.put("id", mid);
+                ids.add(mid);
+                ours.put(one);
+            }
+            // 第二遍补 parent：parent 可能指向被跳过的消息（例如纯工具轮），
+            // 那样会断链——断链就接到上一条保留下来的消息上。
+            String prev = "";
+            for (int i = 0; i < ours.length(); i++) {
+                JSONObject one = ours.getJSONObject(i);
+                JSONObject src = null;
+                String mid = one.optString("id");
+                for (int k = 0; k < ms.length(); k++) {
+                    JSONObject m = ms.optJSONObject(k);
+                    if (m != null && ("m" + m.optString("id")).equals(mid)) { src = m; break; }
+                }
+                String parent = "";
+                if (src != null && !src.isNull("parent_id")) {
+                    String pid = "m" + src.optString("parent_id");
+                    if (ids.contains(pid)) parent = pid;
+                }
+                if (parent.length() == 0 && prev.length() > 0) parent = prev;
+                if (parent.length() > 0) one.put("parent", parent);
+                prev = mid;
+            }
+            String title = o.optString("title", "");
+            r.sessions.add(new Imported(title, "", ours));
+            r.format = "DeepSeek 导出";
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * 递归扫描任意 JSON，把「看起来像消息列表的数组」收成会话。
+     *
+     * <p>不依赖具体字段名：角色取 role / sender / author.role / from，
+     * 正文取 content（字符串或 {parts|text}）/ text / message / body。
+     * 这样即使导出格式改版，只要还是「消息列表」就能导入。
+     */
+    private static void scan(Object node, String inheritedTitle, Result out) {
+        if (node instanceof JSONArray) {
+            JSONArray arr = (JSONArray) node;
+            if (looksLikeMessages(arr)) {
+                String title = inheritedTitle;
+                JSONArray msgs = new JSONArray();
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject m = arr.optJSONObject(i);
+                    if (m == null) continue;
+                    String role = roleOf(m);
+                    String text = textOf(m);
+                    if (role.length() == 0 || text.length() == 0) continue;
+                    JSONObject one = new JSONObject();
+                    try {
+                        one.put("role", role);
+                        one.put("content", text);
+                        String th = firstString(m, "reasoning", "thinking", "reasoning_content", "cot");
+                        if (th.length() > 0) one.put("reasoning", th);
+                    } catch (Exception ignored) {}
+                    msgs.put(one);
+                }
+                if (msgs.length() > 0) {
+                    out.sessions.add(new Imported(
+                            title.length() > 0 ? title : "导入的对话", "", msgs));
+                }
+                return;
+            }
+            for (int i = 0; i < arr.length(); i++) scan(arr.opt(i), inheritedTitle, out);
+            return;
+        }
+        if (node instanceof JSONObject) {
+            JSONObject o = (JSONObject) node;
+            String title = firstString(o, "title", "name", "subject", "topic", "session_title");
+            if (title.length() == 0) title = inheritedTitle;
+            java.util.Iterator<String> it = o.keys();
+            while (it.hasNext()) {
+                String k = it.next();
+                scan(o.opt(k), title, out);
+            }
+        }
+    }
+
+    /** 这个数组是不是一串消息。宽松判断：过半元素带角色与正文。 */
+    private static boolean looksLikeMessages(JSONArray arr) {
+        if (arr == null || arr.length() == 0) return false;
+        int hit = 0;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject m = arr.optJSONObject(i);
+            if (m == null) continue;
+            if (roleOf(m).length() > 0 && textOf(m).length() > 0) hit++;
+        }
+        return hit > 0 && hit * 2 >= arr.length();
+    }
+
+    private static String roleOf(JSONObject m) {
+        String r = firstString(m, "role", "sender", "from", "speaker", "author_role");
+        if (r.length() == 0) {
+            JSONObject a = m.optJSONObject("author");
+            if (a != null) r = a.optString("role", "");
+        }
+        return mapRole(r);
+    }
+
+    private static String textOf(JSONObject m) {
+        String direct = firstString(m, "content", "text", "message", "body", "msg");
+        if (direct.length() > 0) return direct;
+        Object c = m.opt("content");
+        if (c instanceof JSONObject) {
+            JSONObject co = (JSONObject) c;
+            String t = co.optString("text", "");
+            if (t.length() > 0) return t;
+            JSONArray parts = co.optJSONArray("parts");
+            if (parts != null) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < parts.length(); i++) {
+                    String p = parts.optString(i, "");
+                    if (p.length() > 0) sb.append(p);
+                }
+                return sb.toString();
+            }
+        }
+        return "";
+    }
+
+    private static String firstString(JSONObject o, String... keys) {
+        for (int i = 0; i < keys.length; i++) {
+            Object v = o.opt(keys[i]);
+            if (v instanceof String && ((String) v).length() > 0) return (String) v;
+        }
+        return "";
+    }
+
+    /** 出错时把顶层结构说出来，方便定位是哪一种导出格式。 */
+    private static String describe(JSONObject o) {
+        StringBuilder sb = new StringBuilder();
+        java.util.Iterator<String> it = o.keys();
+        int n = 0;
+        while (it.hasNext() && n < 8) {
+            String k = it.next();
+            Object v = o.opt(k);
+            sb.append("\n· ").append(k).append(" = ");
+            if (v instanceof JSONArray) sb.append("数组(").append(((JSONArray) v).length()).append(")");
+            else if (v instanceof JSONObject) sb.append("对象{").append(keysOf((JSONObject) v)).append("}");
+            else sb.append(String.valueOf(v).length() > 24
+                        ? String.valueOf(v).substring(0, 24) + "…" : String.valueOf(v));
+            n++;
+        }
+        return sb.toString();
+    }
+
+    private static String keysOf(JSONObject o) {
+        StringBuilder sb = new StringBuilder();
+        java.util.Iterator<String> it = o.keys();
+        int n = 0;
+        while (it.hasNext() && n < 6) {
+            if (sb.length() > 0) sb.append(",");
+            sb.append(it.next());
+            n++;
+        }
+        return sb.toString();
     }
 
     private static Result parseArray(JSONArray arr, Result r) throws Exception {
@@ -209,6 +442,11 @@ public final class ChatImport {
             if (out.sessions.isEmpty()) throw new Exception("这份文件里没有可导入的消息");
             return out;
         }
+        // 数组里的结构没见过：同样退回通用扫描，再不行才报错
+        Result generic = new Result();
+        generic.format = "通用扫描";
+        scan(arr, "", generic);
+        if (!generic.sessions.isEmpty()) return generic;
         throw new Exception("认不出这种数组结构");
     }
 
