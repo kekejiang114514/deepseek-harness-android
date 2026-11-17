@@ -697,6 +697,11 @@ public final class MainActivity extends Activity {
         final String curModel = currentModel();
         final int activeIdx = ps.activeIndex();
 
+        // 模型单独放进一个限高的滚动列表：模型多时只在这里滚动，
+        // 弹层其余部分（强度、文件范围）位置不变。
+        LinearLayout modelList = new LinearLayout(this);
+        modelList.setOrientation(LinearLayout.VERTICAL);
+
         boolean missingCache = false;
         for (int i = 0; i < ps.items().size(); i++) {
             final int idx = i;
@@ -705,7 +710,7 @@ public final class MainActivity extends Activity {
 
             TextView head = popupLabel(pf.name == null || pf.name.length() == 0 ? "未命名" : pf.name);
             if (activeProfile) head.setTextColor(Theme.accent());
-            box.addView(head);
+            modelList.addView(head);
 
             java.util.List<String> models = cachedModelsFor(pf.baseUrl);
             if (models.isEmpty()) {
@@ -715,13 +720,13 @@ public final class MainActivity extends Activity {
                 pending.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) { fetchModelsFor(idx); }
                 });
-                box.addView(pending);
+                modelList.addView(pending);
                 continue;
             }
             for (int k = 0; k < models.size(); k++) {
                 final String m = models.get(k);
                 boolean on = activeProfile && m.equals(curModel);
-                box.addView(popupRow(m, on, new View.OnClickListener() {
+                modelList.addView(popupRow(m, on, new View.OnClickListener() {
                     public void onClick(View v) {
                         ps.setActive(idx);
                         ps.active().model = m;
@@ -732,6 +737,14 @@ public final class MainActivity extends Activity {
                 }));
             }
         }
+
+        // 包进限高滚动容器
+        ScrollCap modelScroll = new ScrollCap(this);
+        modelScroll.setVerticalScrollBarEnabled(true);
+        modelScroll.setMaxHeight(Math.max(dp(160),
+                Math.round(getResources().getDisplayMetrics().heightPixels * 0.32f)));
+        modelScroll.addView(modelList);
+        box.addView(modelScroll);
 
         box.addView(popupRow("管理配置…", false, new View.OnClickListener() {
             public void onClick(View v) {
