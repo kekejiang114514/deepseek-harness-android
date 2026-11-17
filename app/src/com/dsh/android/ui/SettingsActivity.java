@@ -114,6 +114,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         Theme.init(this);
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Theme.bg()));
         sp = getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
+        // 允许调用方指定打开哪一页（聊天页的「管理配置」直接落到接口页）
+        int req = getIntent() == null ? -1 : getIntent().getIntExtra("page", -1);
+        if (req >= 0) page = req;
         if (savedPage >= 0) {
             page = savedPage;
             savedPage = -1;
@@ -651,6 +654,97 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         super.onBackPressed();
     }
 
+    /**
+     * 编辑 / 新增一份配置。
+     *
+     * @param idx 已有配置的下标；传 -1 表示新增
+     */
+    private void editProfile(final com.dsh.android.kernel.SessionStore store,
+                             final com.dsh.android.kernel.Profiles profiles, final int idx) {
+        final boolean isNew = idx < 0;
+        final com.dsh.android.kernel.Profiles.Profile src =
+                isNew ? new com.dsh.android.kernel.Profiles.Profile("", C.DEFAULT_BASE_URL, "", "", "medium")
+                      : profiles.get(idx).copy();
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(6), dp(18), dp(6));
+
+        final EditText etName = fieldInput(src.name, false, "配置名称，例如「官方」「中转」");
+        final EditText etBase = fieldInput(src.baseUrl, false, C.DEFAULT_BASE_URL);
+        final EditText etKey = fieldInput(src.apiKey, true, "sk-...");
+        final EditText etModel = fieldInput(src.model, false, "deepseek-v4-pro");
+
+        box.addView(fieldLabel("名称"));
+        box.addView(etName);
+        box.addView(fieldLabel("接口地址"));
+        box.addView(etBase);
+
+        // 预设地址：点一下填进地址框，仍可继续改
+        LinearLayout presets = new LinearLayout(this);
+        presets.setOrientation(LinearLayout.HORIZONTAL);
+        presets.setPadding(0, dp(6), 0, dp(2));
+        for (int i = 0; i < ENDPOINT_PRESETS.length; i++) {
+            final String label = ENDPOINT_PRESETS[i][0];
+            final String url = ENDPOINT_PRESETS[i][1];
+            TextView chip = new TextView(this);
+            chip.setText(label);
+            chip.setTextSize(11);
+            chip.setTextColor(Theme.link());
+            chip.setPadding(dp(8), dp(5), dp(8), dp(5));
+            chip.setBackground(Theme.round(Theme.surface2(), Theme.R_SM, this));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.rightMargin = dp(6);
+            chip.setLayoutParams(lp);
+            chip.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    etBase.setText(url);
+                    if (etName.getText().toString().trim().length() == 0) etName.setText(label);
+                }
+            });
+            presets.addView(chip);
+        }
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
+        hs.setHorizontalScrollBarEnabled(false);
+        hs.addView(presets);
+        box.addView(hs);
+
+        box.addView(fieldLabel("API Key"));
+        box.addView(etKey);
+        box.addView(fieldLabel("模型"));
+        box.addView(etModel);
+
+        new AppDialog.Builder(this)
+                .setTitle(isNew ? "新增配置" : "编辑配置")
+                .setView(box)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String name = etName.getText().toString().trim();
+                        String base = etBase.getText().toString().trim();
+                        String key = etKey.getText().toString().trim();
+                        String model = etModel.getText().toString().trim();
+                        if (name.length() == 0) name = "未命名";
+                        if (profiles.nameTaken(name, idx)) {
+                            toast("已有同名配置");
+                            return;
+                        }
+                        com.dsh.android.kernel.Profiles.Profile p =
+                                new com.dsh.android.kernel.Profiles.Profile(
+                                        name,
+                                        base.length() == 0 ? C.DEFAULT_BASE_URL : base,
+                                        key, model, src.level);
+                        if (isNew) profiles.add(p);
+                        else profiles.update(idx, p);
+                        store.saveProfiles(profiles);
+                        toast(isNew ? "已新增配置" : "已保存");
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     private void gotoPage(int target) {
         page = target;
         if (titleView != null) titleView.setText(pageTitle());
@@ -662,61 +756,105 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     // ------------------------------------------------------------ 接口与密钥
 
+    /** 常用接口地址；选中后填进「地址」输入框，仍可继续改。 */
+    static final String[][] ENDPOINT_PRESETS = {
+            {"DeepSeek 官方", "https://api.deepseek.com"},
+            {"OpenRouter", "https://openrouter.ai/api/v1"},
+            {"硅基流动", "https://api.siliconflow.cn/v1"},
+            {"本地 Ollama", "http://127.0.0.1:11434/v1"},
+    };
+
+    /**
+     * 接口与密钥：改成「配置档案」列表。
+     *
+     * <p>一份档案 = 一组地址 + 密钥 + 模型。常用多套（官方、中转、本地）
+     * 时可以并存，点一下就切换，不必反复输入密钥。
+     */
     private void pageApi(LinearLayout body) {
-        body.addView(sectionLabel("接口"));
-        LinearLayout apiCard = card();
+        final com.dsh.android.kernel.SessionStore store =
+                new com.dsh.android.kernel.SessionStore(this);
+        final com.dsh.android.kernel.Profiles profiles = store.profiles();
 
-        apiCard.addView(fieldLabel("接口地址"));
-        final EditText etBase = fieldInput(sp.getString(C.KEY_BASE_URL, ""), false, C.DEFAULT_BASE_URL);
-        apiCard.addView(etBase);
+        body.addView(sectionLabel("配置档案"));
+        LinearLayout listCard = card();
+        for (int i = 0; i < profiles.items().size(); i++) {
+            final int idx = i;
+            final com.dsh.android.kernel.Profiles.Profile pf = profiles.items().get(i);
+            final boolean activeNow = i == profiles.activeIndex();
 
-        apiCard.addView(divider());
-        apiCard.addView(fieldLabel("API Key"));
-        final EditText etKey = fieldInput(sp.getString(C.KEY_API_KEY, ""), true, "sk-...");
-        apiCard.addView(etKey);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(dp(14), dp(11), dp(14), dp(11));
+            row.setBackground(pressable());
 
-        LinearLayout btnRow = new LinearLayout(this);
-        btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setGravity(Gravity.CENTER_VERTICAL);
-        btnRow.setPadding(dp(14), 0, dp(14), dp(12));
+            LinearLayout titleRow = new LinearLayout(this);
+            titleRow.setOrientation(LinearLayout.HORIZONTAL);
+            titleRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        final TextView toggle = new TextView(this);
-        toggle.setText(keyVisible ? "隐藏" : "显示");
-        toggle.setTextSize(12);
-        toggle.setTextColor(Theme.link());
-        toggle.setPadding(dp(2), dp(8), dp(14), dp(8));
-        toggle.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                keyVisible = !keyVisible;
-                etKey.setInputType(InputType.TYPE_CLASS_TEXT
-                        | (keyVisible ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-                                      : InputType.TYPE_TEXT_VARIATION_PASSWORD));
-                toggle.setText(keyVisible ? "隐藏" : "显示");
-            }
-        });
-        btnRow.addView(toggle, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            TextView name = new TextView(this);
+            name.setText(pf.name == null || pf.name.length() == 0 ? "未命名" : pf.name);
+            name.setTextSize(14);
+            name.setTextColor(Theme.text());
+            titleRow.addView(name, new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView save = new TextView(this);
-        save.setText("保存");
-        save.setTextSize(13);
-        save.setTextColor(Theme.onPrimary());
-        save.setPadding(dp(22), dp(8), dp(22), dp(8));
-        save.setBackground(Theme.round(Theme.primary(), Theme.R_LG, this));
-        save.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                String base = etBase.getText().toString().trim();
-                String key = etKey.getText().toString().trim();
-                sp.edit().putString(C.KEY_BASE_URL,
-                        base.length() == 0 ? C.DEFAULT_BASE_URL : base).apply();
-                sp.edit().putString(C.KEY_API_KEY, key).apply();
-                toast("已保存");
-                if (key.length() > 0) fetchModels(false);
-            }
-        });
-        btnRow.addView(save);
-        apiCard.addView(btnRow);
-        body.addView(apiCard);
+            TextView mark = new TextView(this);
+            mark.setText(activeNow ? "使用中" : "切换");
+            mark.setTextSize(12);
+            mark.setTextColor(activeNow ? Theme.accent() : Theme.link());
+            titleRow.addView(mark);
+            row.addView(titleRow);
+
+            TextView sub = new TextView(this);
+            sub.setText((pf.baseUrl == null || pf.baseUrl.length() == 0 ? "未填地址" : pf.baseUrl)
+                    + (pf.model == null || pf.model.length() == 0 ? "" : "  ·  " + pf.model));
+            sub.setTextSize(11);
+            sub.setTextColor(Theme.caption());
+            sub.setPadding(0, dp(3), 0, 0);
+            row.addView(sub);
+
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (activeNow) {
+                        editProfile(store, profiles, idx);
+                        return;
+                    }
+                    profiles.setActive(idx);
+                    store.saveProfiles(profiles);
+                    toast("已切换到「" + profiles.active().name + "」");
+                    fillBody();
+                }
+            });
+            row.setOnLongClickListener(new View.OnLongClickListener() {
+                public boolean onLongClick(View v) {
+                    List<MiniMenu.Item> items = new java.util.ArrayList<MiniMenu.Item>();
+                    items.add(MiniMenu.Item.of("编辑", new Runnable() {
+                        public void run() { editProfile(store, profiles, idx); }
+                    }));
+                    items.add(MiniMenu.Item.of("删除", new Runnable() {
+                        public void run() {
+                            if (profiles.items().size() <= 1) {
+                                toast("至少保留一份配置");
+                                return;
+                            }
+                            profiles.remove(idx);
+                            store.saveProfiles(profiles);
+                            fillBody();
+                        }
+                    }));
+                    MiniMenu.show(SettingsActivity.this, v, pf.name, items);
+                    return true;
+                }
+            });
+            listCard.addView(row);
+            if (i < profiles.items().size() - 1) listCard.addView(divider());
+        }
+        listCard.addView(divider());
+        listCard.addView(actionRow("＋ 新增配置", new View.OnClickListener() {
+            public void onClick(View v) { editProfile(store, profiles, -1); }
+        }));
+        body.addView(listCard);
+        body.addView(hintRow("每份配置各自保存地址、密钥与模型。聊天页标题下方的模型弹层里也能直接切换。"));
 
         body.addView(sectionLabel("模型"));
         LinearLayout modelCard = card();

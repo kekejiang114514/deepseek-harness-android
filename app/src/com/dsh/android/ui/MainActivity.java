@@ -689,6 +689,39 @@ public final class MainActivity extends Activity {
     private void fillPopup(final LinearLayout box) {
         box.removeAllViews();
 
+        // 配置档案：切换地址/密钥/模型一整套
+        com.dsh.android.kernel.SessionStore st = new com.dsh.android.kernel.SessionStore(this);
+        final com.dsh.android.kernel.Profiles ps = st.profiles();
+        if (ps.items().size() > 1) {
+            box.addView(popupLabel("配置"));
+            for (int i = 0; i < ps.items().size(); i++) {
+                final int idx = i;
+                final com.dsh.android.kernel.Profiles.Profile pf = ps.items().get(i);
+                boolean on = i == ps.activeIndex();
+                box.addView(popupRow((pf.name == null || pf.name.length() == 0 ? "未命名" : pf.name)
+                        + (on ? "  \u2713" : ""), on, new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (modelPopup != null) modelPopup.dismiss();
+                        ps.setActive(idx);
+                        st.saveProfiles(ps);
+                        reloadClient();
+                        refreshModelPill();
+                        Snack.show(MainActivity.this, "已切换到「" + ps.active().name + "」");
+                    }
+                }));
+            }
+            box.addView(popupRow("管理配置…", false, new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (modelPopup != null) modelPopup.dismiss();
+                    android.content.Intent it =
+                            new android.content.Intent(MainActivity.this, SettingsActivity.class);
+                    it.putExtra("page", 1);
+                    startActivity(it);
+                }
+            }));
+            box.addView(popupDivider());
+        }
+
         box.addView(popupLabel("模型"));
         List<String> models = cachedModels();
         final String cur = currentModel();
@@ -1282,6 +1315,18 @@ public final class MainActivity extends Activity {
         t.setTextColor(Theme.caption());
         t.setPadding(dp(12), dp(8), dp(12), dp(4));
         return t;
+    }
+
+    /** 弹层里的分隔线。 */
+    private View popupDivider() {
+        View v = new View(this);
+        v.setBackgroundColor(Theme.hover());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+        lp.topMargin = dp(6);
+        lp.bottomMargin = dp(4);
+        v.setLayoutParams(lp);
+        return v;
     }
 
     private TextView popupHint(String text) {

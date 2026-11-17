@@ -359,4 +359,35 @@ public final class SessionStore {
             sp.edit().putString("index", idx.toString()).apply();
         } catch (Exception ignored) {}
     }
+
+    // ------------------------------------------------------------ API 配置档案
+
+    /** 读取配置档案；首次运行时用旧的单份设置迁移出「默认」档案。 */
+    public Profiles profiles() {
+        Profiles p = Profiles.fromJson(sp.getString("profiles", ""));
+        if (p.items().isEmpty()) {
+            p.migrateLegacy(sp.getString(com.dsh.android.kernel.C.KEY_BASE_URL, ""),
+                    sp.getString(com.dsh.android.kernel.C.KEY_API_KEY, ""),
+                    sp.getString(com.dsh.android.kernel.C.KEY_MODEL, ""),
+                    sp.getString(com.dsh.android.kernel.C.KEY_REASONING, "medium"),
+                    com.dsh.android.kernel.C.DEFAULT_BASE_URL);
+            saveProfiles(p);
+        }
+        return p;
+    }
+
+    /** 保存档案列表，并把当前档案的取值同步回旧的单份设置键。 */
+    public void saveProfiles(Profiles p) {
+        if (p == null) return;
+        Profiles.Profile cur = p.active();
+        SharedPreferences.Editor e = sp.edit();
+        e.putString("profiles", p.toJson().toString());
+        if (cur != null) {
+            e.putString(com.dsh.android.kernel.C.KEY_BASE_URL, cur.baseUrl);
+            e.putString(com.dsh.android.kernel.C.KEY_API_KEY, cur.apiKey);
+            e.putString(com.dsh.android.kernel.C.KEY_MODEL, cur.model);
+            e.putString(com.dsh.android.kernel.C.KEY_REASONING, cur.level);
+        }
+        e.apply();
+    }
 }

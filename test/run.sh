@@ -32,6 +32,7 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/com/dsh/android/kernel/ChatImport.java" \
     "$ROOT/app/src/com/dsh/android/kernel/SessionGroups.java" \
     "$ROOT/app/src/com/dsh/android/kernel/SessionMeta.java" \
+    "$ROOT/app/src/com/dsh/android/kernel/Profiles.java" \
     "$ROOT/app/src/com/dsh/android/ui/AskLog.java" \
     "$ROOT/app/src/com/dsh/android/kernel/C.java" \
     "$ROOT/app/src/com/dsh/android/kernel/Version.java" \
@@ -58,6 +59,7 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$HERE/SvgPathCheck.java" \
     "$ROOT/app/src/com/dsh/android/ui/Icons.java" \
     "$HERE/SessionGroupsTest.java" \
+    "$HERE/ProfilesTest.java" \
     "$HERE/PauseTest.java"
 
 echo "[2/2] 运行"
@@ -74,4 +76,5 @@ java -cp "$OUT:$JSON_JAR" ChatImportTest
 java -cp "$OUT:$JSON_JAR" BranchFlowTest
 java -cp "$OUT:$JSON_JAR" SvgPathCheck
 java -cp "$OUT:$JSON_JAR" SessionGroupsTest
+java -cp "$OUT:$JSON_JAR" ProfilesTest
 java -cp "$OUT:$JSON_JAR" PauseTest
