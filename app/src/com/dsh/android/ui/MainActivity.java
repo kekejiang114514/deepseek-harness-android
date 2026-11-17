@@ -689,56 +689,64 @@ public final class MainActivity extends Activity {
     private void fillPopup(final LinearLayout box) {
         box.removeAllViews();
 
-        // 配置档案：切换地址/密钥/模型一整套
-        com.dsh.android.kernel.SessionStore st = new com.dsh.android.kernel.SessionStore(this);
+        // 模型按「配置」分组列出：点哪个模型就用那套 API 的那个模型，
+        // 一步完成「换接口 + 换模型」，不需要先挑配置再挑模型。
+        final com.dsh.android.kernel.SessionStore st =
+                new com.dsh.android.kernel.SessionStore(this);
         final com.dsh.android.kernel.Profiles ps = st.profiles();
-        if (ps.items().size() > 1) {
-            box.addView(popupLabel("配置"));
-            for (int i = 0; i < ps.items().size(); i++) {
-                final int idx = i;
-                final com.dsh.android.kernel.Profiles.Profile pf = ps.items().get(i);
-                boolean on = i == ps.activeIndex();
-                box.addView(popupRow((pf.name == null || pf.name.length() == 0 ? "未命名" : pf.name)
-                        + (on ? "  \u2713" : ""), on, new View.OnClickListener() {
-                    public void onClick(View v) {
-                        if (modelPopup != null) modelPopup.dismiss();
-                        ps.setActive(idx);
-                        st.saveProfiles(ps);
-                        reloadClient();
-                        refreshModelPill();
-                        Snack.show(MainActivity.this, "已切换到「" + ps.active().name + "」");
-                    }
-                }));
-            }
-            box.addView(popupRow("管理配置…", false, new View.OnClickListener() {
-                public void onClick(View v) {
-                    if (modelPopup != null) modelPopup.dismiss();
-                    android.content.Intent it =
-                            new android.content.Intent(MainActivity.this, SettingsActivity.class);
-                    it.putExtra("page", 1);
-                    startActivity(it);
-                }
-            }));
-            box.addView(popupDivider());
-        }
+        final String curModel = currentModel();
+        final int activeIdx = ps.activeIndex();
 
-        box.addView(popupLabel("模型"));
-        List<String> models = cachedModels();
-        final String cur = currentModel();
-        if (models.isEmpty()) {
-            box.addView(popupHint("还没有读取到模型列表"));
-            box.addView(popupRow("读取模型列表", false, new View.OnClickListener() {
-                public void onClick(View v) { fetchModelsIntoPopup(); }
-            }));
-        } else {
-            for (int i = 0; i < models.size(); i++) {
-                final String m = models.get(i);
-                box.addView(popupRow(m, m.equals(cur), new View.OnClickListener() {
+        boolean missingCache = false;
+        for (int i = 0; i < ps.items().size(); i++) {
+            final int idx = i;
+            final com.dsh.android.kernel.Profiles.Profile pf = ps.items().get(i);
+            final boolean activeProfile = i == activeIdx;
+
+            TextView head = popupLabel(pf.name == null || pf.name.length() == 0 ? "未命名" : pf.name);
+            if (activeProfile) head.setTextColor(Theme.accent());
+            box.addView(head);
+
+            java.util.List<String> models = cachedModelsFor(pf.baseUrl);
+            if (models.isEmpty()) {
+                missingCache = true;
+                TextView pending = popupHint(activeProfile ? "读取中…" : "点这里读取该接口的模型");
+                pending.setTextColor(Theme.link());
+                pending.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) { fetchModelsFor(idx); }
+                });
+                box.addView(pending);
+                continue;
+            }
+            for (int k = 0; k < models.size(); k++) {
+                final String m = models.get(k);
+                boolean on = activeProfile && m.equals(curModel);
+                box.addView(popupRow(m, on, new View.OnClickListener() {
                     public void onClick(View v) {
+                        ps.setActive(idx);
+                        ps.active().model = m;
+                        st.saveProfiles(ps);
                         prefs().edit().putString(C.KEY_MODEL, m).apply();
                         applyChoice();
                     }
                 }));
+            }
+        }
+
+        box.addView(popupRow("管理配置…", false, new View.OnClickListener() {
+            public void onClick(View v) {
+                if (modelPopup != null) modelPopup.dismiss();
+                android.content.Intent it =
+                        new android.content.Intent(MainActivity.this, SettingsActivity.class);
+                it.putExtra("page", 1);
+                startActivity(it);
+            }
+        }));
+
+        if (missingCache) {
+            // 进入弹层时后台把各套接口的模型列表都读一次
+            for (int i = 0; i < ps.items().size(); i++) {
+                if (cachedModelsFor(ps.items().get(i).baseUrl).isEmpty()) prefetchModels(i);
             }
         }
 
@@ -1262,6 +1270,73 @@ public final class MainActivity extends Activity {
             for (int i = 0; i < arr.length(); i++) out.add(arr.optString(i, ""));
         } catch (Exception ignored) {}
         return out;
+    }
+
+    /** 每套接口各自缓存一份模型列表，键是接口地址。 */
+    private final java.util.Map<String, java.util.List<String>> modelsByBase =
+            new java.util.HashMap<String, java.util.List<String>>();
+
+    private java.util.List<String> cachedModelsFor(String base) {
+        java.util.List<String> got = modelsByBase.get(base == null ? "" : base);
+        if (got != null) return got;
+        // 当前接口沿用它原来的缓存文件，避免重复请求
+        String curBase = prefs().getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
+        if (base != null && base.equals(curBase)) {
+            java.util.List<String> legacy = cachedModels();
+            if (!legacy.isEmpty()) {
+                modelsByBase.put(base, legacy);
+                return legacy;
+            }
+        }
+        return new java.util.ArrayList<String>();
+    }
+
+    /** 后台读取某一套接口的模型列表，回来后重绘弹层。 */
+    private void prefetchModels(final int idx) {
+        final com.dsh.android.kernel.SessionStore st =
+                new com.dsh.android.kernel.SessionStore(this);
+        final com.dsh.android.kernel.Profiles ps = st.profiles();
+        if (idx < 0 || idx >= ps.items().size()) return;
+        final String base = ps.items().get(idx).baseUrl;
+        final String key = ps.items().get(idx).apiKey;
+        if (base == null || base.length() == 0 || key == null || key.length() == 0) return;
+        if (modelsByBase.containsKey(base)) return;
+        new Thread(new Runnable() {
+            public void run() {
+                List<String> got = null;
+                try {
+                    got = LlmClient.fetchModels(base, key);
+                } catch (Throwable ignored) {}
+                if (got == null || got.isEmpty()) return;
+                modelsByBase.put(base, got);
+                final String curBase = prefs().getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
+                if (base.equals(curBase)) {
+                    org.json.JSONArray arr = new org.json.JSONArray();
+                    for (int i = 0; i < got.size(); i++) arr.put(got.get(i));
+                    prefs().edit().putString("models_cache", arr.toString()).apply();
+                }
+                runOnUiThread(new Runnable() {
+                    public void run() { refillModelPopup(); }
+                });
+            }
+        }, "models-" + idx).start();
+    }
+
+    /** 用户主动点「读取该接口的模型」。 */
+    private void fetchModelsFor(final int idx) {
+        modelsByBase.remove(new com.dsh.android.kernel.SessionStore(this)
+                .profiles().items().get(idx).baseUrl);
+        prefetchModels(idx);
+        Snack.show(this, "正在读取模型列表…");
+    }
+
+    /** 弹层还开着就重绘它。 */
+    private void refillModelPopup() {
+        if (modelPopup == null || !modelPopup.isShowing()) return;
+        View content = modelPopup.getContentView();
+        if (!(content instanceof android.widget.ScrollView)) return;
+        View child = ((android.widget.ScrollView) content).getChildAt(0);
+        if (child instanceof LinearLayout) fillPopup((LinearLayout) child);
     }
 
     private void fetchModelsIntoPopup() {

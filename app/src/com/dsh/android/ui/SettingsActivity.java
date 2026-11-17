@@ -673,7 +673,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         final EditText etName = fieldInput(src.name, false, "配置名称，例如「官方」「中转」");
         final EditText etBase = fieldInput(src.baseUrl, false, C.DEFAULT_BASE_URL);
         final EditText etKey = fieldInput(src.apiKey, true, "sk-...");
-        final EditText etModel = fieldInput(src.model, false, "deepseek-v4-pro");
+
 
         box.addView(fieldLabel("名称"));
         box.addView(etName);
@@ -712,8 +712,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
         box.addView(fieldLabel("API Key"));
         box.addView(etKey);
-        box.addView(fieldLabel("模型"));
-        box.addView(etModel);
+        box.addView(hintRow("模型不需要在这里填：聊天页的模型弹层会按这套接口读取的列表里直接选。"));
 
         new AppDialog.Builder(this)
                 .setTitle(isNew ? "新增配置" : "编辑配置")
@@ -723,7 +722,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                         String name = etName.getText().toString().trim();
                         String base = etBase.getText().toString().trim();
                         String key = etKey.getText().toString().trim();
-                        String model = etModel.getText().toString().trim();
+                        String model = src.model;   // 上次在该接口用过的模型，换接口时保留
                         if (name.length() == 0) name = "未命名";
                         if (profiles.nameTaken(name, idx)) {
                             toast("已有同名配置");
@@ -733,7 +732,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                                 new com.dsh.android.kernel.Profiles.Profile(
                                         name,
                                         base.length() == 0 ? C.DEFAULT_BASE_URL : base,
-                                        key, model, src.level);
+                                        key, model == null ? "" : model, src.level);
                         if (isNew) profiles.add(p);
                         else profiles.update(idx, p);
                         store.saveProfiles(profiles);
