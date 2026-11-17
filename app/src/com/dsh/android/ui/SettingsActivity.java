@@ -246,13 +246,14 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
         body.addView(sectionLabel("清空"));
         LinearLayout dangerCard = card();
-        dangerCard.addView(actionRow("删除所有历史对话", new View.OnClickListener() {
+        dangerCard.addView(actionRow("删除所有历史对话", Theme.danger(), new View.OnClickListener() {
             public void onClick(View v) {
                 new AppDialog.Builder(SettingsActivity.this)
                         .setTitle("删除所有历史对话")
                         .setMessage("所有会话、分支和分组都会被删除，无法恢复。"
                                 + "建议先导出一份备份。确定吗？")
-                        .setPositiveButton("全部删除", new android.content.DialogInterface.OnClickListener() {
+                        .setPositiveButton("全部删除", Theme.danger(),
+                                new android.content.DialogInterface.OnClickListener() {
                             public void onClick(android.content.DialogInterface d, int w) {
                                 st.deleteAll();
                                 toast("已删除全部历史，并新建了一个空会话");
@@ -1739,10 +1740,15 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     /** 纯动作行（左对齐，类似列表按钮）。 */
     private View actionRow(String text, View.OnClickListener click) {
+        return actionRow(text, Theme.link(), click);
+    }
+
+    /** 行文字用指定颜色；危险操作用 Theme.danger() 以示警告。 */
+    private View actionRow(String text, int color, View.OnClickListener click) {
         TextView t = new TextView(this);
         t.setText(text);
         t.setTextSize(14);
-        t.setTextColor(Theme.link());
+        t.setTextColor(color);
         t.setPadding(dp(16), dp(14), dp(16), dp(14));
         t.setBackground(pressable());
         t.setOnClickListener(click);

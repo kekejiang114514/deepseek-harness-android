@@ -21,18 +21,6 @@ public final class SessionStore {
         this.sp = ctx.getSharedPreferences("dsh_sessions", Context.MODE_PRIVATE);
     }
 
-    /** 会话元数据（列表项）。 */
-    public static final class SessionMeta {
-        public final String id;
-        public final String title;
-        public final long updatedAt;
-        /** 所属分组；空串表示未分组。 */
-        public final String group;
-        public SessionMeta(String id, String title, long updatedAt, String group) {
-            this.id = id; this.title = title; this.updatedAt = updatedAt;
-            this.group = group == null ? "" : group;
-        }
-    }
 
     /** 新建会话，返回 id。 */
     public String newSession(String title) {

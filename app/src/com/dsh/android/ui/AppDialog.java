@@ -38,6 +38,8 @@ public final class AppDialog {
         private DialogInterface.OnClickListener positiveClick, negativeClick, neutralClick;
         private DialogInterface.OnDismissListener dismissListener;
         private boolean cancelable = true;
+        /** 主按钮底色；0 = 用主题色 */
+        private int positiveColor = 0;
 
         public Builder(Context c) {
             this.ctx = c;
@@ -59,8 +61,17 @@ public final class AppDialog {
         }
 
         public Builder setPositiveButton(CharSequence t, DialogInterface.OnClickListener l) {
+            return setPositiveButton(t, 0, l);
+        }
+
+        /**
+         * 可指定底色的主按钮。传 0 表示用主题色；
+         * 删除这类不可逆操作用 Theme.danger()，按钮本身就是警告。
+         */
+        public Builder setPositiveButton(CharSequence t, int bgColor, DialogInterface.OnClickListener l) {
             this.positiveText = t;
             this.positiveClick = l;
+            this.positiveColor = bgColor;
             return this;
         }
 
@@ -141,7 +152,7 @@ public final class AppDialog {
 
             if (neutralText != null) btns.addView(textButton(dlg, neutralText, neutralClick));
             if (negativeText != null) btns.addView(textButton(dlg, negativeText, negativeClick));
-            if (positiveText != null) btns.addView(primaryButton(dlg, positiveText, positiveClick));
+            if (positiveText != null) btns.addView(primaryButton(dlg, positiveText, positiveClick, positiveColor));
             card.addView(btns);
 
             dlg.setContentView(card);
@@ -175,13 +186,13 @@ public final class AppDialog {
         }
 
         private TextView primaryButton(final Dialog dlg, CharSequence text,
-                                       final DialogInterface.OnClickListener click) {
+                                       final DialogInterface.OnClickListener click, int bgColor) {
             TextView t = new TextView(ctx);
             t.setText(text);
             t.setTextSize(14);
-            t.setTextColor(Theme.onPrimary());
+            t.setTextColor(0xFFFFFFFF);
             t.setPadding(dp(18), dp(10), dp(18), dp(10));
-            t.setBackground(Theme.round(Theme.primary(), 20, ctx));
+            t.setBackground(Theme.round(bgColor == 0 ? Theme.primary() : bgColor, 20, ctx));
             t.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     if (click != null) click.onClick(dlg, -1);

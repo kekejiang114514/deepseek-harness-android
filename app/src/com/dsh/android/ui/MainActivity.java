@@ -22,6 +22,7 @@ import android.widget.Toast;
 import com.dsh.android.a11y.A11yService;
 import com.dsh.android.kernel.C;
 import com.dsh.android.kernel.EventBus;
+import com.dsh.android.kernel.SessionMeta;
 import com.dsh.android.kernel.SessionStore;
 import com.dsh.android.kernel.Updater;
 import com.dsh.android.llm.AgentLoop;
@@ -1408,26 +1409,20 @@ public final class MainActivity extends Activity {
 
     private void refreshDrawer() {
         drawerList.removeAllViews();
-        final List<SessionStore.SessionMeta> list = sessions.listSessions();
+        final List<SessionMeta> list = sessions.listSessions();
         final String cur = sessions.currentId();
         final List<String> groups = sessions.listGroups();
 
-        // 先按分组分桶，未分组的放最后
-        for (int g = -1; g <= groups.size(); g++) {
-            final String groupName = g < 0 ? "" : groups.get(g);
-            java.util.List<SessionStore.SessionMeta> bucket =
-                    new java.util.ArrayList<SessionStore.SessionMeta>();
-            for (int i = 0; i < list.size(); i++) {
-                SessionStore.SessionMeta m = list.get(i);
-                boolean same = groupName.length() == 0
-                        ? (m.group == null || m.group.length() == 0)
-                        : groupName.equals(m.group);
-                if (same) bucket.add(m);
-            }
-            if (bucket.isEmpty()) continue;
+        // 分组分桶交给 SessionGroups：那里有单测覆盖，界面不再自己写一遍循环
+        java.util.List<com.dsh.android.kernel.SessionGroups.Bucket> buckets =
+                com.dsh.android.kernel.SessionGroups.split(list, groups);
+        boolean showHeaders = com.dsh.android.kernel.SessionGroups.showHeaders(buckets);
 
-            // 组标题（未分组且有已命名的组时才显示，避免多一个空标题）
-            if (groupName.length() > 0 || groups.size() > 0) {
+        for (int bi = 0; bi < buckets.size(); bi++) {
+            final com.dsh.android.kernel.SessionGroups.Bucket bucket = buckets.get(bi);
+            final String groupName = bucket.name;
+
+            if (showHeaders) {
                 TextView head = new TextView(this);
                 head.setText(groupName.length() == 0 ? "未分组" : groupName);
                 head.setTextSize(11);
@@ -1444,8 +1439,8 @@ public final class MainActivity extends Activity {
                 drawerList.addView(head);
             }
 
-            for (int i = 0; i < bucket.size(); i++) {
-                final SessionStore.SessionMeta m = bucket.get(i);
+            for (int i = 0; i < bucket.sessions.size(); i++) {
+                final SessionMeta m = bucket.sessions.get(i);
                 LinearLayout item = new LinearLayout(this);
                 item.setOrientation(LinearLayout.HORIZONTAL);
                 item.setGravity(Gravity.CENTER_VERTICAL);
@@ -1499,7 +1494,7 @@ public final class MainActivity extends Activity {
     }
 
     /** 长按会话：移动到分组 / 移出分组。 */
-    private void showGroupMenu(final SessionStore.SessionMeta m) {
+    private void showGroupMenu(final SessionMeta m) {
         final List<String> groups = sessions.listGroups();
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1545,7 +1540,7 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void promptNewGroupFor(final SessionStore.SessionMeta m) {
+    private void promptNewGroupFor(final SessionMeta m) {
         promptForName("新建分组", "", new NameSink() {
             public void done(String name) {
                 sessions.addGroup(name);
@@ -1615,7 +1610,7 @@ public final class MainActivity extends Activity {
         updateTitle(currentTitle());
     }
 
-    private void confirmDelete(final SessionStore.SessionMeta m) {
+    private void confirmDelete(final SessionMeta m) {
         new AppDialog.Builder(this)
                 .setTitle("删除会话")
                 .setMessage("删除后无法恢复，确定吗？")
@@ -1642,7 +1637,7 @@ public final class MainActivity extends Activity {
 
     private String currentTitle() {
         String id = sessions.currentId();
-        List<SessionStore.SessionMeta> all = sessions.listSessions();
+        List<SessionMeta> all = sessions.listSessions();
         for (int i = 0; i < all.size(); i++) {
             if (all.get(i).id.equals(id)) {
                 String t = all.get(i).title;
@@ -2543,7 +2538,7 @@ public final class MainActivity extends Activity {
 
         // 会话标题：首条消息作为标题
         String id = sessions.currentId();
-        List<SessionStore.SessionMeta> all = sessions.listSessions();
+        List<SessionMeta> all = sessions.listSessions();
         for (int i = 0; i < all.size(); i++) {
             if (all.get(i).id.equals(id)) {
                 String t = all.get(i).title;
