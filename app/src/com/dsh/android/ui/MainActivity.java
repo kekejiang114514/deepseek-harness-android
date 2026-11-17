@@ -1919,22 +1919,21 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * 每条消息下方的操作行。
+     * 每条消息下方的操作行：图标按钮，不是文字。
      *
-     * <p>用文字而不是图标：图标在部分机型上会画不出来，最后变成一条空行；
-     * 文字按钮在任何字体与主题下都可见。
-     * 有兄弟节点时最前面是 `‹ n/m ›`，用来在原回答与重新生成的回答之间切换。
+     * <p>每个按钮都带一块淡色圆角底，这样即使字形路径有问题，
+     * 按钮本身仍然可见、可点，不会整行消失。
      */
     private void addActionRow(final String nodeId, String role, final java.util.List<String> sibs) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(2), dp(1), dp(2), dp(9));
+        row.setPadding(dp(2), dp(2), dp(2), dp(8));
 
         if (sibs != null && sibs.size() > 1) {
             final int idx = sibs.indexOf(nodeId);
             if (idx >= 0) {
-                row.addView(actionText("\u2039", idx > 0, new View.OnClickListener() {
+                row.addView(iconButton(IconView.CHEVRON_LEFT, idx > 0, new View.OnClickListener() {
                     public void onClick(View v) {
                         if (idx > 0) jumpBranch(sibs.get(idx - 1));
                     }
@@ -1942,40 +1941,58 @@ public final class MainActivity extends Activity {
                 TextView label = new TextView(this);
                 label.setText((idx + 1) + "/" + sibs.size());
                 label.setTextSize(11);
-                label.setTextColor(Theme.caption());
+                label.setTextColor(Theme.text2());
+                label.setPadding(dp(2), 0, dp(2), 0);
                 row.addView(label);
-                row.addView(actionText("\u203A", idx < sibs.size() - 1, new View.OnClickListener() {
-                    public void onClick(View v) {
-                        if (idx < sibs.size() - 1) jumpBranch(sibs.get(idx + 1));
-                    }
-                }));
+                row.addView(iconButton(IconView.CHEVRON_RIGHT, idx < sibs.size() - 1,
+                        new View.OnClickListener() {
+                            public void onClick(View v) {
+                                if (idx < sibs.size() - 1) jumpBranch(sibs.get(idx + 1));
+                            }
+                        }));
+                View gap = new View(this);
+                gap.setLayoutParams(new LinearLayout.LayoutParams(dp(6), 1));
+                row.addView(gap);
             }
         }
 
-        row.addView(actionText("选择文本", true, new View.OnClickListener() {
-            public void onClick(View v) { selectText(nodeId); }
+        row.addView(iconButton(IconView.BRANCH, true, new View.OnClickListener() {
+            public void onClick(View v) { startBranchFrom(nodeId); }
         }));
-        row.addView(actionText("复制", true, new View.OnClickListener() {
+        row.addView(iconButton(IconView.COPY, true, new View.OnClickListener() {
             public void onClick(View v) { copyNode(nodeId); }
         }));
         if ("assistant".equals(role)) {
-            row.addView(actionText("重新生成", true, new View.OnClickListener() {
+            row.addView(iconButton(IconView.REFRESH, true, new View.OnClickListener() {
                 public void onClick(View v) { regenerateNode(nodeId); }
             }));
         }
         messages.addView(row);
     }
 
-    /** 操作行里的文字按钮。 */
-    private TextView actionText(String label, boolean enabled, final View.OnClickListener click) {
-        TextView t = new TextView(this);
-        t.setText(label);
-        t.setTextSize(12);
-        t.setTextColor(enabled ? Theme.text2() : Theme.caption());
-        t.setAlpha(enabled ? 1f : 0.45f);
-        t.setPadding(dp(8), dp(4), dp(8), dp(4));
-        if (enabled) t.setOnClickListener(click);
-        return t;
+    /**
+     * 一个带淡色底的图标按钮。
+     *
+     * <p>底色是必要的：图标是描边路径，万一某台设备上路径没画出来，
+     * 至少还看得见一个按钮，而不是整行空白。
+     */
+    private View iconButton(int icon, boolean enabled, final View.OnClickListener click) {
+        FrameLayout box = new FrameLayout(this);
+        box.setBackground(Theme.round(enabled ? Theme.surface2() : Theme.surface(),
+                Theme.R_SM, this));
+
+        IconView ic = new IconView(this, icon, 16);
+        ic.setColor(enabled ? Theme.text2() : Theme.caption());
+        ic.setAlpha(enabled ? 1f : 0.5f);
+        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(16), dp(16));
+        ip.gravity = Gravity.CENTER;
+        box.addView(ic, ip);
+
+        if (enabled) box.setOnClickListener(click);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(30), dp(26));
+        lp.rightMargin = dp(6);
+        box.setLayoutParams(lp);
+        return box;
     }
 
     /** 选择文本：交给系统选择器（可拖动选择手柄、复制）。 */

@@ -54,6 +54,8 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$HERE/ChatBodyTest.java" \
     "$HERE/ConversationTest.java" \
     "$HERE/ChatImportTest.java" \
+    "$HERE/SvgPathCheck.java" \
+    "$ROOT/app/src/com/dsh/android/ui/Icons.java" \
     "$HERE/SessionGroupsTest.java" \
     "$HERE/PauseTest.java"
 
@@ -68,5 +70,6 @@ java -cp "$OUT:$JSON_JAR" LevelTest
 java -cp "$OUT:$JSON_JAR" ChatBodyTest
 java -cp "$OUT:$JSON_JAR" ConversationTest
 java -cp "$OUT:$JSON_JAR" ChatImportTest
+java -cp "$OUT:$JSON_JAR" SvgPathCheck
 java -cp "$OUT:$JSON_JAR" SessionGroupsTest
 java -cp "$OUT:$JSON_JAR" PauseTest
