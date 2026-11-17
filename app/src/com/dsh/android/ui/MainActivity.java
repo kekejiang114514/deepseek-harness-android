@@ -1980,7 +1980,7 @@ public final class MainActivity extends Activity {
             }
         }));
         TextView label = new TextView(this);
-        label.setText("分支 " + (idx + 1) + "/" + kids.size());
+        label.setText((idx + 1) + "/" + kids.size());
         label.setTextSize(11);
         label.setTextColor(Theme.text2());
         label.setPadding(dp(2), 0, dp(2), 0);
@@ -2034,6 +2034,23 @@ public final class MainActivity extends Activity {
         }
         tv.setTextIsSelectable(true);
         tv.requestFocus();
+        // 选完（系统选择菜单关闭）后恢复成不可选：
+        // 否则长按会被文本选择吃掉，二级菜单再也出不来。
+        tv.setCustomSelectionActionModeCallback(new android.view.ActionMode.Callback() {
+            public boolean onCreateActionMode(android.view.ActionMode mode, android.view.Menu menu) {
+                return true;
+            }
+            public boolean onPrepareActionMode(android.view.ActionMode mode, android.view.Menu menu) {
+                return false;
+            }
+            public boolean onActionItemClicked(android.view.ActionMode mode, android.view.MenuItem item) {
+                return false;
+            }
+            public void onDestroyActionMode(android.view.ActionMode mode) {
+                tv.setTextIsSelectable(false);
+                tv.setCustomSelectionActionModeCallback(null);
+            }
+        });
         tv.performLongClick();
     }
 
@@ -2158,28 +2175,40 @@ public final class MainActivity extends Activity {
         });
     }
 
+    /**
+     * 从这里开一条分支。
+     *
+     * <p>分支是**独立的会话**：把到这条消息为止的路径复制进新会话再切过去，
+     * 原会话一个字节都不动。这样「分支」和「重新生成」就是两件事：
+     * 重新生成是同一条问题下的另一个答案（同会话的兄弟节点），
+     * 分支是从这里另起一段对话。
+     */
     private void startBranchFrom(final String nodeId) {
         if (running) {
-            Snack.show(this, "正在生成，先停止再从这条继续");
+            Snack.show(this, "正在生成，先停止再分支");
             return;
         }
         String sessId = sessions.currentId();
         JSONArray all = sessions.loadHistory(sessId);
-        int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
-        if (i < 0) return;
-        sessions.setLeaf(sessId, nodeId);
-        renderHistory();
-        // 如果这条是用户消息，直接给它接着写；否则等用户输入
-        JSONObject o = all.optJSONObject(i);
-        String role = o == null ? "" : o.optString("role");
-        if ("user".equals(role)) {
-            String content = o.optString("content", "");
-            if (content.length() > 0) {
-                Snack.show(this, "已切到这条分支，可直接继续对话");
-            }
-        } else {
-            Snack.show(this, "已从这里开出新分支，发消息即可追加");
+        if (com.dsh.android.kernel.Conversation.indexOf(all, nodeId) < 0) return;
+
+        JSONArray path = com.dsh.android.kernel.Conversation.path(all, nodeId);
+        if (path.length() == 0) return;
+
+        JSONArray copy = new JSONArray();
+        for (int k = 0; k < path.length(); k++) {
+            JSONObject src = path.optJSONObject(k);
+            if (src == null) continue;
+            try {
+                copy.put(new JSONObject(src.toString()));
+            } catch (Exception ignored) {}
         }
+
+        String base = currentTitle();
+        if (base == null || base.length() == 0) base = "新对话";
+        String id = sessions.importSession(base + " · 分支", "", copy);
+        switchTo(id);
+        Snack.show(this, "已在新会话中打开这条分支，原会话保持不变");
     }
 
     private void dismissDialog() {
@@ -3446,8 +3475,11 @@ public final class MainActivity extends Activity {
         // 一个字都没收到就暂停的情况不该留一个点了没用的继续键
         refreshSendMode();
         closeTextSegment();
-        scrollBottom();
         stopTaskBar();
+        // 流式期间是直接往界面追加气泡的，没有操作行。
+        // 收尾重绘一次，这条新回答下面才会出现分支/复制/重新生成。
+        try { renderHistory(); } catch (Throwable ignored) {}
+        scrollBottom();
     }
 
     /** 任务状态条：运行中显示工具数与耗时，结束后留 4 秒摘要再淡出。 */
