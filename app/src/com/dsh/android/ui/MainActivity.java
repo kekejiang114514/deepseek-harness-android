@@ -223,6 +223,9 @@ public final class MainActivity extends Activity {
     /** 每次启动只提醒一次「无障碍被系统关掉了」，别反复弹。 */
     private boolean a11yNotified = false;
 
+    /** 长按消息弹出的菜单；点选项后要关掉它 */
+    private android.app.Dialog nodeMenu;
+
     /**
      * 无障碍自检：连上过、现在却掉了，就给一条可点的提示。
      *
@@ -881,8 +884,13 @@ public final class MainActivity extends Activity {
             Snack.show(this, "当前会话还没有内容");
             return;
         }
+        String sessId = sessions.currentId();
+        if (com.dsh.android.kernel.Conversation.forkCount(sessions.loadHistory(sessId)) > 0) {
+            Snack.show(this, "这个会话有分支，暂不压缩：压缩会删掉较早的消息，分支会跟着丢");
+            return;
+        }
         HistoryCompactor.Report rep = HistoryCompactor.fit(hist, 24000, 14000);
-        sessions.saveHistory(sessions.currentId(), hist);
+        sessions.saveHistory(sessId, hist);
         closeTextSegment();
         if (rep.changed) {
             addNotice("↻ " + rep.describe());
@@ -1402,40 +1410,191 @@ public final class MainActivity extends Activity {
         drawerList.removeAllViews();
         final List<SessionStore.SessionMeta> list = sessions.listSessions();
         final String cur = sessions.currentId();
-        for (int i = 0; i < list.size(); i++) {
-            final SessionStore.SessionMeta m = list.get(i);
-            LinearLayout item = new LinearLayout(this);
-            item.setOrientation(LinearLayout.HORIZONTAL);
-            item.setGravity(Gravity.CENTER_VERTICAL);
-            item.setPadding(dp(12), dp(11), dp(8), dp(11));
-            boolean sel = m.id.equals(cur);
-            item.setBackground(Theme.round(sel ? Theme.surface2() : 0x00000000,
-                    Theme.R_MD, this));
+        final List<String> groups = sessions.listGroups();
 
-            TextView t = new TextView(this);
-            t.setText(m.title == null || m.title.length() == 0 ? "新对话" : m.title);
-            t.setTextSize(14);
-            t.setTextColor(sel ? Theme.text() : Theme.text2());
-            t.setMaxLines(1);
-            t.setEllipsize(TextUtils.TruncateAt.END);
-            item.addView(t, new LinearLayout.LayoutParams(0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        // 先按分组分桶，未分组的放最后
+        for (int g = -1; g <= groups.size(); g++) {
+            final String groupName = g < 0 ? "" : groups.get(g);
+            java.util.List<SessionStore.SessionMeta> bucket =
+                    new java.util.ArrayList<SessionStore.SessionMeta>();
+            for (int i = 0; i < list.size(); i++) {
+                SessionStore.SessionMeta m = list.get(i);
+                boolean same = groupName.length() == 0
+                        ? (m.group == null || m.group.length() == 0)
+                        : groupName.equals(m.group);
+                if (same) bucket.add(m);
+            }
+            if (bucket.isEmpty()) continue;
 
-            TextView del = new TextView(this);
-            del.setText("\u00D7");
-            del.setTextSize(15);
-            del.setTextColor(Theme.caption());
-            del.setPadding(dp(10), 0, dp(6), 0);
-            del.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { confirmDelete(m); }
-            });
-            item.addView(del);
+            // 组标题（未分组且有已命名的组时才显示，避免多一个空标题）
+            if (groupName.length() > 0 || groups.size() > 0) {
+                TextView head = new TextView(this);
+                head.setText(groupName.length() == 0 ? "未分组" : groupName);
+                head.setTextSize(11);
+                head.setTextColor(Theme.caption());
+                head.setPadding(dp(14), dp(12), dp(8), dp(4));
+                if (groupName.length() > 0) {
+                    head.setOnLongClickListener(new View.OnLongClickListener() {
+                        public boolean onLongClick(View v) {
+                            confirmDeleteGroup(groupName);
+                            return true;
+                        }
+                    });
+                }
+                drawerList.addView(head);
+            }
 
-            item.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { switchTo(m.id); }
-            });
-            drawerList.addView(item);
+            for (int i = 0; i < bucket.size(); i++) {
+                final SessionStore.SessionMeta m = bucket.get(i);
+                LinearLayout item = new LinearLayout(this);
+                item.setOrientation(LinearLayout.HORIZONTAL);
+                item.setGravity(Gravity.CENTER_VERTICAL);
+                item.setPadding(dp(12), dp(11), dp(8), dp(11));
+                boolean sel = m.id.equals(cur);
+                item.setBackground(Theme.round(sel ? Theme.surface2() : 0x00000000,
+                        Theme.R_MD, this));
+
+                TextView t = new TextView(this);
+                t.setText(m.title == null || m.title.length() == 0 ? "新对话" : m.title);
+                t.setTextSize(14);
+                t.setTextColor(sel ? Theme.text() : Theme.text2());
+                t.setMaxLines(1);
+                t.setEllipsize(TextUtils.TruncateAt.END);
+                item.addView(t, new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+                TextView del = new TextView(this);
+                del.setText("\u00D7");
+                del.setTextSize(15);
+                del.setTextColor(Theme.caption());
+                del.setPadding(dp(10), 0, dp(6), 0);
+                del.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) { confirmDelete(m); }
+                });
+                item.addView(del);
+
+                item.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) { switchTo(m.id); }
+                });
+                item.setOnLongClickListener(new View.OnLongClickListener() {
+                    public boolean onLongClick(View v) {
+                        showGroupMenu(m);
+                        return true;
+                    }
+                });
+                drawerList.addView(item);
+            }
         }
+
+        // 底部：新建分组 / 新建会话
+        TextView add = new TextView(this);
+        add.setText("+ 新建分组");
+        add.setTextSize(13);
+        add.setTextColor(Theme.caption());
+        add.setPadding(dp(14), dp(16), dp(8), dp(14));
+        add.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { promptNewGroup(); }
+        });
+        drawerList.addView(add);
+    }
+
+    /** 长按会话：移动到分组 / 移出分组。 */
+    private void showGroupMenu(final SessionStore.SessionMeta m) {
+        final List<String> groups = sessions.listGroups();
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        for (int i = 0; i < groups.size(); i++) {
+            final String g = groups.get(i);
+            if (g.equals(m.group)) continue;
+            box.addView(menuItem("移到「" + g + "」", new View.OnClickListener() {
+                public void onClick(View v) {
+                    dismissDialog();
+                    sessions.setGroup(m.id, g);
+                    refreshDrawer();
+                }
+            }));
+        }
+        if (m.group != null && m.group.length() > 0) {
+            box.addView(menuItem("移出分组", new View.OnClickListener() {
+                public void onClick(View v) {
+                    dismissDialog();
+                    sessions.setGroup(m.id, "");
+                    refreshDrawer();
+                }
+            }));
+        }
+        box.addView(menuItem("新建分组并放入", new View.OnClickListener() {
+            public void onClick(View v) {
+                dismissDialog();
+                promptNewGroupFor(m);
+            }
+        }));
+        nodeMenu = new AppDialog.Builder(this)
+                .setTitle(m.title == null || m.title.length() == 0 ? "新对话" : m.title)
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void promptNewGroup() {
+        promptForName("新建分组", "", new NameSink() {
+            public void done(String name) {
+                sessions.addGroup(name);
+                refreshDrawer();
+            }
+        });
+    }
+
+    private void promptNewGroupFor(final SessionStore.SessionMeta m) {
+        promptForName("新建分组", "", new NameSink() {
+            public void done(String name) {
+                sessions.addGroup(name);
+                sessions.setGroup(m.id, name);
+                refreshDrawer();
+            }
+        });
+    }
+
+    private void confirmDeleteGroup(final String group) {
+        new AppDialog.Builder(this)
+                .setTitle("删除分组「" + group + "」")
+                .setMessage("组里的会话会回到「未分组」，不会被删除。")
+                .setPositiveButton("删除分组", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        sessions.removeGroup(group);
+                        refreshDrawer();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 输入名字的小流程，分组相关的地方共用。 */
+    private interface NameSink {
+        void done(String name);
+    }
+
+    private void promptForName(String title, String preset, final NameSink sink) {
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setText(preset);
+        et.setSingleLine(true);
+        et.setHint("分组名");
+        et.setPadding(dp(18), dp(10), dp(18), dp(10));
+        new AppDialog.Builder(this)
+                .setTitle(title)
+                .setView(et)
+                .setPositiveButton("确定", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String name = et.getText() == null ? "" : et.getText().toString().trim();
+                        if (name.length() == 0) {
+                            Snack.show(MainActivity.this, "名字不能为空");
+                            return;
+                        }
+                        sink.done(name);
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private void newSession() {
@@ -1499,6 +1658,24 @@ public final class MainActivity extends Activity {
 
     // ------------------------------------------------------------ 消息渲染
 
+    /**
+     * 把一条分支路径的增量合并回完整历史，并把 leaf 指到末端。
+     *
+     * <p>Agent 循环只拿到当前分支的路径，它追加的消息不带 id/parent；
+     * 这里补上再并回全量，别的分支原样保留。
+     */
+    private String commitPath(String sessId, JSONArray all, JSONArray path, int from, String startLeaf) {
+        String leaf = com.dsh.android.kernel.Conversation.mergeAppended(all, path, from, startLeaf);
+        sessions.saveAll(sessId, all);
+        sessions.setLeaf(sessId, leaf);
+        return leaf;
+    }
+
+    /** 当前会话的完整历史 + 当前分支的起点信息，供各条发送路径复用。 */
+    private JSONArray loadAllForTurn() {
+        return sessions.loadHistory(sessions.currentId());
+    }
+
     private void renderHistory() {
         messages.removeAllViews();
         JSONArray hist = sessions.loadCurrentHistory();
@@ -1506,10 +1683,17 @@ public final class MainActivity extends Activity {
         // 用户的选择在紧跟着的 tool 结果里，一份数据就够
         java.util.Map<Integer, java.util.List<AskLog.Card>> cards = AskLog.byIndex(hist);
 
+        JSONArray allNodes = sessions.loadHistory(sessions.currentId());
+
         int shown = 0;
         for (int i = 0; i < hist.length(); i++) {
             JSONObject o = hist.optJSONObject(i);
             if (o == null) continue;
+            String nodeId = o.optString("id", "");
+            java.util.List<String> sibs = nodeId.length() == 0
+                    ? java.util.Collections.<String>emptyList()
+                    : com.dsh.android.kernel.Conversation.siblingsOf(allNodes, nodeId);
+            int before = messages.getChildCount();
             String role = o.optString("role");
             String content = o.optString("content", "");
             if ("user".equals(role)) {
@@ -1544,10 +1728,161 @@ public final class MainActivity extends Activity {
                     shown++;
                 }
             }
+            // 有兄弟节点 = 这里存在分支，给一排 ‹ n/m › 用来切换
+            if (sibs.size() > 1) {
+                addBranchSwitcher(nodeId, sibs);
+            }
+            // 长按任意一条消息：从这条继续（相当于在这里拉一条新分支）
+            if (nodeId.length() > 0) {
+                for (int k = before; k < messages.getChildCount(); k++) {
+                    attachBranchMenu(messages.getChildAt(k), nodeId);
+                }
+            }
         }
         if (shown == 0) addWelcome();
         refreshSendMode();
         scrollBottom();
+    }
+
+    /**
+     * 分支切换条：`‹ 2/3 ›`。
+     *
+     * <p>只有存在兄弟节点（也就是这里分出过支）时才出现。点箭头会把 leaf
+     * 挪到目标分支的末端，等于「切到那条分支继续看」。
+     */
+    private void addBranchSwitcher(final String nodeId, final java.util.List<String> sibs) {
+        final int idx = sibs.indexOf(nodeId);
+        if (idx < 0) return;
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(4), dp(2), 0, dp(2));
+
+        TextView prev = branchArrow("\u2039", idx > 0);
+        if (idx > 0) {
+            prev.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { jumpBranch(sibs.get(idx - 1)); }
+            });
+        }
+        row.addView(prev);
+
+        TextView label = new TextView(this);
+        label.setText((idx + 1) + "/" + sibs.size());
+        label.setTextSize(11);
+        label.setTextColor(Theme.caption());
+        label.setPadding(dp(6), 0, dp(6), 0);
+        row.addView(label);
+
+        TextView next = branchArrow("\u203A", idx < sibs.size() - 1);
+        if (idx < sibs.size() - 1) {
+            next.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { jumpBranch(sibs.get(idx + 1)); }
+            });
+        }
+        row.addView(next);
+
+        messages.addView(row);
+    }
+
+    private TextView branchArrow(String glyph, boolean enabled) {
+        TextView t = new TextView(this);
+        t.setText(glyph);
+        t.setTextSize(15);
+        t.setTextColor(enabled ? Theme.text2() : Theme.caption());
+        t.setPadding(dp(8), dp(2), dp(8), dp(2));
+        t.setAlpha(enabled ? 1f : 0.4f);
+        return t;
+    }
+
+    /** 切到某条分支：leaf 移到它的末端后整页重绘。 */
+    private void jumpBranch(String targetNodeId) {
+        if (running) {
+            Snack.show(this, "正在生成，先停止再切换分支");
+            return;
+        }
+        String sessId = sessions.currentId();
+        JSONArray all = sessions.loadHistory(sessId);
+        String leaf = com.dsh.android.kernel.Conversation.lastDescendant(all, targetNodeId);
+        sessions.setLeaf(sessId, leaf);
+        renderHistory();
+    }
+
+    /** 长按消息：从这条继续写，或复制内容。 */
+    private void attachBranchMenu(View v, final String nodeId) {
+        if (v == null) return;
+        v.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View view) {
+                LinearLayout box = new LinearLayout(MainActivity.this);
+                box.setOrientation(LinearLayout.VERTICAL);
+                box.addView(menuItem("从这条继续（新建分支）", new View.OnClickListener() {
+                    public void onClick(View v) {
+                        dismissDialog();
+                        startBranchFrom(nodeId);
+                    }
+                }));
+                box.addView(menuItem("复制这条消息", new View.OnClickListener() {
+                    public void onClick(View v) {
+                        dismissDialog();
+                        copyNode(nodeId);
+                    }
+                }));
+                nodeMenu = new AppDialog.Builder(MainActivity.this)
+                        .setTitle("这条消息")
+                        .setView(box)
+                        .setNegativeButton("取消", null)
+                        .show();
+                return true;
+            }
+        });
+    }
+
+    /**
+     * 从某条消息往下继续。
+     *
+     * <p>把 leaf 指到这条消息上，下一条消息就会作为它的子节点写入——
+     * 原来的后续内容不受影响，于是自然形成一条新分支。
+     */
+    private void startBranchFrom(final String nodeId) {
+        if (running) {
+            Snack.show(this, "正在生成，先停止再从这条继续");
+            return;
+        }
+        String sessId = sessions.currentId();
+        JSONArray all = sessions.loadHistory(sessId);
+        int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
+        if (i < 0) return;
+        sessions.setLeaf(sessId, nodeId);
+        renderHistory();
+        // 如果这条是用户消息，直接给它接着写；否则等用户输入
+        JSONObject o = all.optJSONObject(i);
+        String role = o == null ? "" : o.optString("role");
+        if ("user".equals(role)) {
+            String content = o.optString("content", "");
+            if (content.length() > 0) {
+                Snack.show(this, "已切到这条分支，可直接继续对话");
+            }
+        } else {
+            Snack.show(this, "已从这里开出新分支，发消息即可追加");
+        }
+    }
+
+    private void dismissDialog() {
+        try {
+            if (nodeMenu != null) nodeMenu.dismiss();
+        } catch (Throwable ignored) {}
+        nodeMenu = null;
+    }
+
+    private void copyNode(String nodeId) {
+        JSONArray all = sessions.loadHistory(sessions.currentId());
+        int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
+        if (i < 0) return;
+        String content = all.optJSONObject(i).optString("content", "");
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("msg", content));
+        Snack.show(this, "已复制");
     }
 
     /** 历史里的选择题：只读回放（选项和答案都来自历史本身）。 */
@@ -2123,7 +2458,11 @@ public final class MainActivity extends Activity {
     /** 接着上次被暂停的回答继续写。 */
     private void continueRun() {
         if (running) return;
-        final JSONArray hist = sessions.loadCurrentHistory();
+        final String sessId = sessions.currentId();
+        final JSONArray allHist = loadAllForTurn();
+        final String startLeaf = sessions.leafOf(sessId, allHist);
+        final JSONArray hist = com.dsh.android.kernel.Conversation.path(allHist, startLeaf);
+        final int pathFrom = hist.length();
         boolean interrupted = tailInterrupted(hist);
         if (!interrupted) {
             setSendMode(MODE_SEND);
@@ -2147,7 +2486,7 @@ public final class MainActivity extends Activity {
             public void run() {
                 try {
                     loop.run(hist, CONTINUE_NOTE, sink(), true);
-                    sessions.saveHistory(sessions.currentId(), hist);
+                    commitPath(sessId, allHist, hist, pathFrom, startLeaf);
                 } catch (final Throwable t) {
                     runOnUiThread(new Runnable() {
                         public void run() {
@@ -2218,7 +2557,11 @@ public final class MainActivity extends Activity {
             }
         }
 
-        final JSONArray hist = sessions.loadCurrentHistory();
+        final String sessId = sessions.currentId();
+        final JSONArray allHist = loadAllForTurn();
+        final String startLeaf = sessions.leafOf(sessId, allHist);
+        final JSONArray hist = com.dsh.android.kernel.Conversation.path(allHist, startLeaf);
+        final int pathFrom = hist.length();
 
         // 不再预建空气泡：等第一段文字到达时才创建，
         // 这样「文字 → 工具 → 卡片 → 文字」能按真实顺序穿插
@@ -2238,7 +2581,7 @@ public final class MainActivity extends Activity {
             public void run() {
                 try {
                     loop.run(hist, text, sink());
-                    sessions.saveHistory(sessions.currentId(), hist);
+                    commitPath(sessId, allHist, hist, pathFrom, startLeaf);
                 } catch (final Throwable t) {
                     runOnUiThread(new Runnable() {
                         public void run() {
@@ -2738,13 +3081,20 @@ public final class MainActivity extends Activity {
             }
         }
         if (lastUser.length() == 0) return;
-        sessions.saveHistory(sessions.currentId(), kept);
+        // 只把 leaf 往回挪，其它分支不动：重新生成会自然长出一条新分支
+        String leaf = kept.length() == 0 ? null
+                : kept.optJSONObject(kept.length() - 1).optString("id", null);
+        sessions.setLeaf(sessions.currentId(), leaf);
         renderHistory();
         resend(lastUser, kept);
     }
 
     /** 用给定文本与历史再跑一轮（重新生成复用）。 */
     private void resend(final String text, final JSONArray hist) {
+        final String sessId = sessions.currentId();
+        final JSONArray allHist = loadAllForTurn();
+        final String startLeaf = sessions.leafOf(sessId, allHist);
+        final int pathFrom = 0;
         streamingBuf.setLength(0);
         streamingView = null;
         liveThinking = null;
@@ -2757,7 +3107,7 @@ public final class MainActivity extends Activity {
             public void run() {
                 try {
                     loop.run(hist, text, sink());
-                    sessions.saveHistory(sessions.currentId(), hist);
+                    commitPath(sessId, allHist, hist, pathFrom, startLeaf);
                 } catch (final Throwable t) {
                     runOnUiThread(new Runnable() {
                         public void run() {

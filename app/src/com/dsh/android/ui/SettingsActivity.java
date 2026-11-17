@@ -54,6 +54,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
     private SharedPreferences sp;
     private static final int REQ_STORAGE = 1001;
+    private static final int REQ_IMPORT = 1002;
+    private static final int REQ_EXPORT = 1003;
     private boolean pendingDeviceScope = false;
     private LinearLayout scopeShell;
 
@@ -212,6 +214,206 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }));
     }
 
+    // ------------------------------------------------------------ 数据管理
+
+    /**
+     * 数据管理：导入、导出、清空。
+     *
+     * <p>导入按文件内容识别来源（DShAndroid / DeepSeek / ChatGPT / Claude /
+     * 通用 JSON、JSONL），认不出就明确报错，不会假装成功。
+     */
+    private void pageData(LinearLayout body) {
+        final com.dsh.android.kernel.SessionStore st =
+                new com.dsh.android.kernel.SessionStore(this);
+
+        body.addView(sectionLabel("对话记录"));
+        LinearLayout importCard = card();
+        importCard.addView(actionRow("导入对话记录", new View.OnClickListener() {
+            public void onClick(View v) { pickImport(); }
+        }));
+        importCard.addView(divider());
+        importCard.addView(hintRow("支持 DeepSeek、ChatGPT、Claude 导出的文件，"
+                + "以及本应用自己导出的包。DeepSeek 的导出包解开后是 json 文件，选它即可。"
+                + "导入总是新建会话，不会覆盖现有记录。"));
+        importCard.addView(divider());
+        importCard.addView(actionRow("导出全部对话记录", new View.OnClickListener() {
+            public void onClick(View v) { pickExport(); }
+        }));
+        importCard.addView(divider());
+        importCard.addView(hintRow("导出的是一个 json 文件，含所有会话、分支与分组；"
+                + "换设备时导入它即可完整搬过去。"));
+        body.addView(importCard);
+
+        body.addView(sectionLabel("清空"));
+        LinearLayout dangerCard = card();
+        dangerCard.addView(actionRow("删除所有历史对话", new View.OnClickListener() {
+            public void onClick(View v) {
+                new AppDialog.Builder(SettingsActivity.this)
+                        .setTitle("删除所有历史对话")
+                        .setMessage("所有会话、分支和分组都会被删除，无法恢复。"
+                                + "建议先导出一份备份。确定吗？")
+                        .setPositiveButton("全部删除", new android.content.DialogInterface.OnClickListener() {
+                            public void onClick(android.content.DialogInterface d, int w) {
+                                st.deleteAll();
+                                toast("已删除全部历史，并新建了一个空会话");
+                            }
+                        })
+                        .setNegativeButton("取消", null)
+                        .show();
+            }
+        }));
+        dangerCard.addView(divider());
+        dangerCard.addView(hintRow("只影响本机的会话记录，不影响 API Key、插件与凭据库。"));
+        body.addView(dangerCard);
+    }
+
+    private void pickImport() {
+        android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        i.putExtra(android.content.Intent.EXTRA_MIME_TYPES,
+                new String[]{"application/json", "text/plain", "application/octet-stream"});
+        try {
+            startActivityForResult(i, REQ_IMPORT);
+        } catch (Throwable t) {
+            toast("没有可用的文件选择器");
+        }
+    }
+
+    private void pickExport() {
+        String name = "dshandroid-chats-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmm",
+                java.util.Locale.US).format(new java.util.Date()) + ".json";
+        android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+        i.setType("application/json");
+        i.putExtra(android.content.Intent.EXTRA_TITLE, name);
+        try {
+            startActivityForResult(i, REQ_EXPORT);
+        } catch (Throwable t) {
+            toast("没有可用的文件保存位置");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, android.content.Intent data) {
+        super.onActivityResult(req, res, data);
+        if (data == null || data.getData() == null) return;
+        android.net.Uri uri = data.getData();
+        if (req == REQ_IMPORT) doImport(uri);
+        else if (req == REQ_EXPORT) doExport(uri);
+    }
+
+    private void doImport(final android.net.Uri uri) {
+        new Thread(new Runnable() {
+            public void run() {
+                String text = null;
+                try {
+                    text = readText(uri);
+                } catch (Throwable ignored) {}
+                if (text == null) {
+                    final String msg = "读不到这个文件";
+                    runOnUiThread(new Runnable() {
+                        public void run() { toast(msg); }
+                    });
+                    return;
+                }
+                String error = null;
+                int sessionsAdded = 0, messages = 0;
+                String format = "";
+                try {
+                    com.dsh.android.kernel.ChatImport.Result r =
+                            com.dsh.android.kernel.ChatImport.parse(text);
+                    format = r.format;
+                    com.dsh.android.kernel.SessionStore st =
+                            new com.dsh.android.kernel.SessionStore(SettingsActivity.this);
+                    for (int i = 0; i < r.sessions.size(); i++) {
+                        com.dsh.android.kernel.ChatImport.Imported im = r.sessions.get(i);
+                        st.importSession(im.title, im.group, im.messages);
+                        sessionsAdded++;
+                        messages += im.messages.length();
+                    }
+                } catch (final Throwable t) {
+                    error = t.getMessage();
+                }
+                final String f = format;
+                final int sa = sessionsAdded, ms = messages;
+                final String err = error;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (err != null) {
+                            new AppDialog.Builder(SettingsActivity.this)
+                                    .setTitle("导入失败")
+                                    .setMessage(err + "\n\n能识别的格式：DeepSeek 导出、ChatGPT 导出、"
+                                            + "Claude 导出、本应用的导出包，以及含 role/content 的 JSON 或 JSONL。")
+                                    .setPositiveButton("知道了", null)
+                                    .show();
+                            return;
+                        }
+                        new AppDialog.Builder(SettingsActivity.this)
+                                .setTitle("导入完成")
+                                .setMessage("来源：" + f + "\n会话 " + sa + " 个，消息 " + ms + " 条。"
+                                        + "\n\n回到聊天页，打开会话列表就能看到。")
+                                .setPositiveButton("知道了", null)
+                                .show();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private void doExport(final android.net.Uri uri) {
+        new Thread(new Runnable() {
+            public void run() {
+                String err = null;
+                int n = 0;
+                try {
+                    com.dsh.android.kernel.SessionStore st =
+                            new com.dsh.android.kernel.SessionStore(SettingsActivity.this);
+                    org.json.JSONObject all = st.exportAll();
+                    n = all.optJSONArray("sessions") == null ? 0 : all.optJSONArray("sessions").length();
+                    java.io.OutputStream os = getContentResolver().openOutputStream(uri);
+                    if (os == null) throw new Exception("无法写入");
+                    os.write(all.toString().getBytes("UTF-8"));
+                    os.flush();
+                    os.close();
+                } catch (Throwable t) {
+                    err = t.getMessage();
+                }
+                final String e = err;
+                final int count = n;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (e != null) {
+                            new AppDialog.Builder(SettingsActivity.this)
+                                    .setTitle("导出失败").setMessage(e)
+                                    .setPositiveButton("知道了", null).show();
+                        } else {
+                            toast("已导出 " + count + " 个会话");
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private String readText(android.net.Uri uri) {
+        try {
+            java.io.InputStream in = getContentResolver().openInputStream(uri);
+            if (in == null) return null;
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                bo.write(buf, 0, n);
+                if (bo.size() > 40 * 1024 * 1024) break;   // 40MB 上限，防止选错文件把内存吃光
+            }
+            in.close();
+            return new String(bo.toByteArray(), "UTF-8");
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     // ------------------------------------------------------------ 布局
 
     /** 0 = 根菜单，其余为子页。 */
@@ -259,6 +461,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 10) pageTerminal(bodyBox);
         else if (page == 11) pageBrowser(bodyBox);
         else if (page == 12) pageComputer(bodyBox);
+        else if (page == 13) pageData(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -286,6 +489,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(menuRow(IconView.WINDOW, "内置虚拟机", "实时画面与截图", 12));
         c.addView(divider());
         c.addView(menuRow(IconView.BAG, Texts.t(this, "browser"), "查看 AI 正在访问的页面", 11));
+        c.addView(divider());
+        c.addView(menuRow(IconView.BOOKMARK, "数据管理", "导入 / 导出对话记录、清空历史", 13));
         c.addView(divider());
         c.addView(menuRow(IconView.INFO, Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
         body.addView(c);
