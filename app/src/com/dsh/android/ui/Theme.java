@@ -105,6 +105,11 @@ public final class Theme {
     public static int text() { return dark ? 0xFFF9FAFB : 0xFF0F1115; }
     public static int text2() { return dark ? 0xFFCFD3D6 : 0xFF61666B; }
     public static int text3() { return dark ? 0xFFADB2B8 : 0xFF81858C; }
+    /** 滚动指示条：深色下要够亮，浅色下不能太扎眼。 */
+    public static int scrollbar() {
+        return dark ? 0x66FFFFFF : 0x33000000;
+    }
+
     public static int caption() {
         // 这一档常用于 11sp 小字，深色下太暗会读不出来
         return dark ? 0xFF9AA0A6 : 0xFF9BA1A8;
