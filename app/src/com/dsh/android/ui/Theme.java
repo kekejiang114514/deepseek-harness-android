@@ -105,7 +105,10 @@ public final class Theme {
     public static int text() { return dark ? 0xFFF9FAFB : 0xFF0F1115; }
     public static int text2() { return dark ? 0xFFCFD3D6 : 0xFF61666B; }
     public static int text3() { return dark ? 0xFFADB2B8 : 0xFF81858C; }
-    public static int caption() { return dark ? 0xFF81858C : 0xFFADB2B8; }
+    public static int caption() {
+        // 这一档常用于 11sp 小字，深色下太暗会读不出来
+        return dark ? 0xFF9AA0A6 : 0xFF9BA1A8;
+    }
 
     // ---------- 主色 / 状态 ----------
     /** 主按钮底：浅色近黑，深色近白（brand-primary 反转）。 */
@@ -115,13 +118,24 @@ public final class Theme {
     public static int primary() { return dark ? 0xFFF9FAFB : 0xFF0F1115; }
     /** 主按钮上的文字。 */
     public static int onPrimary() { return dark ? 0xFF151517 : 0xFFFFFFFF; }
-    public static int link() { return 0xFF4176E6; }
+    public static int link() {
+        // 深色底上深蓝读不清，暗色模式用更亮的蓝
+        return dark ? 0xFF7FB0FF : 0xFF4176E6;
+    }
     public static int linkDark() { return 0xFF561E5E; }
     public static int success() { return 0xFF22C55E; }
     public static int warning() { return 0xFFF59E0B; }
-    public static int danger() { return 0xFFEC1313; }
+    public static int danger() {
+        // 深色底上深红几乎看不见（对比度 ~2.5），暗色模式换亮红
+        return dark ? 0xFFFF7B72 : 0xFFD92D20;
+    }
+
+    /** 危险色作为背景时（如红色按钮）上面的文字颜色。 */
+    public static int onDanger() {
+        return dark ? 0xFF2A0B09 : 0xFFFFFFFF;
+    }
     /** 强调蓝（深色下更亮）。 */
-    public static int accent() { return dark ? 0xFF7AAAff : 0xFF4176E6; }
+    public static int accent() { return dark ? 0xFF8AB4FF : 0xFF4176E6; }
 
     /** 行内代码底色。 */
     public static int inlineCodeBg() { return dark ? 0x24FFFFFF : 0x14263048; }

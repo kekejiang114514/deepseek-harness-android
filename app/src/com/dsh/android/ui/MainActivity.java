@@ -1350,12 +1350,21 @@ public final class MainActivity extends Activity {
         d.setBackgroundColor(Theme.panel());
         d.setPadding(dp(12), dp(20), dp(12), dp(12));
 
+        // 标题：一行大字 + 一行小字，避免顶部只有一个 13sp 的「会话」显得空
         TextView head = new TextView(this);
-        head.setText("会话");
-        head.setTextSize(13);
-        head.setTextColor(Theme.caption());
-        head.setPadding(dp(8), 0, 0, dp(10));
+        head.setText("对话");
+        head.setTextSize(20);
+        head.setTypeface(null, Typeface.BOLD);
+        head.setTextColor(Theme.text());
+        head.setPadding(dp(10), dp(2), 0, 0);
         d.addView(head);
+
+        TextView sub = new TextView(this);
+        sub.setText("按分组整理，长按会话可移动");
+        sub.setTextSize(11);
+        sub.setTextColor(Theme.caption());
+        sub.setPadding(dp(10), dp(2), 0, dp(12));
+        d.addView(sub);
 
         // 新建会话 + 新建分组放在同一行：分组入口必须在顶部，
         // 会话一多，底部那个入口要滑到底才看得到。
@@ -1363,12 +1372,25 @@ public final class MainActivity extends Activity {
         topRow.setOrientation(LinearLayout.HORIZONTAL);
         topRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView add = new TextView(this);
-        add.setText("\uFF0B  新建会话");
-        add.setTextSize(15);
-        add.setTextColor(Theme.text());
-        add.setPadding(dp(12), dp(12), dp(12), dp(12));
-        add.setBackground(Theme.round(Theme.surface2(), Theme.R_MD, this));
+        LinearLayout add = new LinearLayout(this);
+        add.setOrientation(LinearLayout.HORIZONTAL);
+        add.setGravity(Gravity.CENTER_VERTICAL);
+        add.setPadding(dp(14), dp(11), dp(14), dp(11));
+        add.setBackground(Theme.round(Theme.primarySoft(), Theme.R_MD, this));
+
+        IconView plus = new IconView(this, IconView.PLUS, 14);
+        plus.setColor(Theme.accent());
+        add.addView(plus, new LinearLayout.LayoutParams(dp(14), dp(14)));
+
+        TextView addText = new TextView(this);
+        addText.setText("新建会话");
+        addText.setTextSize(14);
+        addText.setTextColor(Theme.text());
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tp.leftMargin = dp(8);
+        add.addView(addText, tp);
+
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { newSession(); }
         });
@@ -1376,8 +1398,9 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         FrameLayout folderBtn = new FrameLayout(this);
-        folderBtn.setPadding(dp(8), dp(12), dp(8), dp(12));
-        folderBtn.setBackground(Theme.round(Theme.surface2(), Theme.R_MD, this));
+        folderBtn.setPadding(dp(9), dp(11), dp(9), dp(11));
+        folderBtn.setPadding(dp(9), dp(11), dp(9), dp(11));
+        folderBtn.setBackground(Theme.round(Theme.primarySoft(), Theme.R_MD, this));
         IconView folderIcon = new IconView(this, IconView.FOLDER, 20);
         folderIcon.setColor(Theme.text2());
         folderBtn.addView(folderIcon, new FrameLayout.LayoutParams(dp(24), dp(24)));
@@ -1431,11 +1454,11 @@ public final class MainActivity extends Activity {
 
     private void refreshDrawer() {
         drawerList.removeAllViews();
+        drawerList.setPadding(dp(4), dp(2), dp(4), dp(20));
+
         final List<SessionMeta> list = sessions.listSessions();
         final String cur = sessions.currentId();
         final List<String> groups = sessions.listGroups();
-
-        // 分组分桶交给 SessionGroups：那里有单测覆盖，界面不再自己写一遍循环
         java.util.List<com.dsh.android.kernel.SessionGroups.Bucket> buckets =
                 com.dsh.android.kernel.SessionGroups.split(list, groups);
         boolean showHeaders = com.dsh.android.kernel.SessionGroups.showHeaders(buckets);
@@ -1443,32 +1466,38 @@ public final class MainActivity extends Activity {
         for (int bi = 0; bi < buckets.size(); bi++) {
             final com.dsh.android.kernel.SessionGroups.Bucket bucket = buckets.get(bi);
             final String groupName = bucket.name;
-
             final boolean named = groupName.length() > 0;
             final boolean collapsed = named && collapsedGroups().contains(groupName);
+
             if (showHeaders) {
                 LinearLayout head = new LinearLayout(this);
                 head.setOrientation(LinearLayout.HORIZONTAL);
                 head.setGravity(Gravity.CENTER_VERTICAL);
-                head.setPadding(dp(10), dp(10), dp(8), dp(6));
-                head.setBackground(pressableRow());
+                // 组头不铺底色：一排排灰块正是上一版显得笨重的原因
+                head.setPadding(dp(8), dp(14), dp(8), dp(6));
 
                 if (named) {
-                    head.addView(actionIcon(collapsed ? IconView.CHEVRON_RIGHT : IconView.CHEVRON_DOWN,
-                            true, new View.OnClickListener() {
-                                public void onClick(View v) { toggleGroup(groupName); }
-                            }));
-                    head.addView(actionIcon(IconView.FOLDER, true, new View.OnClickListener() {
-                        public void onClick(View v) { toggleGroup(groupName); }
-                    }));
+                    IconView fold = new IconView(this,
+                            collapsed ? IconView.CHEVRON_RIGHT : IconView.CHEVRON_DOWN, 14);
+                    fold.setColor(Theme.caption());
+                    head.addView(fold, new LinearLayout.LayoutParams(dp(14), dp(14)));
+
+                    IconView folder = new IconView(this, IconView.FOLDER, 14);
+                    folder.setColor(Theme.caption());
+                    LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(dp(14), dp(14));
+                    fp.leftMargin = dp(6);
+                    head.addView(folder, fp);
                 }
 
-                TextView headText = new TextView(this);
-                headText.setText(named ? groupName : "未分组");
-                headText.setTextSize(12);
-                headText.setTextColor(named ? Theme.text2() : Theme.caption());
-                headText.setPadding(dp(2), 0, dp(6), 0);
-                head.addView(headText);
+                TextView name = new TextView(this);
+                name.setText(named ? groupName : "未分组");
+                name.setTextSize(11);
+                name.setTextColor(Theme.caption());
+                name.setLetterSpacing(0.04f);
+                LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                np.leftMargin = dp(7);
+                head.addView(name, np);
 
                 TextView count = new TextView(this);
                 count.setText(String.valueOf(bucket.sessions.size()));
@@ -1477,29 +1506,47 @@ public final class MainActivity extends Activity {
                 head.addView(count);
 
                 if (named) {
+                    head.setBackground(Theme.round(0x00000000, Theme.R_SM, this));
+                    head.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View v) { toggleGroup(groupName); }
+                    });
                     head.setOnLongClickListener(new View.OnLongClickListener() {
                         public boolean onLongClick(View v) {
                             showFolderMenu(groupName);
                             return true;
                         }
                     });
-                    head.setOnClickListener(new View.OnClickListener() {
-                        public void onClick(View v) { toggleGroup(groupName); }
-                    });
                 }
                 drawerList.addView(head);
             }
             if (collapsed) continue;
 
+            if (bucket.sessions.isEmpty()) {
+                TextView empty = new TextView(this);
+                empty.setText("空文件夹 · 长按会话可移入");
+                empty.setTextSize(11);
+                empty.setTextColor(Theme.caption());
+                empty.setPadding(dp(36), dp(4), dp(8), dp(10));
+                drawerList.addView(empty);
+            }
+
             for (int i = 0; i < bucket.sessions.size(); i++) {
                 final SessionMeta m = bucket.sessions.get(i);
+                final boolean sel = m.id.equals(cur);
+
                 LinearLayout item = new LinearLayout(this);
                 item.setOrientation(LinearLayout.HORIZONTAL);
                 item.setGravity(Gravity.CENTER_VERTICAL);
-                item.setPadding(dp(12), dp(11), dp(8), dp(11));
-                boolean sel = m.id.equals(cur);
+                item.setPadding(dp(10), dp(9), dp(6), dp(9));
                 item.setBackground(Theme.round(sel ? Theme.surface2() : 0x00000000,
-                        Theme.R_MD, this));
+                        Theme.R_SM, this));
+
+                // 选中项左侧一条强调条，比整块换色更克制
+                View bar = new View(this);
+                bar.setBackground(Theme.round(sel ? Theme.accent() : 0x00000000, 2, this));
+                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(3), dp(16));
+                bp.rightMargin = dp(8);
+                item.addView(bar, bp);
 
                 TextView t = new TextView(this);
                 t.setText(m.title == null || m.title.length() == 0 ? "新对话" : m.title);
@@ -1510,15 +1557,14 @@ public final class MainActivity extends Activity {
                 item.addView(t, new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-                TextView del = new TextView(this);
-                del.setText("\u00D7");
-                del.setTextSize(15);
-                del.setTextColor(Theme.caption());
-                del.setPadding(dp(10), 0, dp(6), 0);
+                IconView del = new IconView(this, IconView.CLOSE, 13);
+                del.setColor(Theme.caption());
+                del.setAlpha(sel ? 1f : 0.35f);
+                del.setPadding(dp(7), dp(7), dp(7), dp(7));
                 del.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) { confirmDelete(m); }
                 });
-                item.addView(del);
+                item.addView(del, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
                 item.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) { switchTo(m.id); }
@@ -1533,12 +1579,12 @@ public final class MainActivity extends Activity {
             }
         }
 
-        // 新建分组放在列表底部，但一直存在，空列表时也能看到
+        // 底部入口保持轻量，只作补充（顶部已有文件夹按钮）
         TextView add = new TextView(this);
-        add.setText("+ 新建分组");
-        add.setTextSize(13);
-        add.setTextColor(Theme.link());
-        add.setPadding(dp(14), dp(16), dp(8), dp(16));
+        add.setText("\uFF0B  新建分组");
+        add.setTextSize(12);
+        add.setTextColor(Theme.caption());
+        add.setPadding(dp(12), dp(18), dp(8), dp(10));
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { promptNewGroup(); }
         });
@@ -1568,11 +1614,6 @@ public final class MainActivity extends Activity {
         }
         prefs().edit().putString("collapsed_groups", sb.toString()).apply();
         refreshDrawer();
-    }
-
-    /** 组的底色，让「文件夹」看起来像一块可点的区域。 */
-    private android.graphics.drawable.Drawable pressableRow() {
-        return Theme.round(Theme.surface2(), Theme.R_SM, this);
     }
 
     /** 长按分组：重命名 / 删除。 */

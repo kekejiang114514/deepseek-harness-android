@@ -190,7 +190,8 @@ public final class AppDialog {
             TextView t = new TextView(ctx);
             t.setText(text);
             t.setTextSize(14);
-            t.setTextColor(0xFFFFFFFF);
+            // 底色是危险红时用深色文字，其它情况用主题的「主按钮文字」色
+            t.setTextColor(bgColor == Theme.danger() ? Theme.onDanger() : Theme.onPrimary());
             t.setPadding(dp(18), dp(10), dp(18), dp(10));
             t.setBackground(Theme.round(bgColor == 0 ? Theme.primary() : bgColor, 20, ctx));
             t.setOnClickListener(new View.OnClickListener() {
