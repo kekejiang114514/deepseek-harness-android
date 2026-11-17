@@ -66,4 +66,22 @@ public final class Icons {
 
     public static final String BAG = "M16 10a4 4 0 0 1-8 0M3.103 6.034h17.794M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z";
 
+    /** 复制：两张叠起来的纸。只用直线，避免不支持的圆弧指令。 */
+    public static final String COPY = "M9 9h11v11H9zM4 15V4h11v4";
+
+    /** 分支：一条线在中间分叉成两条。 */
+    public static final String BRANCH = "M3 12h7l4-6h7M10 12l4 6h7";
+
+    /** 重新生成：圆形箭头（贝塞尔近似圆，不用圆弧指令）。 */
+    public static final String REFRESH = "M12 5C15.9 5 19 8.1 19 12C19 15.9 15.9 19 12 19C8.1 19 5 15.9 5 12C5 8.1 8.1 5 12 5M19 3.5v5h-5";
+
+    /** 分组：文件夹。 */
+    public static final String FOLDER = "M3 7c0-1.1.9-2 2-2h4l2 2h8c1.1 0 2 .9 2 2v9c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2z";
+
+    /** 折叠状态的小三角。 */
+    public static final String CHEVRON_RIGHT = "M9 5l7 7-7 7";
+
+    public static final String CHEVRON_LEFT = "M15 5l-7 7 7 7";
+
+    public static final String CHEVRON_DOWN = "M5 9l7 7 7-7";
 }

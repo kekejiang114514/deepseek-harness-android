@@ -32,7 +32,8 @@ public final class SessionGroups {
     /**
      * 把会话按分组切开，未分组的永远排在最后。
      *
-     * <p>空组不会出现在结果里；会话的 group 指向不存在的组时按未分组处理。
+     * <p>空组也会保留：它们就是空文件夹，必须在列表里可见，否则「新建分组」
+     * 看上去像是没生效。会话的 group 指向不存在的组时按未分组处理。
      *
      * @param all    会话列表（按更新时间倒序）
      * @param groups 已存在的分组名
@@ -60,17 +61,26 @@ public final class SessionGroups {
                 SessionMeta m = list.get(k);
                 if (m != null && name.equals(m.group)) bucket.add(m);
             }
-            if (!bucket.isEmpty()) out.add(new Bucket(name, bucket));
+            out.add(new Bucket(name, bucket));
         }
 
         if (!rest.isEmpty()) out.add(new Bucket("", rest));
         return out;
     }
 
-    /** 是否该显示「未分组」这个段标题。只有一个段且它就是未分组时不必显示。 */
+    /** 是否该显示段标题。只有「全是未分组、且只有一个段」时才不必显示。 */
     public static boolean showHeaders(List<Bucket> buckets) {
         if (buckets == null || buckets.size() == 0) return false;
         if (buckets.size() > 1) return true;
         return !buckets.get(0).isUngrouped();
+    }
+
+    /** 是否存在任何命名分组（决定要不要显示折叠/文件夹那一套）。 */
+    public static boolean hasNamed(List<Bucket> buckets) {
+        if (buckets == null) return false;
+        for (int i = 0; i < buckets.size(); i++) {
+            if (!buckets.get(i).isUngrouped()) return true;
+        }
+        return false;
     }
 }

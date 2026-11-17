@@ -338,4 +338,25 @@ public final class SessionStore {
         sp.edit().putString("hist_" + id, all.toString()).apply();
         updateMeta(id, deriveTitle(all), System.currentTimeMillis());
     }
+
+    /** 重命名分组：组内会话一起跟着改名。 */
+    public void renameGroup(String from, String to) {
+        if (from == null || to == null) return;
+        String name = to.trim();
+        if (name.length() == 0 || from.equals(name)) return;
+        List<String> cur = listGroups();
+        int at = cur.indexOf(from);
+        if (at < 0) return;
+        if (cur.contains(name)) return;      // 已有同名组，拒绝
+        cur.set(at, name);
+        saveGroups(cur);
+        JSONArray idx = loadIndex();
+        try {
+            for (int i = 0; i < idx.length(); i++) {
+                JSONObject m = idx.getJSONObject(i);
+                if (from.equals(m.optString("group", ""))) m.put("group", name);
+            }
+            sp.edit().putString("index", idx.toString()).apply();
+        } catch (Exception ignored) {}
+    }
 }

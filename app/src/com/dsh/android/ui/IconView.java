@@ -23,6 +23,8 @@ public final class IconView extends View {
     public static final int KEY = 15, WRENCH = 16, PALETTE = 17, GLOBE = 18;
     public static final int INFO = 19, LOCK = 20, DOC = 21, WINDOW = 22;
     public static final int TERMINAL = 23, BAG = 24, PAUSE = 25, PLAY = 26, BOOKMARK = 27;
+    public static final int COPY = 28, BRANCH = 29, REFRESH = 30, FOLDER = 31;
+    public static final int CHEVRON_RIGHT = 32, CHEVRON_DOWN = 33, CHEVRON_LEFT = 34;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
@@ -96,6 +98,13 @@ public final class IconView extends View {
             case PLAY: d = Icons.PLAY; break;
             case BOOKMARK: d = Icons.BOOKMARK; break;
             case BAG: d = Icons.BAG; break;
+            case COPY: d = Icons.COPY; break;
+            case BRANCH: d = Icons.BRANCH; break;
+            case REFRESH: d = Icons.REFRESH; break;
+            case FOLDER: d = Icons.FOLDER; break;
+            case CHEVRON_RIGHT: d = Icons.CHEVRON_RIGHT; break;
+            case CHEVRON_DOWN: d = Icons.CHEVRON_DOWN; break;
+            case CHEVRON_LEFT: d = Icons.CHEVRON_LEFT; break;
             default: d = Icons.HELP; break;
         }
         p = SvgPath.parse(d);

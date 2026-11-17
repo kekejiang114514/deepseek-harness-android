@@ -42,13 +42,14 @@ public final class SessionGroupsTest {
         ok(b2.get(1).isUngrouped(), "未分组排在最后");
         ok(SessionGroups.showHeaders(b2), "多段时显示标题");
 
-        System.out.println("t3 空分组不出现");
+        System.out.println("t3 空分组要保留（它就是空文件夹）");
         List<String> g3 = new ArrayList<String>();
         g3.add("工作");
         g3.add("空组");
         List<SessionGroups.Bucket> b3 = SessionGroups.split(all2, g3);
-        ok(b3.size() == 2, "空组被跳过");
-        ok(!b3.get(0).isUngrouped(), "第一段仍是工作");
+        ok(b3.size() == 3, "两个命名分组 + 未分组，共 3 段");
+        ok(b3.get(1).sessions.isEmpty(), "空组以空列表出现，不会凭空消失");
+        ok(SessionGroups.hasNamed(b3), "存在命名分组");
 
         System.out.println("t4 会话指向已删除的组");
         List<SessionMeta> all4 = new ArrayList<SessionMeta>();

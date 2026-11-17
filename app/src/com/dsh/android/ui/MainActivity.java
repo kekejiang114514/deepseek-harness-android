@@ -1357,6 +1357,12 @@ public final class MainActivity extends Activity {
         head.setPadding(dp(8), 0, 0, dp(10));
         d.addView(head);
 
+        // 新建会话 + 新建分组放在同一行：分组入口必须在顶部，
+        // 会话一多，底部那个入口要滑到底才看得到。
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+
         TextView add = new TextView(this);
         add.setText("\uFF0B  新建会话");
         add.setTextSize(15);
@@ -1366,7 +1372,23 @@ public final class MainActivity extends Activity {
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { newSession(); }
         });
-        d.addView(add);
+        topRow.addView(add, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        FrameLayout folderBtn = new FrameLayout(this);
+        folderBtn.setPadding(dp(8), dp(12), dp(8), dp(12));
+        folderBtn.setBackground(Theme.round(Theme.surface2(), Theme.R_MD, this));
+        IconView folderIcon = new IconView(this, IconView.FOLDER, 20);
+        folderIcon.setColor(Theme.text2());
+        folderBtn.addView(folderIcon, new FrameLayout.LayoutParams(dp(24), dp(24)));
+        folderBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { promptNewGroup(); }
+        });
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        fp.leftMargin = dp(8);
+        topRow.addView(folderBtn, fp);
+        d.addView(topRow);
 
         ScrollView sv = new ScrollView(this);
         drawerList = new LinearLayout(this);
@@ -1422,22 +1444,52 @@ public final class MainActivity extends Activity {
             final com.dsh.android.kernel.SessionGroups.Bucket bucket = buckets.get(bi);
             final String groupName = bucket.name;
 
+            final boolean named = groupName.length() > 0;
+            final boolean collapsed = named && collapsedGroups().contains(groupName);
             if (showHeaders) {
-                TextView head = new TextView(this);
-                head.setText(groupName.length() == 0 ? "未分组" : groupName);
-                head.setTextSize(11);
-                head.setTextColor(Theme.caption());
-                head.setPadding(dp(14), dp(12), dp(8), dp(4));
-                if (groupName.length() > 0) {
+                LinearLayout head = new LinearLayout(this);
+                head.setOrientation(LinearLayout.HORIZONTAL);
+                head.setGravity(Gravity.CENTER_VERTICAL);
+                head.setPadding(dp(10), dp(10), dp(8), dp(6));
+                head.setBackground(pressableRow());
+
+                if (named) {
+                    head.addView(actionIcon(collapsed ? IconView.CHEVRON_RIGHT : IconView.CHEVRON_DOWN,
+                            true, new View.OnClickListener() {
+                                public void onClick(View v) { toggleGroup(groupName); }
+                            }));
+                    head.addView(actionIcon(IconView.FOLDER, true, new View.OnClickListener() {
+                        public void onClick(View v) { toggleGroup(groupName); }
+                    }));
+                }
+
+                TextView headText = new TextView(this);
+                headText.setText(named ? groupName : "未分组");
+                headText.setTextSize(12);
+                headText.setTextColor(named ? Theme.text2() : Theme.caption());
+                headText.setPadding(dp(2), 0, dp(6), 0);
+                head.addView(headText);
+
+                TextView count = new TextView(this);
+                count.setText(String.valueOf(bucket.sessions.size()));
+                count.setTextSize(11);
+                count.setTextColor(Theme.caption());
+                head.addView(count);
+
+                if (named) {
                     head.setOnLongClickListener(new View.OnLongClickListener() {
                         public boolean onLongClick(View v) {
-                            confirmDeleteGroup(groupName);
+                            showFolderMenu(groupName);
                             return true;
                         }
+                    });
+                    head.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View v) { toggleGroup(groupName); }
                     });
                 }
                 drawerList.addView(head);
             }
+            if (collapsed) continue;
 
             for (int i = 0; i < bucket.sessions.size(); i++) {
                 final SessionMeta m = bucket.sessions.get(i);
@@ -1481,16 +1533,74 @@ public final class MainActivity extends Activity {
             }
         }
 
-        // 底部：新建分组 / 新建会话
+        // 新建分组放在列表底部，但一直存在，空列表时也能看到
         TextView add = new TextView(this);
         add.setText("+ 新建分组");
         add.setTextSize(13);
-        add.setTextColor(Theme.caption());
-        add.setPadding(dp(14), dp(16), dp(8), dp(14));
+        add.setTextColor(Theme.link());
+        add.setPadding(dp(14), dp(16), dp(8), dp(16));
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { promptNewGroup(); }
         });
         drawerList.addView(add);
+    }
+
+    /** 折叠状态存在 prefs 里，重开应用保持一致。 */
+    private java.util.Set<String> collapsedGroups() {
+        java.util.Set<String> out = new java.util.HashSet<String>();
+        String raw = prefs().getString("collapsed_groups", "");
+        if (raw != null && raw.length() > 0) {
+            String[] parts = raw.split("\n");
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i].length() > 0) out.add(parts[i]);
+            }
+        }
+        return out;
+    }
+
+    private void toggleGroup(String name) {
+        java.util.Set<String> set = collapsedGroups();
+        if (!set.remove(name)) set.add(name);
+        StringBuilder sb = new StringBuilder();
+        for (String s : set) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(s);
+        }
+        prefs().edit().putString("collapsed_groups", sb.toString()).apply();
+        refreshDrawer();
+    }
+
+    /** 组的底色，让「文件夹」看起来像一块可点的区域。 */
+    private android.graphics.drawable.Drawable pressableRow() {
+        return Theme.round(Theme.surface2(), Theme.R_SM, this);
+    }
+
+    /** 长按分组：重命名 / 删除。 */
+    private void showFolderMenu(final String group) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(menuItem("重命名分组", new View.OnClickListener() {
+            public void onClick(View v) {
+                dismissDialog();
+                promptForName("重命名分组", group, new NameSink() {
+                    public void done(String name) {
+                        sessions.renameGroup(group, name);
+                        refreshDrawer();
+                    }
+                });
+            }
+        }));
+        box.addView(menuItem("删除分组", new View.OnClickListener() {
+            public void onClick(View v) {
+                dismissDialog();
+                confirmDeleteGroup(group);
+            }
+        }));
+        nodeMenu = new AppDialog.Builder(this)
+                .setTitle(group)
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     /** 长按会话：移动到分组 / 移出分组。 */
@@ -1723,12 +1833,9 @@ public final class MainActivity extends Activity {
                     shown++;
                 }
             }
-            // 有兄弟节点 = 这里存在分支，给一排 ‹ n/m › 用来切换
-            if (sibs.size() > 1) {
-                addBranchSwitcher(nodeId, sibs);
-            }
-            // 长按任意一条消息：从这条继续（相当于在这里拉一条新分支）
+            // 每条消息下面都有一排操作：分支切换 / 复制 / 从这里分支 / 重新生成
             if (nodeId.length() > 0) {
+                addActionRow(nodeId, role, sibs);
                 for (int k = before; k < messages.getChildCount(); k++) {
                     attachBranchMenu(messages.getChildAt(k), nodeId);
                 }
@@ -1740,54 +1847,70 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * 分支切换条：`‹ 2/3 ›`。
+     * 每条消息下方的操作行。
      *
-     * <p>只有存在兄弟节点（也就是这里分出过支）时才出现。点箭头会把 leaf
-     * 挪到目标分支的末端，等于「切到那条分支继续看」。
+     * <p>参照主流客户端的做法放在气泡下面而不是藏进长按菜单：
+     * 有分支时显示 `‹ n/m ›`，然后是复制、从这里分支，助手消息再带一个重新生成。
      */
-    private void addBranchSwitcher(final String nodeId, final java.util.List<String> sibs) {
-        final int idx = sibs.indexOf(nodeId);
-        if (idx < 0) return;
-
+    private void addActionRow(final String nodeId, String role, final java.util.List<String> sibs) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(4), dp(2), 0, dp(2));
+        row.setPadding(dp(2), dp(2), 0, dp(8));
 
-        TextView prev = branchArrow("\u2039", idx > 0);
-        if (idx > 0) {
-            prev.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { jumpBranch(sibs.get(idx - 1)); }
-            });
+        if (sibs != null && sibs.size() > 1) {
+            final int idx = sibs.indexOf(nodeId);
+            if (idx >= 0) {
+                row.addView(actionIcon(IconView.CHEVRON_LEFT, true, new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (idx > 0) jumpBranch(sibs.get(idx - 1));
+                    }
+                }));
+                TextView label = new TextView(this);
+                label.setText((idx + 1) + "/" + sibs.size());
+                label.setTextSize(11);
+                label.setTextColor(Theme.caption());
+                label.setPadding(dp(2), 0, dp(2), 0);
+                row.addView(label);
+                row.addView(actionIcon(IconView.CHEVRON_RIGHT, false, new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (idx < sibs.size() - 1) jumpBranch(sibs.get(idx + 1));
+                    }
+                }));
+                View gap = new View(this);
+                gap.setLayoutParams(new LinearLayout.LayoutParams(dp(10), 1));
+                row.addView(gap);
+            }
         }
-        row.addView(prev);
 
-        TextView label = new TextView(this);
-        label.setText((idx + 1) + "/" + sibs.size());
-        label.setTextSize(11);
-        label.setTextColor(Theme.caption());
-        label.setPadding(dp(6), 0, dp(6), 0);
-        row.addView(label);
-
-        TextView next = branchArrow("\u203A", idx < sibs.size() - 1);
-        if (idx < sibs.size() - 1) {
-            next.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { jumpBranch(sibs.get(idx + 1)); }
-            });
+        row.addView(actionIcon(IconView.COPY, true, new View.OnClickListener() {
+            public void onClick(View v) { copyNode(nodeId); }
+        }));
+        row.addView(actionIcon(IconView.BRANCH, true, new View.OnClickListener() {
+            public void onClick(View v) { startBranchFrom(nodeId); }
+        }));
+        if ("assistant".equals(role)) {
+            row.addView(actionIcon(IconView.REFRESH, true, new View.OnClickListener() {
+                public void onClick(View v) { regenerateNode(nodeId); }
+            }));
         }
-        row.addView(next);
-
         messages.addView(row);
     }
 
-    private TextView branchArrow(String glyph, boolean enabled) {
-        TextView t = new TextView(this);
-        t.setText(glyph);
-        t.setTextSize(15);
-        t.setTextColor(enabled ? Theme.text2() : Theme.caption());
-        t.setPadding(dp(8), dp(2), dp(8), dp(2));
-        t.setAlpha(enabled ? 1f : 0.4f);
-        return t;
+    /**
+     * 一个可点的图标按钮。
+     *
+     * @param enabled  false 时画淡且不响应点击（分支到头了就是这样）
+     */
+    private View actionIcon(int icon, boolean enabled, final View.OnClickListener click) {
+        IconView v = new IconView(this, icon, 18);
+        v.setColor(enabled ? Theme.text2() : Theme.caption());
+        v.setAlpha(enabled ? 1f : 0.45f);
+        int pad = dp(6);
+        v.setPadding(pad, dp(4), pad, dp(4));
+        v.setLayoutParams(new LinearLayout.LayoutParams(dp(30), dp(30)));
+        if (enabled) v.setOnClickListener(click);
+        return v;
     }
 
     /** 切到某条分支：leaf 移到它的末端后整页重绘。 */
@@ -1801,6 +1924,35 @@ public final class MainActivity extends Activity {
         String leaf = com.dsh.android.kernel.Conversation.lastDescendant(all, targetNodeId);
         sessions.setLeaf(sessId, leaf);
         renderHistory();
+    }
+
+    /** 重新生成某条助手回答：回到它对应的提问，再答一次（会自然长出新分支）。 */
+    private void regenerateNode(String nodeId) {
+        if (running) {
+            Snack.show(this, "正在生成，先停止");
+            return;
+        }
+        String sessId = sessions.currentId();
+        JSONArray all = sessions.loadHistory(sessId);
+        int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
+        if (i < 0) return;
+        JSONObject node = all.optJSONObject(i);
+        String parent = node == null ? "" : node.optString("parent", "");
+        if (parent.length() == 0) {
+            Snack.show(this, "这条没有对应的提问，无法重新生成");
+            return;
+        }
+        int pi = com.dsh.android.kernel.Conversation.indexOf(all, parent);
+        JSONObject pnode = pi < 0 ? null : all.optJSONObject(pi);
+        String question = pnode == null ? "" : pnode.optString("content", "");
+        if (question.length() == 0) {
+            Snack.show(this, "上一条不是文本提问，无法重新生成");
+            return;
+        }
+        JSONArray path = com.dsh.android.kernel.Conversation.path(all, parent);
+        sessions.setLeaf(sessId, parent);
+        renderHistory();
+        resend(question, path);
     }
 
     /** 长按消息：从这条继续写，或复制内容。 */
