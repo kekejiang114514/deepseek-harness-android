@@ -1860,6 +1860,9 @@ public final class MainActivity extends Activity {
         // 用户的选择在紧跟着的 tool 结果里，一份数据就够
         java.util.Map<Integer, java.util.List<AskLog.Card>> cards = AskLog.byIndex(hist);
 
+        // 重绘时旧视图会被移除，映射必须重建，否则「选择文本」可能
+        // 拿到一个已经不在界面上的 TextView
+        nodeViews.clear();
         JSONArray allNodes = sessions.loadHistory(sessions.currentId());
 
         int shown = 0;
@@ -2027,15 +2030,25 @@ public final class MainActivity extends Activity {
      */
     private void selectText(String nodeId) {
         View root = nodeViews.get(nodeId);
-        android.widget.TextView tv = findTextView(root);
+        final android.widget.TextView tv = findTextView(root);
         if (tv == null) {
             Snack.show(this, "这条消息没有可选择的文字");
             return;
         }
+        final CharSequence text = tv.getText();
+        final int len = text == null ? 0 : text.length();
+        if (len == 0) {
+            Snack.show(this, "这条消息没有可选择的文字");
+            return;
+        }
+
         tv.setTextIsSelectable(true);
         tv.requestFocus();
-        // 选完（系统选择菜单关闭）后恢复成不可选：
-        // 否则长按会被文本选择吃掉，二级菜单再也出不来。
+
+        // 选择结束（点复制 / 点空白处）后恢复成不可选，长按菜单才会回来。
+        // 关键：这里必须 post 出去延后执行。在 onDestroyActionMode 里同步调用
+        // setTextIsSelectable(false) 会在框架销毁 ActionMode 的过程中改动
+        // 同一个 TextView 的内部状态，点「复制」或点空白按下去就是直接闪退。
         tv.setCustomSelectionActionModeCallback(new android.view.ActionMode.Callback() {
             public boolean onCreateActionMode(android.view.ActionMode mode, android.view.Menu menu) {
                 return true;
@@ -2047,11 +2060,50 @@ public final class MainActivity extends Activity {
                 return false;
             }
             public void onDestroyActionMode(android.view.ActionMode mode) {
-                tv.setTextIsSelectable(false);
-                tv.setCustomSelectionActionModeCallback(null);
+                tv.post(new Runnable() {
+                    public void run() {
+                        try {
+                            tv.setTextIsSelectable(false);
+                            tv.setCustomSelectionActionModeCallback(null);
+                        } catch (Throwable ignored) {}
+                    }
+                });
             }
         });
-        tv.performLongClick();
+
+        // 默认整段选中：点「选择文本」时就该看到全选的高亮，
+        // 而不是先出现一个光标让人自己拖。
+        try {
+            selectAll(tv, len);
+            tv.performLongClick();          // 让系统把选择工具条弹出来
+            final android.widget.TextView fv = tv;
+            tv.post(new Runnable() {
+                public void run() {
+                    // 长按会把选择缩成词，这里再铺满整段
+                    selectAll(fv, len);
+                }
+            });
+        } catch (Throwable t) {
+            Snack.show(this, "无法进入选择模式");
+        }
+    }
+
+    /**
+     * 把 TextView 的内容整段选中。
+     *
+     * <p>用 {@link android.text.Selection#setSelection} 而不是
+     * {@code TextView.setSelection}：后者在编译用的精简 android.jar 里没有，
+     * 而且对非 Spannable 的文本本来就无效，所以先换成 SPANNABLE 再选。
+     */
+    private void selectAll(android.widget.TextView tv, int len) {
+        CharSequence cs = tv.getText();
+        if (!(cs instanceof android.text.Spannable)) {
+            tv.setText(cs, android.widget.TextView.BufferType.SPANNABLE);
+            cs = tv.getText();
+        }
+        if (cs instanceof android.text.Spannable) {
+            android.text.Selection.setSelection((android.text.Spannable) cs, 0, len);
+        }
     }
 
     /** 在视图树里找第一个有文字的 TextView。 */
