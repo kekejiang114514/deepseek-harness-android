@@ -112,6 +112,14 @@ public final class AgentLoop {
      *                 再追加一次会变成「同一个问题问两遍」。
      */
     public void run(JSONArray history, String userMessage, Sink sink, boolean hidden, boolean skipUser) {
+        run(history, userMessage, sink, hidden, skipUser, null);
+    }
+
+    /**
+     * @param images 本次用户消息附带的图片（base64 或 data URL）；null 表示纯文本
+     */
+    public void run(JSONArray history, String userMessage, Sink sink,
+                    boolean hidden, boolean skipUser, JSONArray images) {
         try {
             cancelled = false;
             paused = false;
@@ -121,6 +129,7 @@ public final class AgentLoop {
                 u.put("role", "user");
                 u.put("content", userMessage);
                 if (hidden) u.put("hidden", true);
+                if (images != null && images.length() > 0) u.put("images", images);
                 history.put(u);
             }
 

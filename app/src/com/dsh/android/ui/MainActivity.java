@@ -523,10 +523,12 @@ public final class MainActivity extends Activity {
         composerWrap.setOrientation(LinearLayout.VERTICAL);
         composerWrap.setPadding(dp(12), dp(4), dp(12), dp(12));
 
+        // 卡片内分两行：上面是输入文字（整行宽度），下面是工具与发送。
+        // 之前所有按钮和输入框挤在同一行，窄屏上文本框被压得只剩几十 dp，
+        // 图标宽度也各不相同（36/32/30），视觉上就是「错位」。
         LinearLayout composer = new LinearLayout(this);
-        composer.setOrientation(LinearLayout.HORIZONTAL);
-        composer.setGravity(Gravity.BOTTOM);
-        composer.setPadding(dp(16), dp(6), dp(6), dp(6));
+        composer.setOrientation(LinearLayout.VERTICAL);
+        composer.setPadding(dp(14), dp(8), dp(10), dp(8));
         composer.setBackground(Theme.roundOutlined(
                 Theme.surface(), Theme.R_PANEL, Theme.border(), this));
 
@@ -542,18 +544,17 @@ public final class MainActivity extends Activity {
                 }
             }
         });
-        LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(dp(36), dp(40));
-        cLp.setMargins(dp(4), 0, dp(2), 0);
-        cLp.gravity = Gravity.CENTER_VERTICAL;
-        composer.addView(computerBtn, cLp);
+        LinearLayout toolRow = new LinearLayout(this);
+        toolRow.setOrientation(LinearLayout.HORIZONTAL);
+        toolRow.setGravity(Gravity.CENTER_VERTICAL);
+        toolRow.setPadding(0, dp(6), 0, 0);
 
         IconView attachBtn = new IconView(this, IconView.PLUS, 20);
         attachBtn.setColor(Theme.text2());
         attachBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { pickFile(); }
         });
-        LinearLayout.LayoutParams attLp = new LinearLayout.LayoutParams(dp(32), dp(40));
-        composer.addView(attachBtn, attLp);
+
 
         // 语音输入：系统 SpeechRecognizer，长按说话，结果填进输入框
         IconView micBtn = new IconView(this, IconView.MIC, 20);
@@ -561,8 +562,7 @@ public final class MainActivity extends Activity {
         micBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { startVoiceInput(); }
         });
-        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(dp(30), dp(40));
-        composer.addView(micBtn, micLp);
+
 
         // 指令入口：列出插件注册的命令，点选后填入输入框
         IconView cmdBtn = new IconView(this, IconView.SLASH, 20);
@@ -570,8 +570,28 @@ public final class MainActivity extends Activity {
         cmdBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { showCommandPicker(); }
         });
-        LinearLayout.LayoutParams cmdLp = new LinearLayout.LayoutParams(dp(30), dp(40));
-        composer.addView(cmdBtn, cmdLp);
+        IconView imageBtn = new IconView(this, IconView.IMAGE, 20);
+        imageBtn.setColor(Theme.text2());
+        imageBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { pickImage(); }
+        });
+
+        // 统一尺寸的工具按钮，视觉上不再高低不齐
+        int toolSize = dp(34);
+        int toolGap = dp(2);
+        LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(toolSize, toolSize);
+        cLp.setMargins(0, 0, toolGap, 0);
+        toolRow.addView(computerBtn, cLp);
+        toolRow.addView(attachBtn, new LinearLayout.LayoutParams(toolSize, toolSize));
+        LinearLayout.LayoutParams imgLp = new LinearLayout.LayoutParams(toolSize, toolSize);
+        imgLp.setMargins(toolGap, 0, 0, 0);
+        toolRow.addView(imageBtn, imgLp);
+        LinearLayout.LayoutParams micLp2 = new LinearLayout.LayoutParams(toolSize, toolSize);
+        micLp2.setMargins(toolGap, 0, 0, 0);
+        toolRow.addView(micBtn, micLp2);
+        LinearLayout.LayoutParams cmdLp2 = new LinearLayout.LayoutParams(toolSize, toolSize);
+        cmdLp2.setMargins(toolGap, 0, 0, 0);
+        toolRow.addView(cmdBtn, cmdLp2);
 
         input = new EditText(this);
         input.setHint("给 DShAndroid 发消息");
@@ -594,8 +614,19 @@ public final class MainActivity extends Activity {
                 return false;
             }
         });
-        composer.addView(input, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        imageChip = new TextView(this);
+        imageChip.setTextSize(11);
+        imageChip.setTextColor(Theme.link());
+        imageChip.setPadding(dp(2), 0, 0, dp(4));
+        imageChip.setVisibility(View.GONE);
+        imageChip.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { clearImages(); }
+        });
+        composer.addView(imageChip, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        composer.addView(input, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         sendBtn = new FrameLayout(this);
         sendBtn.setBackground(Theme.round(Theme.primary(), 20f, this));
@@ -619,9 +650,13 @@ public final class MainActivity extends Activity {
                 return true;
             }
         });
-        LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(dp(40), dp(40));
-        sendLp.setMargins(dp(6), 0, dp(2), 0);
-        composer.addView(sendBtn, sendLp);
+        // 工具行：左侧图标，中间弹性空白，右侧发送
+        View spacer = new View(this);
+        toolRow.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
+        LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(dp(38), dp(38));
+        toolRow.addView(sendBtn, sendLp);
+        composer.addView(toolRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // 已选附件：一排可横向滑动的文件卡片
         attachBar = new LinearLayout(this);
@@ -3203,10 +3238,10 @@ public final class MainActivity extends Activity {
         }
         final String typed = input.getText().toString().trim();
         // 允许「只发附件」：有附件时文本可以为空
-        if (typed.length() == 0 && attaches.isEmpty()) return;
+        if (typed.length() == 0 && attaches.isEmpty() && images.isEmpty()) return;
 
         // 以 / 开头：先看内置指令，再看插件注册的指令
-        if (typed.startsWith("/") && attaches.isEmpty()) {
+        if (typed.startsWith("/") && attaches.isEmpty() && images.isEmpty()) {
             if (runBuiltinCommand(typed)) {
                 input.setText("");
                 return;
@@ -3224,6 +3259,11 @@ public final class MainActivity extends Activity {
         final String text = withAttachment(typed);
         // 先快照，后面清空列表还要用来画卡片
         final java.util.List<Attach> sent = new java.util.ArrayList<Attach>(attaches);
+        // 图片单独快照：它走 content 数组，不参与正文拼装
+        final org.json.JSONArray sentImages = new org.json.JSONArray();
+        for (int i = 0; i < images.size(); i++) sentImages.put(images.get(i));
+        images.clear();
+        refreshImageChip();
 
         input.setText("");
         clearAttachment();
@@ -3269,7 +3309,7 @@ public final class MainActivity extends Activity {
         new Thread(new Runnable() {
             public void run() {
                 try {
-                    loop.run(hist, text, sink());
+                    loop.run(hist, text, sink(), false, false, sentImages);
                     commitPath(sessId, allHist, hist, pathFrom, startLeaf);
                 } catch (final Throwable t) {
                     runOnUiThread(new Runnable() {
@@ -3290,6 +3330,7 @@ public final class MainActivity extends Activity {
     // ---------- 文件上传 ----------
 
     private static final int REQ_PICK_FILE = 2001;
+    private static final int REQ_PICK_IMAGE = 2002;
 
     /** 打开系统文件选择器（仿 Minis 的上传入口）。 */
     /** 单个附件。一次能选多个文件，所以不能用两个字段硬存。 */
@@ -3306,10 +3347,96 @@ public final class MainActivity extends Activity {
     }
 
     private final java.util.ArrayList<Attach> attaches = new java.util.ArrayList<Attach>();
+    /** 待发送的图片（data URL），与附件分开：图片走 content 数组，附件走正文内联 */
+    private final java.util.ArrayList<String> images = new java.util.ArrayList<String>();
 
     private static final int MAX_FILES = 8;              // 单次消息最多几个文件
     private static final int PER_FILE_CHARS = 40000;     // 单个文件内联字符上限
     private static final int TOTAL_CHARS = 120000;       // 全部附件合计上限
+
+    /** 选图：多选，读入后统一压缩再编码。 */
+    private void pickImage() {
+        try {
+            Intent it = new Intent(Intent.ACTION_GET_CONTENT);
+            it.setType("image/*");
+            it.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            startActivityForResult(Intent.createChooser(it, "选择图片"), REQ_PICK_IMAGE);
+        } catch (Throwable t) {
+            Snack.show(this, "无法打开图片选择器");
+        }
+    }
+
+    /**
+     * 读入并压缩一张图片。
+     *
+     * <p>先用 inJustDecodeBounds 拿到原始尺寸，按长边 1568px 计算采样率，
+     * 再用 JPEG 质量逐档下降，直到体积不超过 800KB —— 单张原图动辄几 MB，
+     * 直接 base64 塞进请求既慢又容易超限。
+     */
+    private String loadCompressedImage(android.net.Uri uri) {
+        try {
+            android.graphics.BitmapFactory.Options probe = new android.graphics.BitmapFactory.Options();
+            probe.inJustDecodeBounds = true;
+            java.io.InputStream in0 = getContentResolver().openInputStream(uri);
+            android.graphics.BitmapFactory.decodeStream(in0, null, probe);
+            if (in0 != null) in0.close();
+
+            int sample = 1;
+            int longEdge = Math.max(probe.outWidth, probe.outHeight);
+            while (longEdge / sample > 1568) sample *= 2;
+
+            android.graphics.BitmapFactory.Options opt = new android.graphics.BitmapFactory.Options();
+            opt.inSampleSize = sample;
+            java.io.InputStream in = getContentResolver().openInputStream(uri);
+            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in, null, opt);
+            if (in != null) in.close();
+            if (bmp == null) return null;
+
+            // 采样后可能仍偏大，等比缩到长边 1568
+            int w = bmp.getWidth(), h = bmp.getHeight();
+            int cur = Math.max(w, h);
+            if (cur > 1568) {
+                float scale = 1568f / cur;
+                android.graphics.Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(
+                        bmp, Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)), true);
+                if (scaled != bmp) bmp.recycle();
+                bmp = scaled;
+            }
+
+            byte[] out = null;
+            for (int q = 85; q >= 45; q -= 10) {
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, q, bo);
+                out = bo.toByteArray();
+                if (out.length <= 800 * 1024) break;
+            }
+            bmp.recycle();
+            if (out == null) return null;
+
+            String b64 = android.util.Base64.encodeToString(out, android.util.Base64.NO_WRAP);
+            return "data:image/jpeg;base64," + b64;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 把已选的图片从输入框上方的提示里清掉。 */
+    private void clearImages() {
+        images.clear();
+        refreshImageChip();
+    }
+
+    private TextView imageChip;
+
+    private void refreshImageChip() {
+        if (imageChip == null) return;
+        if (images.isEmpty()) {
+            imageChip.setVisibility(View.GONE);
+            return;
+        }
+        imageChip.setVisibility(View.VISIBLE);
+        imageChip.setText("已选 " + images.size() + " 张图片 · 点此清除");
+    }
 
     private void pickFile() {
         try {
@@ -3330,10 +3457,46 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** 处理选中的图片：压缩后放进待发送列表。 */
+    private void handlePickedImages(Intent data) {
+        java.util.ArrayList<android.net.Uri> uris = new java.util.ArrayList<android.net.Uri>();
+        android.content.ClipData clip = data.getClipData();
+        if (clip != null && clip.getItemCount() > 0) {
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                android.net.Uri u = clip.getItemAt(i).getUri();
+                if (u != null) uris.add(u);
+            }
+        } else if (data.getData() != null) {
+            uris.add(data.getData());
+        }
+        if (uris.isEmpty()) return;
+
+        int added = 0;
+        for (int i = 0; i < uris.size() && i < 4; i++) {     // 单次最多 4 张
+            String url = loadCompressedImage(uris.get(i));
+            if (url != null) {
+                images.add(url);
+                added++;
+            }
+        }
+        if (added == 0) {
+            Snack.show(this, "图片读取失败");
+            return;
+        }
+        refreshImageChip();
+        Snack.show(this, "已添加 " + added + " 张图片（已压缩）");
+    }
+
     @Override
     protected void onActivityResult(int req, int result, Intent data) {
         super.onActivityResult(req, result, data);
-        if (req != REQ_PICK_FILE || result != RESULT_OK || data == null) return;
+        if (result != RESULT_OK || data == null) return;
+
+        if (req == REQ_PICK_IMAGE) {
+            handlePickedImages(data);
+            return;
+        }
+        if (req != REQ_PICK_FILE) return;
 
         // 多选的结果在 clipData 里；单选才走 getData()。
         // 有些文件管理器多选时两者都给，所以要优先看 clipData 的条目数。

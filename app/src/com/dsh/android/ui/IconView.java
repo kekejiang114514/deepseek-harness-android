@@ -25,7 +25,7 @@ public final class IconView extends View {
     public static final int TERMINAL = 23, BAG = 24, PAUSE = 25, PLAY = 26, BOOKMARK = 27;
     public static final int COPY = 28, BRANCH = 29, REFRESH = 30, FOLDER = 31;
     public static final int CHEVRON_RIGHT = 32, CHEVRON_DOWN = 33, CHEVRON_LEFT = 34;
-    public static final int MIC = 35, SPEAKER = 36;
+    public static final int MIC = 35, SPEAKER = 36, IMAGE = 37;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
@@ -108,6 +108,7 @@ public final class IconView extends View {
             case CHEVRON_LEFT: d = Icons.CHEVRON_LEFT; break;
             case MIC: d = Icons.MIC; break;
             case SPEAKER: d = Icons.SPEAKER; break;
+            case IMAGE: d = Icons.IMAGE; break;
             default: d = Icons.HELP; break;
         }
         p = SvgPath.parse(d);

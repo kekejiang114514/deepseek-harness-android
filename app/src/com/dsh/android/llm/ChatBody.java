@@ -31,6 +31,39 @@ public final class ChatBody {
      * @param effort     推理强度；null 表示不显式指定（取服务端默认）
      * @param thinkingOff 是否明确关闭思考模式
      */
+    /**
+     * 消息内容。
+     *
+     * <p>纯文本仍是字符串，保持既有行为；一旦带 {@code images}
+     * （base64 或 data URL 数组），转成 OpenAI 的 content 数组：
+     * 先一个 text 块，再若干 image_url 块。
+     */
+    public static Object contentOf(JSONObject m) throws Exception {
+        String text = m.optString("content", "");
+        JSONArray images = m.optJSONArray("images");
+        if (images == null || images.length() == 0) return text;
+
+        JSONArray blocks = new JSONArray();
+        if (text.length() > 0) {
+            JSONObject t = new JSONObject();
+            t.put("type", "text");
+            t.put("text", text);
+            blocks.put(t);
+        }
+        for (int i = 0; i < images.length(); i++) {
+            String url = images.optString(i, "");
+            if (url.length() == 0) continue;
+            if (!url.startsWith("data:")) url = "data:image/jpeg;base64," + url;
+            JSONObject img = new JSONObject();
+            img.put("type", "image_url");
+            JSONObject holder = new JSONObject();
+            holder.put("url", url);
+            img.put("image_url", holder);
+            blocks.put(img);
+        }
+        return blocks;
+    }
+
     public static JSONObject build(String model, JSONArray messages, JSONArray tools,
                                    boolean stream, int maxTokens,
                                    String effort, boolean thinkingOff) throws Exception {
@@ -55,7 +88,10 @@ public final class ChatBody {
                 // 这些界面自用标记，混进请求里某些服务端会直接整单拒绝。
                 JSONObject clean = new JSONObject();
                 clean.put("role", role);
-                if (m.has("content")) clean.put("content", m.opt("content"));
+                if (m.has("content")) {
+                    // 带图片的消息要发 content 数组：文本块 + 若干 image_url 块
+                    clean.put("content", contentOf(m));
+                }
                 if (m.has("tool_calls")) clean.put("tool_calls", m.opt("tool_calls"));
                 if (m.has("tool_call_id")) clean.put("tool_call_id", m.opt("tool_call_id"));
                 if (m.has("name")) clean.put("name", m.opt("name"));

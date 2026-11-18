@@ -122,6 +122,31 @@ public class ChatBodyTest {
         ok(C.maxTokensFor(C.LEVEL_MAX) <= 384000, "上限不超过 384K");
 
         System.out.println();
+        System.out.println("t20 图片走 content 数组");
+        org.json.JSONArray imgs = new org.json.JSONArray();
+        imgs.put("data:image/jpeg;base64,AAAA");
+        imgs.put("BBBB");
+        org.json.JSONObject mu = new org.json.JSONObject();
+        mu.put("role", "user");
+        mu.put("content", "看图");
+        mu.put("images", imgs);
+        Object c1 = ChatBody.contentOf(mu);
+        ok(c1 instanceof org.json.JSONArray, "带图片时内容变成数组");
+        org.json.JSONArray arr = (org.json.JSONArray) c1;
+        ok(arr.length() == 3, "一个文本块 + 两张图片");
+        ok("text".equals(arr.getJSONObject(0).optString("type")), "首块是文本");
+        ok("image_url".equals(arr.getJSONObject(1).optString("type")), "其后是图片块");
+        ok(arr.getJSONObject(1).optJSONObject("image_url").optString("url")
+                .startsWith("data:image/jpeg;base64,"), "data URL 原样保留");
+        ok(arr.getJSONObject(2).optJSONObject("image_url").optString("url")
+                .startsWith("data:image/jpeg;base64,"), "裸 base64 自动补前缀");
+
+        System.out.println("t21 无图片时仍是字符串");
+        org.json.JSONObject mt = new org.json.JSONObject();
+        mt.put("role", "user");
+        mt.put("content", "纯文本");
+        ok(ChatBody.contentOf(mt) instanceof String, "纯文本保持字符串，不改变既有行为");
+
         System.out.println("==== " + pass + " passed, " + fail + " failed ====");
         if (fail > 0) System.exit(1);
     }
