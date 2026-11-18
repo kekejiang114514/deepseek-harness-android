@@ -80,6 +80,12 @@ public final class Icons {
      */
     public static final String REFRESH = "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5";
 
+    /** 麦克风：语音输入。 */
+    public static final String MIC = "M12 3c-1.7 0-3 1.3-3 3v6c0 1.7 1.3 3 3 3s3-1.3 3-3V6c0-1.7-1.3-3-3-3zM5 11v1a7 7 0 0 0 14 0v-1M12 19v3M9 22h6";
+
+    /** 喇叭：朗读。 */
+    public static final String SPEAKER = "M4 9v6h4l5 4V5L8 9H4zM17 9a4 4 0 0 1 0 6M19.5 6.5a8 8 0 0 1 0 11";
+
     /** 分组：文件夹。 */
     public static final String FOLDER = "M3 7c0-1.1.9-2 2-2h4l2 2h8c1.1 0 2 .9 2 2v9c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2z";
 

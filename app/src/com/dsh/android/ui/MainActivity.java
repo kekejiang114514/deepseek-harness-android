@@ -228,6 +228,8 @@ public final class MainActivity extends Activity {
 
     /** 长按消息弹出的菜单；点选项后要关掉它 */
     private android.app.Dialog nodeMenu;
+    /** 正在朗读的消息节点；再点一次同一行则停止 */
+    private String speakingNode;
     /** 右键式小菜单（长按会话 / 分组时出现） */
     private android.widget.PopupWindow lastMenu;
 
@@ -237,6 +239,75 @@ public final class MainActivity extends Activity {
      * <p>不少 ROM 在应用被划掉、或被内存清理时会把无障碍开关一起关掉。
      * 用户不会去翻系统设置，所以这里主动告诉他，并且一点就能重开。
      */
+    /** 系统语音识别器；同一时刻只保留一个。 */
+    private android.speech.SpeechRecognizer recognizer;
+
+    /**
+     * 语音输入。
+     *
+     * <p>用系统 SpeechRecognizer，不引入第三方 SDK。设备上没有可用的
+     * 识别服务时直接说明，不做无声失败。
+     */
+    private void startVoiceInput() {
+        try {
+            if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
+                Snack.show(this, "这台设备没有可用的语音识别服务");
+                return;
+            }
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 9002);
+                Snack.show(this, "允许录音后再点一次麦克风");
+                return;
+            }
+            if (recognizer != null) {
+                try { recognizer.destroy(); } catch (Throwable ignored) {}
+            }
+            recognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(this);
+            recognizer.setRecognitionListener(new android.speech.RecognitionListener() {
+                public void onReadyForSpeech(android.os.Bundle b) {
+                    Snack.show(MainActivity.this, "请说话…");
+                }
+                public void onBeginningOfSpeech() {}
+                public void onRmsChanged(float v) {}
+                public void onBufferReceived(byte[] b) {}
+                public void onEndOfSpeech() {}
+                public void onError(int code) {
+                    Snack.show(MainActivity.this, "没听清，再试一次");
+                }
+                public void onResults(android.os.Bundle b) {
+                    String text = firstResult(b);
+                    if (text == null || text.length() == 0) return;
+                    String cur = input.getText() == null ? "" : input.getText().toString();
+                    input.setText(cur.length() == 0 ? text : cur + " " + text);
+                    input.setSelection(input.getText().length());
+                }
+                public void onPartialResults(android.os.Bundle b) {}
+                public void onEvent(int t, android.os.Bundle b) {}
+            });
+            android.content.Intent i = new android.content.Intent(
+                    android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            i.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            i.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE,
+                    java.util.Locale.getDefault().toLanguageTag());
+            i.putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
+            recognizer.startListening(i);
+        } catch (Throwable t) {
+            Snack.show(this, "语音输入不可用");
+        }
+    }
+
+    private String firstResult(android.os.Bundle b) {
+        try {
+            java.util.ArrayList<String> list =
+                    b.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION);
+            return list == null || list.isEmpty() ? "" : list.get(0);
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
     /**
      * Android 13 起通知是运行时权限。拿不到不会崩，但前台服务的常驻通知
      * 与任务完成提示都不会显示，所以首次进入时问一次。
@@ -349,6 +420,7 @@ public final class MainActivity extends Activity {
         // 悬浮窗开关开着就保证服务在跑（进程被杀后重开应用能自己恢复）
         ensureFloatService();
         requestNotificationPermissionOnce();
+        Speaker.init(this);
 
         // 从系统设置或其它应用回来：顺手看看无障碍还在不在
         checkA11yHealth();
@@ -383,6 +455,11 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        Speaker.stop();
+        if (recognizer != null) {
+            try { recognizer.destroy(); } catch (Throwable ignored) {}
+            recognizer = null;
+        }
         // 页面销毁后悬浮窗不能再回调过来
         com.dsh.android.kernel.RunStatus.setControl(null);
         super.onDestroy();
@@ -477,6 +554,15 @@ public final class MainActivity extends Activity {
         });
         LinearLayout.LayoutParams attLp = new LinearLayout.LayoutParams(dp(32), dp(40));
         composer.addView(attachBtn, attLp);
+
+        // 语音输入：系统 SpeechRecognizer，长按说话，结果填进输入框
+        IconView micBtn = new IconView(this, IconView.MIC, 20);
+        micBtn.setColor(Theme.text2());
+        micBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { startVoiceInput(); }
+        });
+        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(dp(30), dp(40));
+        composer.addView(micBtn, micLp);
 
         // 指令入口：列出插件注册的命令，点选后填入输入框
         IconView cmdBtn = new IconView(this, IconView.SLASH, 20);
@@ -2138,6 +2224,9 @@ public final class MainActivity extends Activity {
         row.addView(iconButton(IconView.REFRESH, true, new View.OnClickListener() {
             public void onClick(View v) { regenerateNode(nodeId); }
         }));
+        row.addView(iconButton(IconView.SPEAKER, true, new View.OnClickListener() {
+            public void onClick(View v) { speakNode(nodeId); }
+        }));
         messages.addView(row);
     }
 
@@ -2393,6 +2482,9 @@ public final class MainActivity extends Activity {
                     items.add(MiniMenu.Item.of("重新生成", new Runnable() {
                         public void run() { regenerateNode(nodeId); }
                     }));
+                    items.add(MiniMenu.Item.of("朗读", new Runnable() {
+                        public void run() { speakNode(nodeId); }
+                    }));
                 }
                 items.add(MiniMenu.Item.of("从这里继续（分支）", new Runnable() {
                     public void run() { startBranchFrom(nodeId); }
@@ -2445,6 +2537,27 @@ public final class MainActivity extends Activity {
             if (nodeMenu != null) nodeMenu.dismiss();
         } catch (Throwable ignored) {}
         nodeMenu = null;
+    }
+
+    /** 朗读某条回答：已在该条朗读中则停止。 */
+    private void speakNode(String nodeId) {
+        if (!Speaker.available()) {
+            Snack.show(this, "这台设备没有可用的语音引擎");
+            return;
+        }
+        JSONArray all = sessions.loadHistory(sessions.currentId());
+        int i = com.dsh.android.kernel.Conversation.indexOf(all, nodeId);
+        if (i < 0) return;
+        String content = all.optJSONObject(i).optString("content", "");
+        if (content.length() == 0) return;
+        if (nodeId.equals(speakingNode)) {
+            Speaker.stop();
+            speakingNode = null;
+            Snack.show(this, "已停止朗读");
+            return;
+        }
+        speakingNode = nodeId;
+        Speaker.speak(content);
     }
 
     private void copyNode(String nodeId) {

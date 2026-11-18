@@ -1147,6 +1147,31 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 },
                 new String[]{Theme.MODE_SYSTEM, Theme.MODE_LIGHT, Theme.MODE_DARK},
                 new String[]{"跟随系统", "浅色", "深色"}, null));
+
+        // Android 12+ 才有效：从系统壁纸取色
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            uiCard.addView(divider());
+            uiCard.addView(segmentRow("动态取色",
+                    new HintFn() {
+                        public String get() { return "跟随系统壁纸的强调色（Android 12+）"; }
+                    },
+                    new ValueIO() {
+                        public String get() {
+                            return getSharedPreferences("dshandroid", MODE_PRIVATE)
+                                    .getBoolean("dynamic_color", true) ? "on" : "off";
+                        }
+                        public void set(String k) {
+                            getSharedPreferences("dshandroid", MODE_PRIVATE).edit()
+                                    .putBoolean("dynamic_color", "on".equals(k)).apply();
+                            SettingsActivity.this.findViewById(android.R.id.content)
+                                    .post(new Runnable() {
+                                        public void run() { applyThemeReveal(); }
+                                    });
+                        }
+                    },
+                    new String[]{"on", "off"},
+                    new String[]{"开启", "关闭"}, null));
+        }
         body.addView(uiCard);
     }
 

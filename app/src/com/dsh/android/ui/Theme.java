@@ -29,6 +29,11 @@ public final class Theme {
     private static boolean dark = false;
     private static boolean inited = false;
 
+    /** Material You 动态取色（API 31+）读到的强调色；0 表示不用。 */
+    private static int dynAccent = 0;
+    private static int dynPrimary = 0;
+    private static int dynPrimarySoft = 0;
+
     private Theme() {}
 
     /** 在 Activity.onCreate 里最先调用。 */
@@ -45,7 +50,59 @@ public final class Theme {
             dark = night == android.content.res.Configuration.UI_MODE_NIGHT_YES;
         }
         inited = true;
+        applyDynamicColors(ctx);
         applyDirection(ctx);
+    }
+
+    /**
+     * Material You：Android 12+ 从系统壁纸取色。
+     *
+     * <p>只替换强调色一族（强调色、主按钮、主按钮淡底），其余中性色仍用
+     * 设计 token —— 全部换成动态色会让自绘界面失去层次。API 31 以下或
+     * 取不到颜色时保持原配色。
+     */
+    private static void applyDynamicColors(Context ctx) {
+        dynAccent = 0;
+        dynPrimary = 0;
+        dynPrimarySoft = 0;
+        if (android.os.Build.VERSION.SDK_INT < 31) return;
+        try {
+            boolean on = ctx.getSharedPreferences("dshandroid", Context.MODE_PRIVATE)
+                    .getBoolean("dynamic_color", true);
+            if (!on) return;
+            // 用资源名解析而不是 R 常量：编译用的精简 android.jar 里没有这些字段
+            int c1 = sysColor(ctx, "system_accent1_200");
+            int c2 = sysColor(ctx, "system_accent1_500");
+            int c3 = sysColor(ctx, "system_accent1_50");
+            if (c1 == 0 || c2 == 0) return;
+            if (dark) {
+                dynAccent = c1;          // 深色下用较亮的那档
+                dynPrimarySoft = withAlpha(c2, 0x33);
+            } else {
+                dynAccent = c2;          // 浅色下用中间档
+                dynPrimarySoft = withAlpha(c3, 0xFF);
+            }
+            dynPrimary = c2;
+        } catch (Throwable ignored) {
+            dynAccent = 0;
+            dynPrimary = 0;
+            dynPrimarySoft = 0;
+        }
+    }
+
+    /** 按名字取系统颜色资源；取不到返回 0。 */
+    private static int sysColor(Context ctx, String name) {
+        try {
+            int id = ctx.getResources().getIdentifier(name, "color", "android");
+            if (id == 0) return 0;
+            return ctx.getColor(id);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (alpha << 24);
     }
 
     public static boolean isDark() { return dark; }
@@ -118,9 +175,16 @@ public final class Theme {
     // ---------- 主色 / 状态 ----------
     /** 主按钮底：浅色近黑，深色近白（brand-primary 反转）。 */
     /** 主色的极浅底（选择题选中态用）。 */
-    public static int primarySoft() { return dark ? 0x1FF9FAFB : 0x0F0F1115; }
+    public static int primarySoft() {
+        if (dynPrimarySoft != 0) return dynPrimarySoft;
+        return dark ? 0x1FF9FAFB : 0x0F0F1115;
+    }
 
-    public static int primary() { return dark ? 0xFFF9FAFB : 0xFF0F1115; }
+    public static int primary() {
+        // 主按钮本来是近黑/近白；开了动态取色则跟随系统强调色
+        if (dynPrimary != 0) return dynPrimary;
+        return dark ? 0xFFF9FAFB : 0xFF0F1115;
+    }
     /** 主按钮上的文字。 */
     public static int onPrimary() { return dark ? 0xFF151517 : 0xFFFFFFFF; }
     public static int link() {
@@ -140,7 +204,10 @@ public final class Theme {
         return dark ? 0xFF2A0B09 : 0xFFFFFFFF;
     }
     /** 强调蓝（深色下更亮）。 */
-    public static int accent() { return dark ? 0xFF8AB4FF : 0xFF4176E6; }
+    public static int accent() {
+        if (dynAccent != 0) return dynAccent;
+        return dark ? 0xFF8AB4FF : 0xFF4176E6;
+    }
 
     /** 行内代码底色。 */
     public static int inlineCodeBg() { return dark ? 0x24FFFFFF : 0x14263048; }
