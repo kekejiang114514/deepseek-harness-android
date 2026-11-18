@@ -69,10 +69,10 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 106
-    a.version_name = '1.5'
+    a.version_code = 107
+    a.version_name = '1.6-beta1'
     a.min_sdk = 23
-    a.target_sdk = 29
+    a.target_sdk = 34
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
     a.permissions = [
         'android.permission.INTERNET',
@@ -85,9 +85,12 @@ def build_dshandroid_app():
         'android.permission.SYSTEM_ALERT_WINDOW',
         # 悬浮窗是个前台服务：常驻通知顺带让进程不那么容易被回收
         'android.permission.FOREGROUND_SERVICE',
+        # Android 14：specialUse 类型的前台服务需要单独声明此权限
+        'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
     ]
     # 允许在 Android 10 上以旧式存储访问 /sdcard（全局文件模式需要）
     a.extra_app_attrs = [
+        # Android 10 及以下的旧式存储；33+ 已忽略，保留以兼容旧机型
         ('requestLegacyExternalStorage', TYPE_BOOL, True),
         # 插件市场要解析约 3MB 的索引 JSON，给大一点的堆更稳
         ('largeHeap', TYPE_BOOL, True),
@@ -186,7 +189,11 @@ def build_dshandroid_app():
     # 悬浮窗（前台服务）：不导出，只由本应用自己启动
     a.components.append(ComponentDef(
         'service', '.ui.FloatService', False,
-        attrs=[('stopWithTask', TYPE_BOOL, False)],
+        attrs=[
+            ('stopWithTask', TYPE_BOOL, False),
+            # Android 14 起前台服务必须声明类型，否则启动即崩
+            ('foregroundServiceType', TYPE_INT_HEX, 0x40000000),   # specialUse
+        ],
     ))
     a.resources.append(ResourceDef('mipmap', 'ic_launcher', 'res/mipmap/ic_launcher.png'))
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用

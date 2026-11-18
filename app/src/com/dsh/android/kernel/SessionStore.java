@@ -365,9 +365,14 @@ public final class SessionStore {
     /** 读取配置档案；首次运行时用旧的单份设置迁移出「默认」档案。 */
     public Profiles profiles() {
         Profiles p = Profiles.fromJson(sp.getString("profiles", ""));
+        // 档案里的密钥同样是密文，读出来先解密
+        for (int i = 0; i < p.items().size(); i++) {
+            Profiles.Profile pf = p.items().get(i);
+            pf.apiKey = SecureStore.decrypt(pf.apiKey);
+        }
         if (p.items().isEmpty()) {
             p.migrateLegacy(sp.getString(com.dsh.android.kernel.C.KEY_BASE_URL, ""),
-                    sp.getString(com.dsh.android.kernel.C.KEY_API_KEY, ""),
+                    com.dsh.android.kernel.SecureStore.readKey(sp),
                     sp.getString(com.dsh.android.kernel.C.KEY_MODEL, ""),
                     sp.getString(com.dsh.android.kernel.C.KEY_REASONING, "medium"),
                     com.dsh.android.kernel.C.DEFAULT_BASE_URL);
@@ -381,10 +386,17 @@ public final class SessionStore {
         if (p == null) return;
         Profiles.Profile cur = p.active();
         SharedPreferences.Editor e = sp.edit();
-        e.putString("profiles", p.toJson().toString());
+
+        // 落盘前把每份档案的密钥加密；内存里始终是明文，避免重复加密
+        Profiles out = Profiles.fromJson(p.toJson().toString());
+        for (int i = 0; i < out.items().size(); i++) {
+            Profiles.Profile pf = out.items().get(i);
+            pf.apiKey = SecureStore.encrypt(pf.apiKey);
+        }
+        e.putString("profiles", out.toJson().toString());
         if (cur != null) {
             e.putString(com.dsh.android.kernel.C.KEY_BASE_URL, cur.baseUrl);
-            e.putString(com.dsh.android.kernel.C.KEY_API_KEY, cur.apiKey);
+            com.dsh.android.kernel.SecureStore.putKey(e, cur.apiKey);
             e.putString(com.dsh.android.kernel.C.KEY_MODEL, cur.model);
             e.putString(com.dsh.android.kernel.C.KEY_REASONING, cur.level);
         }

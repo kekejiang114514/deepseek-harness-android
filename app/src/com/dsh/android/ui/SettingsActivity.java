@@ -2285,7 +2285,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
     }
 
     private String keyValue() {
-        String k = sp.getString(C.KEY_API_KEY, "");
+        String k = com.dsh.android.kernel.SecureStore.readKey(sp);
         return k == null ? "" : k.trim();
     }
 

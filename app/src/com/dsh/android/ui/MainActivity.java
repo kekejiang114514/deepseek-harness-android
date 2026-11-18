@@ -237,6 +237,21 @@ public final class MainActivity extends Activity {
      * <p>不少 ROM 在应用被划掉、或被内存清理时会把无障碍开关一起关掉。
      * 用户不会去翻系统设置，所以这里主动告诉他，并且一点就能重开。
      */
+    /**
+     * Android 13 起通知是运行时权限。拿不到不会崩，但前台服务的常驻通知
+     * 与任务完成提示都不会显示，所以首次进入时问一次。
+     */
+    private void requestNotificationPermissionOnce() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return;
+        if (prefs().getBoolean("asked_notif", false)) return;
+        prefs().edit().putBoolean("asked_notif", true).apply();
+        try {
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 9001);
+        } catch (Throwable ignored) {}
+    }
+
     private void checkA11yHealth() {
         if (running || messages == null || a11yNotified) return;
         final android.content.SharedPreferences sp = getSharedPreferences("dsh", MODE_PRIVATE);
@@ -333,6 +348,8 @@ public final class MainActivity extends Activity {
         refreshModelPill();
         // 悬浮窗开关开着就保证服务在跑（进程被杀后重开应用能自己恢复）
         ensureFloatService();
+        requestNotificationPermissionOnce();
+
         // 从系统设置或其它应用回来：顺手看看无障碍还在不在
         checkA11yHealth();
     }
@@ -681,7 +698,7 @@ public final class MainActivity extends Activity {
         pw.showAsDropDown(anchor, 0, dp(4));
 
         // 第一次打开且缓存为空：后台拉一次模型列表
-        if (cachedModels().isEmpty() && prefs().getString(C.KEY_API_KEY, "").length() > 0) {
+        if (cachedModels().isEmpty() && com.dsh.android.kernel.SecureStore.readKey(prefs()).length() > 0) {
             fetchModelsIntoPopup();
         }
     }
@@ -1354,7 +1371,7 @@ public final class MainActivity extends Activity {
 
     private void fetchModelsIntoPopup() {
         final String base = prefs().getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
-        final String key = prefs().getString(C.KEY_API_KEY, "");
+        final String key = com.dsh.android.kernel.SecureStore.readKey(prefs());
         if (key.length() == 0) {
             Snack.show(this, "先在设置里填写 API Key");
             return;
@@ -2920,7 +2937,7 @@ public final class MainActivity extends Activity {
     private void reloadClient() {
         SharedPreferences sp = getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
         String base = sp.getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
-        String key = sp.getString(C.KEY_API_KEY, "");
+        String key = com.dsh.android.kernel.SecureStore.readKey(sp);
         String model = sp.getString(C.KEY_MODEL, "");
         if (model == null || model.length() == 0) model = C.MODEL_CHAT;
         String level = C.normalizeLevel(sp.getString(C.KEY_REASONING, C.LEVEL_MEDIUM));

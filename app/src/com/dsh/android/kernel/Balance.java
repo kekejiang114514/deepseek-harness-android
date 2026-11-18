@@ -31,7 +31,7 @@ public final class Balance {
         android.content.SharedPreferences sp =
                 c.getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
         String base = sp.getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
-        String key = sp.getString(C.KEY_API_KEY, "");
+        String key = SecureStore.readKey(sp);
         if (key == null || key.length() == 0) {
             info.error = "未设置 API Key";
             return info;
