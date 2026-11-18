@@ -388,6 +388,9 @@ public final class A11yService extends AccessibilityService {
 
         // 文字节点自己通常不可点，真正响应的是外层容器
         AccessibilityNodeInfo hit = node.isClickable() ? node : clickableAncestor(node);
+        // 自动化期间显示一条不可聚焦、不可触摸的提示：
+        // 让用户知道「手机在自己操作」，同时不抢焦点、不吃手势
+        try { com.dsh.android.ui.QuietBadge.show(this, "正在点击"); } catch (Throwable ignored) {}
         if (hit != null && hit.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
             hit.recycle();
             node.recycle();
@@ -446,6 +449,7 @@ public final class A11yService extends AccessibilityService {
         }
         android.os.Bundle args = new android.os.Bundle();
         args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+        try { com.dsh.android.ui.QuietBadge.show(this, "输入文字"); } catch (Throwable ignored) {}
         boolean ok = field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
         if (!ok) {
             // 少数输入法实现不支持 SET_TEXT：先聚焦，再用系统粘贴

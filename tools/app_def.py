@@ -69,8 +69,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 109
-    a.version_name = '1.6-beta3'
+    a.version_code = 110
+    a.version_name = '1.6-beta4'
     a.min_sdk = 23
     a.target_sdk = 34
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
@@ -89,6 +89,8 @@ def build_dshandroid_app():
         'android.permission.FOREGROUND_SERVICE',
         # Android 14：specialUse 类型的前台服务需要单独声明此权限
         'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
+        # 开机后重新登记定时任务
+        'android.permission.RECEIVE_BOOT_COMPLETED',
     ]
     # 允许在 Android 10 上以旧式存储访问 /sdcard（全局文件模式需要）
     a.extra_app_attrs = [
@@ -196,6 +198,25 @@ def build_dshandroid_app():
             # Android 14 起前台服务必须声明类型，否则启动即崩
             ('foregroundServiceType', TYPE_INT_HEX, 0x40000000),   # specialUse
         ],
+    ))
+    # 定时任务：闹钟广播 → 前台服务执行
+    a.components.append(ComponentDef(
+        'receiver', '.boot.TaskReceiver', False,
+    ))
+    a.components.append(ComponentDef(
+        'receiver', '.boot.BootReceiver', True,
+        children=[
+            ('intent-filter', [], [
+                ('action', [('name', TYPE_STR, 'android.intent.action.BOOT_COMPLETED')], []),
+            ]),
+            ('intent-filter', [], [
+                ('action', [('name', TYPE_STR, 'android.intent.action.MY_PACKAGE_REPLACED')], []),
+            ]),
+        ],
+    ))
+    a.components.append(ComponentDef(
+        'service', '.service.AutoTaskService', False,
+        attrs=[('foregroundServiceType', TYPE_INT_HEX, 0x40000000)],
     ))
     a.resources.append(ResourceDef('mipmap', 'ic_launcher', 'res/mipmap/ic_launcher.png'))
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用

@@ -3102,6 +3102,14 @@ public final class MainActivity extends Activity {
         boolean device = tools.isDeviceScope();
         boolean a11y = tools.isA11yEnabled() && A11yService.isReady();
         StringBuilder sb = new StringBuilder();
+        // 长期记忆：整份注入，让模型知道跨对话该记住什么
+        String mem = new com.dsh.android.kernel.MemoryStore(getFilesDir()).read();
+        if (mem.trim().length() > 0) {
+            sb.append("以下是你长期记住的事实（来自 memory.md，跨对话有效）：\n");
+            sb.append(mem.trim()).append("\n\n");
+            sb.append("需要记住新的长期事实时，调用 memory.update 工具写入。\n\n");
+        }
+
         // 跟随用户的语言：写「用中文回答」会让英文提问也回中文
         sb.append("你是运行在 Android 手机上的 AI 助手 DShAndroid。"
                 + "用简洁准确的语言回答，并跟随用户当前使用的语言："

@@ -50,6 +50,8 @@ public final class ToolRuntime {
         this.prefs = ctx.getSharedPreferences(C.SP_NAME, Context.MODE_PRIVATE);
         registerAskTool();
         registerVaultTools();
+        registerMemoryTools();
+        registerMcpTools();
         registerBrowserTools();
         registerShellTool();
     }
@@ -361,6 +363,122 @@ public final class ToolRuntime {
 
 
     /** 记忆库工具：只暴露名称与用途，值只在执行动作时解密使用。 */
+    /**
+     * MCP 服务器。
+     *
+     * <p>每台服务器注册一个代理工具 {@code mcp.<名字>}，参数是
+     * {@code {action:"list"}} 或 {@code {action:"call", tool, arguments}}。
+     * 不在启动时联网拉工具清单——那会让冷启动被网络拖住；
+     * 需要时由模型先 list 再 call。
+     */
+    private void registerMcpTools() {
+        org.json.JSONArray servers = com.dsh.android.kernel.McpServers.load(ctx);
+        for (int i = 0; i < servers.length(); i++) {
+            final org.json.JSONObject cfg = servers.optJSONObject(i);
+            if (cfg == null) continue;
+            final String name = cfg.optString("name", "");
+            final String url = cfg.optString("url", "");
+            final String token = cfg.optString("token", "");
+            if (name.length() == 0 || url.length() == 0) continue;
+
+            JSONObject params = new JSONObject();
+            try {
+                JSONObject props = new JSONObject();
+                JSONObject action = new JSONObject();
+                action.put("type", "string");
+                action.put("description", "list 查看该服务器提供的工具，call 调用其中一个");
+                props.put("action", action);
+                JSONObject tool = new JSONObject();
+                tool.put("type", "string");
+                tool.put("description", "action=call 时要调用的工具名");
+                props.put("tool", tool);
+                JSONObject args = new JSONObject();
+                args.put("type", "object");
+                args.put("description", "工具的入参（JSON 对象）");
+                props.put("arguments", args);
+                params.put("type", "object");
+                params.put("properties", props);
+                params.put("required", new JSONArray().put("action"));
+            } catch (Exception ignored) {}
+
+            registry.put("mcp." + name, new ToolDef("mcp." + name,
+                    "调用 MCP 服务器「" + name + "」。先 action=list 查看有哪些工具，"
+                            + "再 action=call 并给出 tool 与 arguments。",
+                    params, new ToolExecutor() {
+                public String execute(JSONObject args) {
+                    com.dsh.android.kernel.McpClient client =
+                            new com.dsh.android.kernel.McpClient(url, token);
+                    if (!client.usable()) return "MCP 地址无效：" + url;
+                    String action = args.optString("action", "list");
+                    try {
+                        if ("list".equals(action)) {
+                            JSONArray tools = client.listTools();
+                            StringBuilder sb = new StringBuilder();
+                            for (int k = 0; k < tools.length(); k++) {
+                                org.json.JSONObject t = tools.optJSONObject(k);
+                                if (t == null) continue;
+                                if (sb.length() > 0) sb.append('\n');
+                                sb.append("- ").append(t.optString("name", "?"));
+                                String desc = t.optString("description", "");
+                                if (desc.length() > 0) sb.append("：").append(desc);
+                            }
+                            return sb.length() == 0 ? "该服务器没有提供工具" : sb.toString();
+                        }
+                        String tool = args.optString("tool", "");
+                        if (tool.length() == 0) return "action=call 需要 tool";
+                        return client.callTool(tool, args.optJSONObject("arguments"));
+                    } catch (Throwable t) {
+                        return "MCP 调用失败：" + t.getMessage();
+                    }
+                }
+            }));
+        }
+    }
+
+    /** 长期记忆：写一条、读全部。 */
+    private void registerMemoryTools() {
+        JSONObject params = new JSONObject();
+        try {
+            JSONObject props = new JSONObject();
+            JSONObject text = new JSONObject();
+            text.put("type", "string");
+            text.put("description", "要长期记住的一条事实，一句话说清");
+            props.put("text", text);
+            params.put("type", "object");
+            params.put("properties", props);
+            params.put("required", new JSONArray().put("text"));
+        } catch (Exception ignored) {}
+
+        registry.put("memory.update", new ToolDef("memory.update",
+                "把一条事实写入长期记忆（memory.md），之后每个对话都会看到它。"
+                        + "只在用户明确要求记住、或确认是需要跨对话保留的稳定事实时使用；"
+                        + "不要写入临时的、一次性的内容。",
+                params, new ToolExecutor() {
+            public String execute(JSONObject args) {
+                String text = args.optString("text", "").trim();
+                if (text.length() == 0) return "没有提供内容";
+                com.dsh.android.kernel.MemoryStore m =
+                        new com.dsh.android.kernel.MemoryStore(ctx.getFilesDir());
+                m.append(text);
+                return "已记住：" + text;
+            }
+        }));
+
+        JSONObject empty = new JSONObject();
+        try {
+            empty.put("type", "object");
+            empty.put("properties", new JSONObject());
+        } catch (Exception ignored) {}
+        registry.put("memory.read", new ToolDef("memory.read",
+                "读取长期记忆的全部内容。",
+                empty, new ToolExecutor() {
+            public String execute(JSONObject args) {
+                String all = new com.dsh.android.kernel.MemoryStore(ctx.getFilesDir()).read();
+                return all.trim().length() == 0 ? "（长期记忆为空）" : all.trim();
+            }
+        }));
+    }
+
     private void registerVaultTools() {
         JSONObject listParams = new JSONObject();
         JSONObject fillParams = new JSONObject();

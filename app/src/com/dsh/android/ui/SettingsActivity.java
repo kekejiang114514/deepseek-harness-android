@@ -217,6 +217,340 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }));
     }
 
+    // ------------------------------------------------------------ 长期记忆
+
+    private void pageMemory(LinearLayout body) {
+        final com.dsh.android.kernel.MemoryStore mem =
+                new com.dsh.android.kernel.MemoryStore(getFilesDir());
+
+        body.addView(sectionLabel("长期记忆"));
+        LinearLayout card = card();
+        TextView preview = new TextView(this);
+        String cur = mem.read().trim();
+        preview.setText(cur.length() == 0 ? "（还没有任何记忆）" : cur);
+        preview.setTextSize(13);
+        preview.setTextColor(cur.length() == 0 ? Theme.caption() : Theme.text2());
+        preview.setPadding(dp(14), dp(12), dp(14), dp(12));
+        preview.setMaxLines(12);
+        preview.setEllipsize(TextUtils.TruncateAt.END);
+        card.addView(preview);
+        card.addView(divider());
+        card.addView(actionRow("编辑", new View.OnClickListener() {
+            public void onClick(View v) { editMemory(mem, false); }
+        }));
+        card.addView(divider());
+        card.addView(actionRow("清空记忆", Theme.danger(), new View.OnClickListener() {
+            public void onClick(View v) {
+                new AppDialog.Builder(SettingsActivity.this)
+                        .setTitle("清空长期记忆")
+                        .setMessage("所有记住的事实都会被删除，无法恢复。")
+                        .setPositiveButton("清空", Theme.danger(),
+                                new android.content.DialogInterface.OnClickListener() {
+                                    public void onClick(android.content.DialogInterface d, int w) {
+                                        mem.clear();
+                                        fillBody();
+                                    }
+                                })
+                        .setNegativeButton("取消", null)
+                        .show();
+            }
+        }));
+        body.addView(card);
+        body.addView(hintRow("这份内容会随每次对话一起发给模型。模型可以通过 memory.update 工具"
+                + "写入新条目；也可以在这里直接改。有体积上限，超出后会从最早的条目开始丢弃。"));
+    }
+
+    /** 编辑记忆：整份文本直接改。 */
+    private void editMemory(final com.dsh.android.kernel.MemoryStore mem, boolean unused) {
+        final EditText et = new EditText(this);
+        et.setText(mem.read());
+        et.setTextSize(13);
+        et.setTextColor(Theme.text());
+        et.setHintTextColor(Theme.caption());
+        et.setHint("每行一条，例如：- 2026-11-19 用户偏好深色模式");
+        et.setMinLines(6);
+        et.setGravity(Gravity.TOP | Gravity.START);
+        et.setBackground(Theme.round(Theme.surface2(), Theme.R_SM, this));
+        et.setPadding(dp(12), dp(10), dp(12), dp(10));
+        new AppDialog.Builder(this)
+                .setTitle("编辑长期记忆")
+                .setView(et)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        mem.write(et.getText() == null ? "" : et.getText().toString());
+                        toast("已保存");
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // ------------------------------------------------------------ 定时任务
+
+    private void pageSchedules(LinearLayout body) {
+        final com.dsh.android.kernel.ScheduleStore store =
+                new com.dsh.android.kernel.ScheduleStore(this);
+        final com.dsh.android.kernel.Schedules all = store.load();
+
+        body.addView(sectionLabel("定时任务"));
+        LinearLayout card = card();
+        if (all.items().isEmpty()) {
+            card.addView(hintRow("还没有定时任务。新建后，到点会由系统在后台执行，"
+                    + "结果保存为一个名为「定时任务」分组的会话，并推送一条通知。"));
+        }
+        for (int i = 0; i < all.items().size(); i++) {
+            final int idx = i;
+            final com.dsh.android.kernel.Schedules.Task t = all.items().get(i);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(dp(14), dp(11), dp(14), dp(11));
+
+            LinearLayout head = new LinearLayout(this);
+            head.setOrientation(LinearLayout.HORIZONTAL);
+            head.setGravity(Gravity.CENTER_VERTICAL);
+
+            TextView name = new TextView(this);
+            name.setText(t.timeText() + "  " + t.repeatText());
+            name.setTextSize(14);
+            name.setTextColor(t.enabled ? Theme.text() : Theme.caption());
+            head.addView(name, new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            TextView toggle = new TextView(this);
+            toggle.setText(t.enabled ? "已启用" : "已停用");
+            toggle.setTextSize(12);
+            toggle.setTextColor(t.enabled ? Theme.accent() : Theme.caption());
+            head.addView(toggle);
+            row.addView(head);
+
+            TextView prompt = new TextView(this);
+            prompt.setText(t.prompt);
+            prompt.setTextSize(11);
+            prompt.setTextColor(Theme.caption());
+            prompt.setMaxLines(2);
+            prompt.setEllipsize(TextUtils.TruncateAt.END);
+            prompt.setPadding(0, dp(3), 0, 0);
+            row.addView(prompt);
+
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    List<MiniMenu.Item> items = new java.util.ArrayList<MiniMenu.Item>();
+                    items.add(MiniMenu.Item.of(t.enabled ? "停用" : "启用", new Runnable() {
+                        public void run() {
+                            t.enabled = !t.enabled;
+                            store.save(all);
+                            store.rescheduleAll();
+                            fillBody();
+                        }
+                    }));
+                    items.add(MiniMenu.Item.of("立即执行一次", new Runnable() {
+                        public void run() {
+                            android.content.Intent it =
+                                    new android.content.Intent(SettingsActivity.this,
+                                            com.dsh.android.service.AutoTaskService.class);
+                            it.putExtra("task_id", t.id);
+                            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                                startForegroundService(it);
+                            } else {
+                                startService(it);
+                            }
+                            toast("已触发，稍后查看通知");
+                        }
+                    }));
+                    items.add(MiniMenu.Item.of("删除", new Runnable() {
+                        public void run() {
+                            store.cancel(t.id);
+                            all.remove(idx);
+                            store.save(all);
+                            store.rescheduleAll();
+                            fillBody();
+                        }
+                    }));
+                    MiniMenu.show(SettingsActivity.this, v, t.timeText(), items);
+                }
+            });
+            card.addView(row);
+            if (i < all.items().size() - 1) card.addView(divider());
+        }
+        card.addView(divider());
+        card.addView(actionRow("＋ 新建任务", new View.OnClickListener() {
+            public void onClick(View v) { editSchedule(store, all); }
+        }));
+        body.addView(card);
+        body.addView(hintRow("使用系统闹钟，不额外申请精确闹钟权限，因此触发时间可能有几分钟误差；"
+                + "手机重启后会自动重新登记。"));
+    }
+
+    /** 新建任务：提示词 + 时间 + 重复方式。 */
+    private void editSchedule(final com.dsh.android.kernel.ScheduleStore store,
+                              final com.dsh.android.kernel.Schedules all) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(6), dp(18), dp(6));
+
+        final EditText etPrompt = fieldInput("", false, "例如：汇总今天的天气和日程");
+        final EditText etTime = fieldInput("09:00", false, "HH:mm");
+        box.addView(fieldLabel("提示词"));
+        box.addView(etPrompt);
+        box.addView(fieldLabel("时间（24 小时制，如 09:00）"));
+        box.addView(etTime);
+
+        final String[] repeat = {"每天"};
+        box.addView(fieldLabel("重复"));
+        LinearLayout chips = new LinearLayout(this);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        final String[] keys = {"每天", "工作日", "一次"};
+        for (int i = 0; i < keys.length; i++) {
+            final String label = keys[i];
+            TextView chip = new TextView(this);
+            chip.setText(label);
+            chip.setTextSize(12);
+            chip.setTextColor(Theme.link());
+            chip.setPadding(dp(10), dp(6), dp(10), dp(6));
+            chip.setBackground(Theme.round(Theme.surface2(), Theme.R_SM, this));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.rightMargin = dp(6);
+            chip.setLayoutParams(lp);
+            chip.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    repeat[0] = label;
+                    toast("重复方式：" + label);
+                }
+            });
+            chips.addView(chip);
+        }
+        box.addView(chips);
+
+        new AppDialog.Builder(this)
+                .setTitle("新建定时任务")
+                .setView(box)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String prompt = etPrompt.getText().toString().trim();
+                        String time = etTime.getText().toString().trim();
+                        if (prompt.length() == 0) {
+                            toast("提示词不能为空");
+                            return;
+                        }
+                        int h = 9, m = 0;
+                        try {
+                            String[] parts = time.split(":");
+                            h = Math.max(0, Math.min(23, Integer.parseInt(parts[0].trim())));
+                            if (parts.length > 1) m = Math.max(0, Math.min(59, Integer.parseInt(parts[1].trim())));
+                        } catch (Throwable t) {
+                            toast("时间格式应为 HH:mm");
+                            return;
+                        }
+                        String rep = com.dsh.android.kernel.Schedules.DAILY;
+                        if ("工作日".equals(repeat[0])) rep = com.dsh.android.kernel.Schedules.WEEKDAYS;
+                        else if ("一次".equals(repeat[0])) rep = com.dsh.android.kernel.Schedules.ONCE;
+
+                        com.dsh.android.kernel.Schedules.Task task =
+                                new com.dsh.android.kernel.Schedules.Task("", prompt, h, m, rep);
+                        all.add(task);
+                        store.save(all);
+                        store.rescheduleAll();
+                        toast("已保存，到点自动执行");
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // ------------------------------------------------------------ MCP
+
+    private void pageMcp(LinearLayout body) {
+        final org.json.JSONArray servers = com.dsh.android.kernel.McpServers.load(this);
+
+        body.addView(sectionLabel("MCP 服务器"));
+        LinearLayout card = card();
+        if (servers.length() == 0) {
+            card.addView(hintRow("还没有接入 MCP 服务器。接入后，每台服务器会成为一个工具"
+                    + "「mcp.名称」，模型可以先用 action=list 查看它的工具，再调用。"));
+        }
+        for (int i = 0; i < servers.length(); i++) {
+            final int idx = i;
+            org.json.JSONObject o = servers.optJSONObject(i);
+            if (o == null) continue;
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(dp(14), dp(11), dp(14), dp(11));
+            TextView name = new TextView(this);
+            name.setText(o.optString("name", "未命名"));
+            name.setTextSize(14);
+            name.setTextColor(Theme.text());
+            row.addView(name);
+            TextView sub = new TextView(this);
+            sub.setText(o.optString("url", ""));
+            sub.setTextSize(11);
+            sub.setTextColor(Theme.caption());
+            row.addView(sub);
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    List<MiniMenu.Item> items = new java.util.ArrayList<MiniMenu.Item>();
+                    items.add(MiniMenu.Item.of("删除", new Runnable() {
+                        public void run() {
+                            com.dsh.android.kernel.McpServers.remove(SettingsActivity.this, idx);
+                            fillBody();
+                        }
+                    }));
+                    MiniMenu.show(SettingsActivity.this, v, null, items);
+                }
+            });
+            card.addView(row);
+            if (i < servers.length() - 1) card.addView(divider());
+        }
+        card.addView(divider());
+        card.addView(actionRow("＋ 添加服务器", new View.OnClickListener() {
+            public void onClick(View v) { editMcp(); }
+        }));
+        body.addView(card);
+        body.addView(hintRow("只支持 HTTP 型服务器（URL 指向 JSON-RPC 端点）。"
+                + "需要令牌时填 Bearer 值。stdio 型服务器在 Android 上无法启动子进程，未支持。"));
+    }
+
+    private void editMcp() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(6), dp(18), dp(6));
+        final EditText etName = fieldInput("", false, "例如：本机工具");
+        final EditText etUrl = fieldInput("", false, "https://example.com/mcp");
+        final EditText etToken = fieldInput("", true, "可留空");
+        box.addView(fieldLabel("名称"));
+        box.addView(etName);
+        box.addView(fieldLabel("地址"));
+        box.addView(etUrl);
+        box.addView(fieldLabel("令牌"));
+        box.addView(etToken);
+
+        new AppDialog.Builder(this)
+                .setTitle("添加 MCP 服务器")
+                .setView(box)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String name = etName.getText().toString().trim();
+                        String url = etUrl.getText().toString().trim();
+                        if (name.length() == 0) {
+                            toast("名称不能为空");
+                            return;
+                        }
+                        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                            toast("地址需要以 http:// 或 https:// 开头");
+                            return;
+                        }
+                        com.dsh.android.kernel.McpServers.add(SettingsActivity.this, name, url,
+                                etToken.getText().toString().trim());
+                        toast("已添加，重开应用后生效");
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     // ------------------------------------------------------------ 数据管理
 
     /**
@@ -469,6 +803,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 11) pageBrowser(bodyBox);
         else if (page == 12) pageComputer(bodyBox);
         else if (page == 13) pageData(bodyBox);
+        else if (page == 14) pageMemory(bodyBox);
+        else if (page == 15) pageSchedules(bodyBox);
+        else if (page == 16) pageMcp(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -497,6 +834,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(divider());
         c.addView(menuRow(IconView.BAG, Texts.t(this, "browser"), "查看 AI 正在访问的页面", 11));
         c.addView(divider());
+        c.addView(menuRow(IconView.BOOKMARK, "长期记忆", "AI 跨对话记住的事实，可查看与编辑", 14));
+        c.addView(menuRow(IconView.REFRESH, "定时任务", "到点自动执行一条提示词", 15));
+        c.addView(menuRow(IconView.PLUGIN, "MCP 服务器", "接入外部工具服务器（HTTP）", 16));
         c.addView(menuRow(IconView.BOOKMARK, "数据管理", "导入 / 导出对话记录、清空历史", 13));
         c.addView(divider());
         c.addView(menuRow(IconView.INFO, Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
