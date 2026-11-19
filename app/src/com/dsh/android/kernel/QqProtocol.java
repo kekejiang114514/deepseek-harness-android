@@ -1,5 +1,6 @@
 package com.dsh.android.kernel;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
@@ -37,17 +38,22 @@ public final class QqProtocol {
         return "QQBot " + (accessToken == null ? "" : accessToken);
     }
 
-    /** 构造 identify（op=2）。 */
+    /**
+     * 构造 identify（op=2）。
+     *
+     * <p>字段与官方 SDK 完全一致：只有 token、intents、shard。
+     * 早期版本照着 Discord 加了 properties，QQ 侧并不需要；
+     * 而 shard 缺失会让部分账号被判定为非法握手。
+     */
     public static String identify(String accessToken, int intents) {
         try {
             JSONObject d = new JSONObject();
             d.put("token", authToken(accessToken));
             d.put("intents", intents);
-            JSONObject props = new JSONObject();
-            props.put("$os", "android");
-            props.put("$browser", "dshandroid");
-            props.put("$device", "phone");
-            d.put("properties", props);
+            JSONArray shard = new JSONArray();
+            shard.put(0);
+            shard.put(1);
+            d.put("shard", shard);
 
             JSONObject root = new JSONObject();
             root.put("op", OP_IDENTIFY);

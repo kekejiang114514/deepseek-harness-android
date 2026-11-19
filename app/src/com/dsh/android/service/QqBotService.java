@@ -130,7 +130,14 @@ public class QqBotService extends Service {
 
     private void handleFrame(QqSocket s, String text) {
         QqProtocol.Frame f = QqProtocol.parseFrame(text);
-        if (f == null) return;
+        if (f == null) {
+            QqConfig.log(this, "无法解析的帧：" + text);
+            return;
+        }
+        // 只记录关键事件，避免日志被心跳刷满
+        if (f.op != QqProtocol.OP_HEARTBEAT_ACK) {
+            QqConfig.log(this, "op=" + f.op + (f.type.length() > 0 ? " t=" + f.type : ""));
+        }
         if (f.seq > 0) seq = Long.valueOf(f.seq);
 
         switch (f.op) {
@@ -148,6 +155,7 @@ public class QqBotService extends Service {
                 return;
             case QqProtocol.OP_DISPATCH:
                 if ("READY".equals(f.type)) {
+                    QqConfig.log(this, "READY");
                     status("已就绪（连接建立，等待消息）");
                     return;
                 }

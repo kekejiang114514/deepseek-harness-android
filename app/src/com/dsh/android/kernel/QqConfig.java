@@ -174,6 +174,39 @@ public final class QqConfig {
         sp(ctx).edit().putInt("daily_limit", n).apply();
     }
 
+    // ---------------------------------------------------------------- 连接日志
+
+    /** 记一条原始帧/事件，方便对照官方协议排查。 */
+    public static void log(Context ctx, String line) {
+        if (line == null || line.length() == 0) return;
+        String t = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
+                .format(new java.util.Date());
+        String entry = t + "  " + (line.length() > 200 ? line.substring(0, 200) + "…" : line);
+        java.util.List<String> cur = logs(ctx);
+        cur.add(0, entry);
+        while (cur.size() > 12) cur.remove(cur.size() - 1);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < cur.size(); i++) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(cur.get(i));
+        }
+        sp(ctx).edit().putString("log", sb.toString()).apply();
+    }
+
+    public static java.util.List<String> logs(Context ctx) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        String raw = sp(ctx).getString("log", "");
+        String[] parts = raw.split("\n");
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].trim().length() > 0) out.add(parts[i]);
+        }
+        return out;
+    }
+
+    public static void clearLogs(Context ctx) {
+        sp(ctx).edit().remove("log").apply();
+    }
+
     /** 最近一次运行状态，设置页展示。 */
     public static String status(Context ctx) {
         return sp(ctx).getString("status", "尚未启动");

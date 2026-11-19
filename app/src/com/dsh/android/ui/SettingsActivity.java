@@ -598,6 +598,11 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             public void onClick(View v) { testQq(); }
         }));
         conn.addView(divider());
+        conn.addView(actionRow("查看连接日志（" + com.dsh.android.kernel.QqConfig.logs(this).size()
+                + " 条）", new View.OnClickListener() {
+            public void onClick(View v) { showQqLogs(); }
+        }));
+        conn.addView(divider());
         conn.addView(actionRow(on ? "停用机器人" : "启用机器人", new View.OnClickListener() {
             public void onClick(View v) { toggleQq(!com.dsh.android.kernel.QqConfig.enabled(SettingsActivity.this)); }
         }));
@@ -762,6 +767,41 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
         body.addView(hintRow("被动回复有 5 分钟窗口，因此机器人会先回「处理中」，"
                 + "再把 Agent 的结果作为第二条发出。仅支持官方平台，不使用任何个人号协议。"));
+    }
+
+    /** 展示最近收到的原始帧，排查「未连接灵魂」这类问题用。 */
+    private void showQqLogs() {
+        java.util.List<String> logs = com.dsh.android.kernel.QqConfig.logs(this);
+        StringBuilder sb = new StringBuilder();
+        if (logs.isEmpty()) {
+            sb.append("还没有日志。启用机器人后，握手与事件都会记在这里。");
+        } else {
+            for (int i = 0; i < logs.size(); i++) {
+                if (sb.length() > 0) sb.append('\n');
+                sb.append(logs.get(i));
+            }
+        }
+        android.widget.TextView tv = new android.widget.TextView(this);
+        tv.setText(sb.toString());
+        tv.setTextSize(12);
+        tv.setTextColor(Theme.text2());
+        tv.setTextIsSelectable(true);
+        tv.setPadding(dp(16), dp(12), dp(16), dp(12));
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+
+        new AppDialog.Builder(this)
+                .setTitle("连接日志")
+                .setView(sv)
+                .setPositiveButton("清空", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        com.dsh.android.kernel.QqConfig.clearLogs(SettingsActivity.this);
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("关闭", null)
+                .show();
     }
 
     /** 测试连接：只验证凭据与网关，不建立长连接。 */

@@ -21,6 +21,8 @@ public final class QqProtocolTest {
         ok(id.optInt("op") == 2, "op=2");
         ok("QQBot tok".equals(id.getJSONObject("d").optString("token")), "token 正确");
         ok(id.getJSONObject("d").optInt("intents") == (1 << 25), "intents 正确");
+        ok(id.getJSONObject("d").optJSONArray("shard").length() == 2, "带 shard [0,1]（官方 SDK 要求）");
+        ok(!id.getJSONObject("d").has("properties"), "不发送 Discord 风格的 properties");
 
         System.out.println("t3 心跳");
         ok(new JSONObject(QqProtocol.heartbeat(5L)).optInt("op") == 1, "op=1");
