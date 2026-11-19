@@ -71,8 +71,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 115
-    a.version_name = '1.6-beta9'
+    a.version_code = 116
+    a.version_name = '1.6-beta10'
     a.min_sdk = 23
     a.target_sdk = 34
     a.platform_build_version_code = 34
@@ -220,6 +220,10 @@ def build_dshandroid_app():
                 ('action', [('name', TYPE_STR, 'android.intent.action.MY_PACKAGE_REPLACED')], []),
             ]),
         ],
+    ))
+    a.components.append(ComponentDef(
+        'service', '.service.QqBotService', False,
+        attrs=[('foregroundServiceType', TYPE_INT_HEX, 0x40000000)],
     ))
     a.components.append(ComponentDef(
         'service', '.service.AutoTaskService', False,

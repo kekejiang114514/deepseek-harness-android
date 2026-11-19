@@ -1,0 +1,86 @@
+package com.dsh.android.kernel;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+/**
+ * QQ 机器人的本地配置。
+ *
+ * <p>clientSecret 用 SecureStore 加密存放；白名单为空时**不响应任何人**，
+ * 避免机器人被陌生群拉进去白烧额度。
+ */
+public final class QqConfig {
+
+    private static final String SP = "dsh_qq_bot";
+
+    private QqConfig() {}
+
+    private static SharedPreferences sp(Context ctx) {
+        return ctx.getSharedPreferences(SP, Context.MODE_PRIVATE);
+    }
+
+    public static String appId(Context ctx) {
+        return sp(ctx).getString("app_id", "");
+    }
+
+    public static String secret(Context ctx) {
+        return SecureStore.open(sp(ctx).getString("secret", ""));
+    }
+
+    public static void save(Context ctx, String appId, String secret) {
+        sp(ctx).edit()
+                .putString("app_id", appId == null ? "" : appId.trim())
+                .putString("secret", SecureStore.seal(secret == null ? "" : secret.trim()))
+                .apply();
+    }
+
+    public static boolean enabled(Context ctx) {
+        return sp(ctx).getBoolean("enabled", false);
+    }
+
+    public static void setEnabled(Context ctx, boolean on) {
+        sp(ctx).edit().putBoolean("enabled", on).apply();
+    }
+
+    /** 白名单：群 openid 或用户 openid，一行一个。 */
+    public static java.util.List<String> whitelist(Context ctx) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        String raw = sp(ctx).getString("whitelist", "");
+        String[] parts = raw.split("\n");
+        for (int i = 0; i < parts.length; i++) {
+            String s = parts[i].trim();
+            if (s.length() > 0) out.add(s);
+        }
+        return out;
+    }
+
+    public static void setWhitelist(Context ctx, java.util.List<String> list) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(list.get(i).trim());
+        }
+        sp(ctx).edit().putString("whitelist", sb.toString()).apply();
+    }
+
+    public static boolean allowed(Context ctx, String openid) {
+        java.util.List<String> list = whitelist(ctx);
+        if (list.isEmpty()) return false;      // 没配名单就不响应
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).equals(openid)) return true;
+        }
+        return false;
+    }
+
+    /** 最近一次运行状态，设置页展示。 */
+    public static String status(Context ctx) {
+        return sp(ctx).getString("status", "尚未启动");
+    }
+
+    public static void setStatus(Context ctx, String s) {
+        sp(ctx).edit().putString("status", s == null ? "" : s).apply();
+    }
+}

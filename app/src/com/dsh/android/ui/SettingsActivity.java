@@ -551,6 +551,145 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 .show();
     }
 
+    // ------------------------------------------------------------ QQ 机器人
+
+    /**
+     * QQ 机器人设置。
+     *
+     * <p>只支持官方开放平台（appId + clientSecret）。白名单留空时机器人
+     * 不响应任何人——避免被陌生群拉进去白烧额度。
+     */
+    private void pageQq(LinearLayout body) {
+        final String appId = com.dsh.android.kernel.QqConfig.appId(this);
+        final boolean on = com.dsh.android.kernel.QqConfig.enabled(this);
+
+        body.addView(sectionLabel("QQ 机器人（官方平台）"));
+        LinearLayout card = card();
+        card.addView(actionRow("appId：" + (appId.length() == 0 ? "未填写" : appId),
+                new View.OnClickListener() {
+                    public void onClick(View v) { editQqCredential(); }
+                }));
+        card.addView(divider());
+        card.addView(actionRow(on ? "已启用 · 点此停用" : "已停用 · 点此启用",
+                new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (com.dsh.android.kernel.QqConfig.appId(SettingsActivity.this).length() == 0) {
+                            toast("先填写 appId 与 clientSecret");
+                            return;
+                        }
+                        boolean now = !com.dsh.android.kernel.QqConfig.enabled(SettingsActivity.this);
+                        com.dsh.android.kernel.QqConfig.setEnabled(SettingsActivity.this, now);
+                        android.content.Intent svc = new android.content.Intent(
+                                SettingsActivity.this,
+                                com.dsh.android.service.QqBotService.class);
+                        try {
+                            if (now) {
+                                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                                    startForegroundService(svc);
+                                } else {
+                                    startService(svc);
+                                }
+                            } else {
+                                stopService(svc);
+                            }
+                        } catch (Throwable t) {
+                            toast("启动失败：" + t.getMessage());
+                        }
+                        toast(now ? "已启用，后台连接中" : "已停用");
+                        fillBody();
+                    }
+                }));
+        card.addView(divider());
+        card.addView(actionRow("白名单（" + com.dsh.android.kernel.QqConfig
+                .whitelist(this).size() + " 项）", new View.OnClickListener() {
+            public void onClick(View v) { editQqWhitelist(); }
+        }));
+        body.addView(card);
+
+        LinearLayout statusCard = card();
+        statusCard.addView(hintRow("状态：" + com.dsh.android.kernel.QqConfig.status(this)));
+        body.addView(statusCard);
+
+        body.addView(hintRow("说明：需要在 q.qq.com 创建机器人并取得 appId 与 clientSecret。"
+                + "白名单留空时不会响应任何人。官方限制：被动回复需在 5 分钟内，"
+                + "同一消息最多回 5 条。仅支持官方平台，不使用任何个人号协议。"));
+    }
+
+    private void editQqCredential() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(6), dp(18), dp(6));
+        final EditText etId = fieldInput(com.dsh.android.kernel.QqConfig.appId(this), false, "appId");
+        final EditText etSecret = fieldInput("", true, "clientSecret（留空表示不修改）");
+        box.addView(fieldLabel("appId"));
+        box.addView(etId);
+        box.addView(fieldLabel("clientSecret"));
+        box.addView(etSecret);
+
+        new AppDialog.Builder(this)
+                .setTitle("QQ 机器人凭据")
+                .setView(box)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        String id = etId.getText().toString().trim();
+                        String secret = etSecret.getText().toString().trim();
+                        if (secret.length() == 0) {
+                            secret = com.dsh.android.kernel.QqConfig.secret(SettingsActivity.this);
+                        }
+                        if (id.length() == 0 || secret.length() == 0) {
+                            toast("appId 与 clientSecret 都需要填写");
+                            return;
+                        }
+                        com.dsh.android.kernel.QqConfig.save(SettingsActivity.this, id, secret);
+                        toast("已保存（secret 已加密）");
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void editQqWhitelist() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(6), dp(18), dp(6));
+        StringBuilder cur = new StringBuilder();
+        java.util.List<String> list = com.dsh.android.kernel.QqConfig.whitelist(this);
+        for (int i = 0; i < list.size(); i++) {
+            if (cur.length() > 0) cur.append('\n');
+            cur.append(list.get(i));
+        }
+        final EditText et = new EditText(this);
+        et.setText(cur.toString());
+        et.setTextSize(13);
+        et.setTextColor(Theme.text());
+        et.setHintTextColor(Theme.caption());
+        et.setHint("群 openid 或用户 openid，一行一个");
+        et.setMinLines(4);
+        et.setGravity(Gravity.TOP | Gravity.START);
+        et.setBackground(Theme.round(Theme.surface2(), Theme.R_SM, this));
+        et.setPadding(dp(12), dp(10), dp(12), dp(10));
+        box.addView(et);
+
+        new AppDialog.Builder(this)
+                .setTitle("白名单")
+                .setView(box)
+                .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        java.util.List<String> out = new java.util.ArrayList<String>();
+                        String[] parts = et.getText().toString().split("\n");
+                        for (int i = 0; i < parts.length; i++) {
+                            if (parts[i].trim().length() > 0) out.add(parts[i].trim());
+                        }
+                        com.dsh.android.kernel.QqConfig.setWhitelist(SettingsActivity.this, out);
+                        toast(out.isEmpty() ? "白名单为空：机器人不会响应任何人" : "已保存");
+                        fillBody();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     // ------------------------------------------------------------ 数据管理
 
     /**
@@ -806,6 +945,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         else if (page == 14) pageMemory(bodyBox);
         else if (page == 15) pageSchedules(bodyBox);
         else if (page == 16) pageMcp(bodyBox);
+        else if (page == 17) pageQq(bodyBox);
         else pageAbout(bodyBox);
     }
 
@@ -837,6 +977,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         c.addView(menuRow(IconView.BOOKMARK, "长期记忆", "AI 跨对话记住的事实，可查看与编辑", 14));
         c.addView(menuRow(IconView.REFRESH, "定时任务", "到点自动执行一条提示词", 15));
         c.addView(menuRow(IconView.PLUGIN, "MCP 服务器", "接入外部工具服务器（HTTP）", 16));
+        c.addView(menuRow(IconView.GLOBE, "QQ 机器人", "接入官方 QQ 机器人（试验中）", 17));
         c.addView(menuRow(IconView.BOOKMARK, "数据管理", "导入 / 导出对话记录、清空历史", 13));
         c.addView(divider());
         c.addView(menuRow(IconView.INFO, Texts.t(this, "about"), Texts.t(this, "sub_about"), 5));
