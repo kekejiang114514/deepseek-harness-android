@@ -70,8 +70,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 112
-    a.version_name = '1.6-beta6'
+    a.version_code = 113
+    a.version_name = '1.6-beta7'
     a.min_sdk = 23
     a.target_sdk = 34
     a.compile_sdk = 34
@@ -98,12 +98,10 @@ def build_dshandroid_app():
     a.extra_app_attrs = [
         # Android 10 及以下的旧式存储；33+ 已忽略，保留以兼容旧机型
         ('requestLegacyExternalStorage', TYPE_BOOL, True),
-        # 默认禁止明文；只有本机回环地址放行（本地推理服务常用 http）
-        ('networkSecurityConfig', TYPE_REF, 0x7F020001),
-        # 备份规则：全部排除（allowBackup 已为 false，这里是第二道保险）
-        ('fullBackupContent', TYPE_REF, 0x7F020002),
-        # dataExtractionRules 是 API 31 的属性，本项目用的 platform-29 属性表里没有；
-        # 不猜 ID，改由 allowBackup=false + fullBackupContent 覆盖。
+        # 说明：networkSecurityConfig / fullBackupContent 暂不使用。
+        # 前者需要 res/xml 下的二进制 AXML（含 <domain> 文本节点），
+        # 本项目的 AXML 写出器还不支持文本节点；后者依赖同一套资源。
+        # 备份已由 allowBackup=false 覆盖，明文策略由 usesCleartextTraffic 控制。
         # 插件市场要解析约 3MB 的索引 JSON，给大一点的堆更稳
         ('largeHeap', TYPE_BOOL, True),
     ]
@@ -238,11 +236,6 @@ def build_dshandroid_app():
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用
     a.resources.append(ResourceDef('xml', 'accessibility_service_config',
                                    'res/xml/accessibility_service_config.xml'))
-    a.resources.append(ResourceDef('xml', 'network_security_config',
-                                   'res/xml/network_security_config.xml'))
-    a.resources.append(ResourceDef('xml', 'backup_rules', 'res/xml/backup_rules.xml'))
-    a.resources.append(ResourceDef('xml', 'data_extraction_rules',
-                                   'res/xml/data_extraction_rules.xml'))
 
 
     return a

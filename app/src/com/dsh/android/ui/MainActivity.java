@@ -312,6 +312,27 @@ public final class MainActivity extends Activity {
      * Android 13 起通知是运行时权限。拿不到不会崩，但前台服务的常驻通知
      * 与任务完成提示都不会显示，所以首次进入时问一次。
      */
+    /**
+     * 负面情绪关怀弹窗。
+     *
+     * <p>命中后 6 小时内不再重复弹：反复提示会变成负担，而不是帮助。
+     */
+    private void maybeShowCare(String text) {
+        try {
+            if (!com.dsh.android.kernel.CareCheck.looksDistressed(text)) return;
+            long last = prefs().getLong("care_shown_at", 0);
+            if (System.currentTimeMillis() - last < 6L * 3600 * 1000) return;
+            prefs().edit().putLong("care_shown_at", System.currentTimeMillis()).apply();
+
+            new AppDialog.Builder(this)
+                    .setTitle(com.dsh.android.kernel.CareCheck.careTitle())
+                    .setMessage(com.dsh.android.kernel.CareCheck.careText())
+                    .setPositiveButton("我知道了", null)
+                    .setNegativeButton("先不用", null)
+                    .show();
+        } catch (Throwable ignored) {}
+    }
+
     private void requestNotificationPermissionOnce() {
         if (android.os.Build.VERSION.SDK_INT < 33) return;
         if (prefs().getBoolean("asked_notif", false)) return;
@@ -3252,6 +3273,9 @@ public final class MainActivity extends Activity {
         if (typed.length() == 0 && attaches.isEmpty() && images.isEmpty()) return;
 
         // 以 / 开头：先看内置指令，再看插件注册的指令
+        // 负面情绪：给出一次关怀提示（有冷却，不反复打扰）
+        maybeShowCare(typed);
+
         if (typed.startsWith("/") && attaches.isEmpty() && images.isEmpty()) {
             if (runBuiltinCommand(typed)) {
                 input.setText("");
