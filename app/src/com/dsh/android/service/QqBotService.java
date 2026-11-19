@@ -46,6 +46,8 @@ public class QqBotService extends Service {
     private String token = "";
     private long tokenExpireAt = 0;
     private volatile Long seq = null;
+    /** 当前正在跑的循环，供看门狗取消。 */
+    private volatile AgentLoop currentLoop;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -212,7 +214,14 @@ public class QqBotService extends Service {
 
     private void onDispatch(final QqSocket s, QqProtocol.Frame f) {
         final QqProtocol.Incoming in = QqProtocol.incoming(f);
-        if (in == null) return;
+        if (in == null) {
+            // 事件类型认识但解析不出消息，说明字段结构和预期不同，必须留痕
+            if (QqProtocol.EVENT_GROUP_AT.equals(f.type) || QqProtocol.EVENT_C2C.equals(f.type)) {
+                QqConfig.log(this, "事件无法解析：" + f.type + " d=" + (f.d == null ? "null" : f.d.toString()));
+            }
+            return;
+        }
+        QqConfig.log(this, "收到 " + in.kind + " " + in.openid + "：" + shorten(in.content));
         if (!seen.contains(in.dedupKey())) {
             seen.add(in.dedupKey());
             if (seen.size() > 500) seen.clear();      // 避免无限增长
@@ -232,18 +241,31 @@ public class QqBotService extends Service {
 
             // 先回「处理中」，因为被动回复窗口只有 5 分钟
             reply(in, "收到，正在处理…", 1);
+            final boolean[] done = {false};
+            // 看门狗：先安抚一句，再硬性中止，避免用户那边一直「正在输入」
+            startWatchdog(in, done, 45, 180);
             new Thread(new Runnable() {
                 public void run() {
-                    String answer = runAgent(in.content);
+                    String answer;
+                    try {
+                        answer = runAgent(in.content);
+                    } catch (Throwable e) {
+                        answer = "处理时出错：" + e.getMessage();
+                    }
+                    done[0] = true;
+                    if (answer == null || answer.trim().length() == 0) {
+                        answer = "（没有生成内容）";
+                    }
                     reply(in, answer, 2);
                 }
             }, "qq-reply").start();
         }
     }
 
-    /** 跑一轮 Agent，返回文本结果。 */
+    /** 跑一轮 Agent，返回文本结果；超过时限会中止并说明。 */
     private String runAgent(String prompt) {
         final StringBuilder out = new StringBuilder();
+        QqConfig.log(this, "开始生成…");
         try {
             String base = getSharedPreferences(C.SP_NAME, MODE_PRIVATE)
                     .getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL);
@@ -256,6 +278,7 @@ public class QqBotService extends Service {
             ToolRuntime tools = new ToolRuntime(this);
             AgentLoop loop = new AgentLoop(client, tools,
                     "你是通过 QQ 与用户对话的助手。回答简洁，不要使用 Markdown 表格。");
+            currentLoop = loop;
             JSONArray history = new JSONArray();
             loop.run(history, prompt, new AgentLoop.Sink() {
                 public void onDelta(String d) { out.append(d); }
@@ -264,10 +287,13 @@ public class QqBotService extends Service {
                 public void onError(String msg) { out.append("[错误] ").append(msg); }
             });
 
+            QqConfig.log(this, "生成完成，长度 " + out.length());
+
             SessionStore sessions = new SessionStore(this);
             sessions.importSession("QQ · " + prompt.substring(0, Math.min(12, prompt.length())),
                     "QQ 机器人", history);
         } catch (Throwable e) {
+            QqConfig.log(this, "生成异常：" + e.getMessage());
             if (out.length() == 0) return "处理失败：" + e.getMessage();
         }
         String text = out.toString().trim();
@@ -275,11 +301,53 @@ public class QqBotService extends Service {
         return text.length() > 1500 ? text.substring(0, 1500) + "…" : text;
     }
 
+    /** 发送回复；无论成败都写日志，避免「界面没反应」却查不到原因。 */
     private void reply(QqProtocol.Incoming in, String text, int seqNo) {
         try {
-            if (token.length() == 0) return;
-            QqApi.sendText(token, in.kind, in.openid, text, in.msgId, seqNo);
-        } catch (Throwable ignored) {}
+            if (token.length() == 0) {
+                QqConfig.log(this, "回复失败：没有 token");
+                return;
+            }
+            String err = QqApi.sendText(token, in.kind, in.openid, text, in.msgId, seqNo);
+            QqConfig.log(this, "回复#" + seqNo + (err.length() == 0 ? " 成功" : " 失败：" + err));
+            if (err.length() > 0) status("发送失败：" + err);
+        } catch (Throwable e) {
+            QqConfig.log(this, "回复异常：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 生成看门狗。
+     *
+     * @param remindAfter 多少秒后先回一句「还在处理」
+     * @param abortAfter  多少秒后强制取消生成并告知结果
+     */
+    private void startWatchdog(final QqProtocol.Incoming in, final boolean[] done,
+                               final int remindAfter, final int abortAfter) {
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    Thread.sleep(remindAfter * 1000L);
+                    if (!done[0]) {
+                        reply(in, "还在处理，稍等一下…", 3);
+                        QqConfig.log(QqBotService.this, "已发送进度提醒");
+                    }
+                    long left = (abortAfter - remindAfter) * 1000L;
+                    if (left > 0) Thread.sleep(left);
+                    if (!done[0]) {
+                        AgentLoop l = currentLoop;
+                        if (l != null) l.cancel();
+                        QqConfig.log(QqBotService.this, "生成超时，已取消");
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }, "qq-watchdog").start();
+    }
+
+    private static String shorten(String s) {
+        if (s == null) return "";
+        String t = s.replace("\n", " ");
+        return t.length() > 40 ? t.substring(0, 40) + "…" : t;
     }
 
     private boolean ensureToken() {
