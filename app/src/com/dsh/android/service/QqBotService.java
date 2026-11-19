@@ -172,7 +172,18 @@ public class QqBotService extends Service {
         if (!seen.contains(in.dedupKey())) {
             seen.add(in.dedupKey());
             if (seen.size() > 500) seen.clear();      // 避免无限增长
-            if (!QqConfig.allowed(this, in.kind, in.openid)) return;
+            // 记下来源，方便用户把它们加入名单
+            QqConfig.noteSource(this, in.kind, in.openid);
+            if (!QqConfig.allowed(this, in.kind, in.openid)) {
+                status("已忽略一条消息（不在允许范围）：" + in.kind + " " + in.openid);
+                return;
+            }
+            int limit = QqConfig.dailyLimit(this);
+            if (limit > 0 && QqConfig.todayCount(this) >= limit) {
+                status("已达到今日回复上限 " + limit + " 条");
+                return;
+            }
+            QqConfig.bumpToday(this);
             if (in.content.trim().length() == 0) return;
 
             // 先回「处理中」，因为被动回复窗口只有 5 分钟

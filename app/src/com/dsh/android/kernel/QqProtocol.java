@@ -133,12 +133,17 @@ public final class QqProtocol {
         return in;
     }
 
-    /** 去掉群消息 @ 之后残留的前导空格。 */
+    /**
+     * 清理群消息正文。
+     *
+     * <p>群里 @ 机器人时，正文可能带 {@code <@!123456>} 这样的提及标记，
+     * 也可能只是残留一个前导空格。标记不清掉会让模型不知道要回答什么。
+     */
     public static String cleanContent(String content) {
         if (content == null) return "";
-        String s = content;
+        String s = content.replaceAll("<@!?[0-9]+>", " ");
         while (s.startsWith(" ")) s = s.substring(1);
-        return s;
+        return s.trim().length() == 0 ? "" : s;
     }
 
     /**

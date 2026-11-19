@@ -57,6 +57,11 @@ public final class QqProtocolTest {
         ok(QqProtocol.incoming(QqProtocol.parseFrame(
                 "{\"op\":0,\"t\":\"READY\",\"d\":{}}")) == null, "其它事件忽略");
 
+        System.out.println("t6b 提及标记要清掉");
+        ok("你好".equals(QqProtocol.cleanContent("<@!123> 你好")), "去掉 <@!id>");
+        ok("你好".equals(QqProtocol.cleanContent("<@123>你好")), "去掉 <@id> 且无空格");
+        ok("".equals(QqProtocol.cleanContent("<@!1>  ")), "只剩提及视为空");
+
         System.out.println("t7 发送体");
         JSONObject body = new JSONObject(QqProtocol.messageBody("回复", "msg-1", 1));
         ok("回复".equals(body.optString("content")), "正文");

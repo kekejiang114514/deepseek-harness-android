@@ -650,6 +650,33 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 new String[]{"on", "off"}, new String[]{"允许", "禁止"}, null));
         body.addView(scope);
 
+        body.addView(sectionLabel("最近收到的来源"));
+        LinearLayout recentCard = card();
+        java.util.List<String> recent = com.dsh.android.kernel.QqConfig.recent(this);
+        if (recent.isEmpty()) {
+            recentCard.addView(hintRow("还没有收到过消息。对方发一条消息后，这里会显示它的 openid。"));
+        } else {
+            for (int i = 0; i < recent.size(); i++) {
+                final String entry = recent.get(i);
+                recentCard.addView(actionRow(entry + "  · 点此加入名单", new View.OnClickListener() {
+                    public void onClick(View v) {
+                        java.util.List<String> cur =
+                                com.dsh.android.kernel.QqConfig.whitelist(SettingsActivity.this);
+                        String id = entry.substring(entry.indexOf("  ") + 2).trim();
+                        if (!cur.contains(id)) cur.add(id);
+                        com.dsh.android.kernel.QqConfig.setWhitelist(SettingsActivity.this, cur);
+                        toast("已加入名单");
+                        fillBody();
+                    }
+                }));
+                if (i < recent.size() - 1) recentCard.addView(divider());
+            }
+        }
+        recentCard.addView(divider());
+        recentCard.addView(hintRow("今日已回复 " + com.dsh.android.kernel.QqConfig.todayCount(this)
+                + " 条，上限 " + com.dsh.android.kernel.QqConfig.dailyLimit(this) + " 条"));
+        body.addView(recentCard);
+
         body.addView(sectionLabel("名单"));
         LinearLayout listCard = card();
         StringBuilder cur = new StringBuilder();
@@ -1708,10 +1735,9 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                         public void set(String k) {
                             getSharedPreferences("dshandroid", MODE_PRIVATE).edit()
                                     .putBoolean("dynamic_color", "on".equals(k)).apply();
-                            SettingsActivity.this.findViewById(android.R.id.content)
-                                    .post(new Runnable() {
-                                        public void run() { applyThemeReveal(); }
-                                    });
+                            // 只刷新本页配色即可；整页重建会让用户以为应用被重启
+                            Theme.init(SettingsActivity.this);
+                            fillBody();
                         }
                     },
                     new String[]{"on", "off"},
