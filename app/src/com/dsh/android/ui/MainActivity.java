@@ -320,8 +320,8 @@ public final class MainActivity extends Activity {
     private void maybeShowCare(String text) {
         try {
             if (text == null || text.trim().length() == 0) return;
-            if (System.currentTimeMillis() - prefs().getLong("care_shown_at", 0)
-                    < 6L * 3600 * 1000) return;
+            // 只有用户主动选了「一小时内不触发」才静音；默认每次都判断
+            if (System.currentTimeMillis() < prefs().getLong("care_muted_until", 0)) return;
 
             // 关键词命中时立刻弹，不等模型：这种情况没必要多等一次往返
             if (com.dsh.android.kernel.CareCheck.looksDistressed(text)) {
@@ -353,15 +353,28 @@ public final class MainActivity extends Activity {
         } catch (Throwable ignored) {}
     }
 
-    /** 弹出关怀提示，并记录时间用于冷却。 */
+    /**
+     * 弹出关怀提示。
+     *
+     * <p>两个出口的含义不同：
+     * <ul>
+     *   <li>「一小时内不触发报警」——把静音时间推后一小时，期间不再打扰；</li>
+     *   <li>「知道了」——只关掉这一个弹窗，不设静音，下次仍会提示。</li>
+     * </ul>
+     */
     private void showCareDialog() {
         try {
-            prefs().edit().putLong("care_shown_at", System.currentTimeMillis()).apply();
             new AppDialog.Builder(this)
                     .setTitle(com.dsh.android.kernel.CareCheck.careTitle())
                     .setMessage(com.dsh.android.kernel.CareCheck.careText())
-                    .setPositiveButton("我知道了", null)
-                    .setNegativeButton("先不用", null)
+                    .setPositiveButton("一小时内不触发报警",
+                            new android.content.DialogInterface.OnClickListener() {
+                                public void onClick(android.content.DialogInterface d, int w) {
+                                    prefs().edit().putLong("care_muted_until",
+                                            System.currentTimeMillis() + 3600L * 1000).apply();
+                                }
+                            })
+                    .setNegativeButton("知道了", null)
                     .show();
         } catch (Throwable ignored) {}
     }
