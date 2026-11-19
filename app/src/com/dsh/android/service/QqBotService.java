@@ -50,6 +50,7 @@ public class QqBotService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForegroundCompat();
+        status("服务已启动，正在连接…");
         if (!running) {
             running = true;
             new Thread(new Runnable() {
@@ -101,7 +102,7 @@ public class QqBotService extends Service {
                 final QqSocket s = new QqSocket();
                 socket = s;
                 s.connect(gw, new QqSocket.Listener() {
-                    public void onOpen() { status("已连接"); }
+                    public void onOpen() { status("已握手，等待 READY…"); }
 
                     public void onText(String text) {
                         try {
@@ -146,6 +147,10 @@ public class QqBotService extends Service {
                 closeSocket();
                 return;
             case QqProtocol.OP_DISPATCH:
+                if ("READY".equals(f.type)) {
+                    status("已就绪（连接建立，等待消息）");
+                    return;
+                }
                 onDispatch(s, f);
                 return;
             default:

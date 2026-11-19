@@ -560,8 +560,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
      * 值」的场景，弹窗里逐项确认反而更麻烦。
      */
     private void pageQq(LinearLayout body) {
-        final com.dsh.android.kernel.QqConfig cfg = null;   // 仅用于可读性，方法都是静态的
-
         body.addView(sectionLabel("凭据"));
         LinearLayout cred = card();
         cred.addView(fieldLabel("appId"));
@@ -614,8 +612,8 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 new ValueIO() {
                     public String get() { return com.dsh.android.kernel.QqConfig.mode(SettingsActivity.this); }
                     public void set(String k) {
+                        // 配置是每条消息实时读取的，改完不需要动服务
                         com.dsh.android.kernel.QqConfig.setMode(SettingsActivity.this, k);
-                        restartIfRunning();
                     }
                 },
                 new String[]{"white", "black", "all"},
@@ -674,7 +672,57 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }
         recentCard.addView(divider());
         recentCard.addView(hintRow("今日已回复 " + com.dsh.android.kernel.QqConfig.todayCount(this)
-                + " 条，上限 " + com.dsh.android.kernel.QqConfig.dailyLimit(this) + " 条"));
+                + " 条，上限 " + com.dsh.android.kernel.QqConfig.dailyLimitText(this)));
+
+        // 上限可自行设定：填 0 表示不限制
+        LinearLayout limitRow = new LinearLayout(this);
+        limitRow.setOrientation(LinearLayout.HORIZONTAL);
+        limitRow.setGravity(Gravity.CENTER_VERTICAL);
+        limitRow.setPadding(dp(14), dp(10), dp(14), dp(10));
+
+        TextView limitLabel = new TextView(this);
+        limitLabel.setText("每日回复上限");
+        limitLabel.setTextSize(14);
+        limitLabel.setTextColor(Theme.text());
+        limitRow.addView(limitLabel, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        final EditText etLimit = new EditText(this);
+        etLimit.setText(String.valueOf(com.dsh.android.kernel.QqConfig.dailyLimit(this)));
+        etLimit.setTextSize(13);
+        etLimit.setTextColor(Theme.text());
+        etLimit.setHintTextColor(Theme.caption());
+        etLimit.setHint("0 = 不限制");
+        etLimit.setSingleLine(true);
+        etLimit.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        etLimit.setBackground(Theme.round(Theme.surface2(), Theme.R_SM, this));
+        etLimit.setPadding(dp(10), dp(6), dp(10), dp(6));
+        etLimit.setWidth(dp(96));
+        limitRow.addView(etLimit);
+
+        TextView limitSave = new TextView(this);
+        limitSave.setText("保存");
+        limitSave.setTextSize(13);
+        limitSave.setTextColor(Theme.link());
+        limitSave.setPadding(dp(12), dp(6), dp(2), dp(6));
+        limitSave.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                int n;
+                try {
+                    n = Integer.parseInt(etLimit.getText().toString().trim());
+                } catch (Throwable t) {
+                    toast("请填数字，0 表示不限制");
+                    return;
+                }
+                if (n < 0) n = 0;
+                com.dsh.android.kernel.QqConfig.setDailyLimit(SettingsActivity.this, n);
+                toast(n <= 0 ? "已设为不限制" : "已设为每天 " + n + " 条");
+                fillBody();
+            }
+        });
+        limitRow.addView(limitSave);
+        recentCard.addView(divider());
+        recentCard.addView(limitRow);
         body.addView(recentCard);
 
         body.addView(sectionLabel("名单"));
@@ -768,17 +816,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         }
         toast(on ? "已启用，后台连接中" : "已停用");
         fillBody();
-    }
-
-    /** 改了响应范围后，让运行中的服务重新读配置。 */
-    private void restartIfRunning() {
-        if (!com.dsh.android.kernel.QqConfig.enabled(this)) return;
-        android.content.Intent svc = new android.content.Intent(this,
-                com.dsh.android.service.QqBotService.class);
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(svc);
-            else startService(svc);
-        } catch (Throwable ignored) {}
     }
 
     // ------------------------------------------------------------ 数据管理

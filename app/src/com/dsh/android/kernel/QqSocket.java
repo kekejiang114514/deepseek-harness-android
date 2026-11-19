@@ -140,7 +140,14 @@ public final class QqSocket {
                     continue;
                 }
                 if (opcode == 0xA) continue;     // pong
-                if (opcode == 0x8) break;        // close
+                if (opcode == 0x8) {             // close：把 code 与原因带出来
+                    int code = data.length >= 2
+                            ? ((data[0] & 0xFF) << 8 | (data[1] & 0xFF)) : 0;
+                    String reason = data.length > 2
+                            ? new String(data, 2, data.length - 2, "UTF-8") : "";
+                    lastError = "服务端关闭 " + code + (reason.length() > 0 ? "：" + reason : "");
+                    break;
+                }
                 if (opcode == 0x1 || opcode == 0x0) {
                     frag.write(data);
                     if (fin) {
@@ -226,10 +233,11 @@ public final class QqSocket {
         return i > 0 ? header.substring(0, i) : header;
     }
 
+    /** Sec-WebSocket-Key：16 字节随机数的 base64，用自己的实现以便纯 JVM 测试。 */
     private static String nonce() {
         byte[] b = new byte[16];
         new SecureRandom().nextBytes(b);
-        return android.util.Base64.encodeToString(b, android.util.Base64.NO_WRAP);
+        return SecretFormat.encode(b);
     }
 
     void setListener(Listener l) { this.listener = l; }

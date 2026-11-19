@@ -164,6 +164,12 @@ public final class QqConfig {
         return sp(ctx).getInt("daily_limit", 300);
     }
 
+    /** 上限的展示文本。 */
+    public static String dailyLimitText(Context ctx) {
+        int n = dailyLimit(ctx);
+        return n <= 0 ? "不限制" : (n + " 条/天");
+    }
+
     public static void setDailyLimit(Context ctx, int n) {
         sp(ctx).edit().putInt("daily_limit", n).apply();
     }
