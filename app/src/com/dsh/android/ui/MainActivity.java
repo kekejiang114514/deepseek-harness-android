@@ -319,11 +319,44 @@ public final class MainActivity extends Activity {
      */
     private void maybeShowCare(String text) {
         try {
-            if (!com.dsh.android.kernel.CareCheck.looksDistressed(text)) return;
-            long last = prefs().getLong("care_shown_at", 0);
-            if (System.currentTimeMillis() - last < 6L * 3600 * 1000) return;
-            prefs().edit().putLong("care_shown_at", System.currentTimeMillis()).apply();
+            if (text == null || text.trim().length() == 0) return;
+            if (System.currentTimeMillis() - prefs().getLong("care_shown_at", 0)
+                    < 6L * 3600 * 1000) return;
 
+            // 关键词命中时立刻弹，不等模型：这种情况没必要多等一次往返
+            if (com.dsh.android.kernel.CareCheck.looksDistressed(text)) {
+                showCareDialog();
+                return;
+            }
+
+            // 否则交给模型判断一次（异步，不阻塞发送）
+            final String probe = text;
+            new Thread(new Runnable() {
+                public void run() {
+                    boolean risk = false;
+                    try {
+                        LlmClient c = new LlmClient(MainActivity.this,
+                                prefs().getString(C.KEY_BASE_URL, C.DEFAULT_BASE_URL),
+                                com.dsh.android.kernel.SecureStore.readKey(prefs()),
+                                prefs().getString(C.KEY_MODEL, C.MODEL_CHAT), 64);
+                        String answer = c.classify(
+                                com.dsh.android.kernel.CrisisClassifier.systemPrompt(),
+                                com.dsh.android.kernel.CrisisClassifier.userPrompt(probe));
+                        risk = com.dsh.android.kernel.CrisisClassifier.parseResponse(answer);
+                    } catch (Throwable ignored) {}
+                    if (!risk) return;
+                    runOnUiThread(new Runnable() {
+                        public void run() { showCareDialog(); }
+                    });
+                }
+            }, "care-check").start();
+        } catch (Throwable ignored) {}
+    }
+
+    /** 弹出关怀提示，并记录时间用于冷却。 */
+    private void showCareDialog() {
+        try {
+            prefs().edit().putLong("care_shown_at", System.currentTimeMillis()).apply();
             new AppDialog.Builder(this)
                     .setTitle(com.dsh.android.kernel.CareCheck.careTitle())
                     .setMessage(com.dsh.android.kernel.CareCheck.careText())

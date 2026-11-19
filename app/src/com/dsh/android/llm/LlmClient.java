@@ -240,6 +240,60 @@ public final class LlmClient {
                 com.dsh.android.kernel.C.thinkingOff(reasoningLevel));
     }
 
+    /**
+     * 一次性短问答：给一段 system + user，返回纯文本。
+     *
+     * <p>用于安全分类这类「只要一个判断」的场景：不流式、不带工具、
+     * max_tokens 很小，成本与延迟都可以忽略。
+     */
+    public String classify(String system, String user) throws Exception {
+        org.json.JSONArray msgs = new org.json.JSONArray();
+        org.json.JSONObject s1 = new org.json.JSONObject();
+        s1.put("role", "system");
+        s1.put("content", system);
+        msgs.put(s1);
+        org.json.JSONObject u = new org.json.JSONObject();
+        u.put("role", "user");
+        u.put("content", user);
+        msgs.put(u);
+
+        org.json.JSONObject body = new org.json.JSONObject();
+        body.put("model", model);
+        body.put("messages", msgs);
+        body.put("max_tokens", 32);
+        body.put("stream", false);
+
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+                new java.net.URL(baseUrl.replaceAll("/+$", "") + "/chat/completions").openConnection();
+        try {
+            c.setRequestMethod("POST");
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(20000);
+            c.setDoOutput(true);
+            c.setRequestProperty("Content-Type", "application/json");
+            c.setRequestProperty("Authorization", "Bearer " + apiKey);
+            java.io.OutputStream os = c.getOutputStream();
+            os.write(body.toString().getBytes("UTF-8"));
+            os.flush();
+            os.close();
+
+            java.io.InputStream in = c.getInputStream();
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+            in.close();
+
+            org.json.JSONObject resp = new org.json.JSONObject(new String(bo.toByteArray(), "UTF-8"));
+            org.json.JSONArray choices = resp.optJSONArray("choices");
+            if (choices == null || choices.length() == 0) return "";
+            org.json.JSONObject msg = choices.getJSONObject(0).optJSONObject("message");
+            return msg == null ? "" : msg.optString("content", "");
+        } finally {
+            c.disconnect();
+        }
+    }
+
     /** 把响应里的 usage 累加到本地统计；没有就跳过。 */
     private void recordUsage(JSONObject o) {
         if (ctx == null) return;

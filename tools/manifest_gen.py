@@ -101,6 +101,13 @@ def main():
         an('versionCode', TYPE_INT_DEC, app.version_code),
         an('versionName', TYPE_STR, app.version_name),
     ]
+    # aapt 生成的清单里这两个属性没有命名空间；部分 ROM 的安装器会读取
+    if getattr(app, 'platform_build_version_code', None):
+        root_attrs.append(A(None, 'platformBuildVersionCode', TYPE_INT_DEC,
+                            app.platform_build_version_code))
+    if getattr(app, 'platform_build_version_name', None):
+        root_attrs.append(A(None, 'platformBuildVersionName', TYPE_STR,
+                            app.platform_build_version_name))
     manifest_children = [
         E('uses-sdk', attrs=[
             an('minSdkVersion', TYPE_INT_DEC, app.min_sdk),

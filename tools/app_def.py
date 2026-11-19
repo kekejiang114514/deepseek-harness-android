@@ -19,6 +19,7 @@ class AppDef(object):
     __slots__ = (
         'package', 'label', 'icon_attr', 'round_icon_attr', 'version_code', 'version_name',
         'min_sdk', 'target_sdk', 'compile_sdk', 'permissions', 'components', 'resources', 'theme',
+        'platform_build_version_code', 'platform_build_version_name',
         'uses_cleartext', 'extra_manifest_roots', 'extra_app_attrs',
     )
 
@@ -70,10 +71,12 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 113
-    a.version_name = '1.6-beta7'
+    a.version_code = 114
+    a.version_name = '1.6-beta8'
     a.min_sdk = 23
     a.target_sdk = 34
+    a.platform_build_version_code = 34
+    a.platform_build_version_name = '14'
     a.compile_sdk = 34
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
     a.permissions = [
@@ -96,8 +99,6 @@ def build_dshandroid_app():
     ]
     # 允许在 Android 10 上以旧式存储访问 /sdcard（全局文件模式需要）
     a.extra_app_attrs = [
-        # Android 10 及以下的旧式存储；33+ 已忽略，保留以兼容旧机型
-        ('requestLegacyExternalStorage', TYPE_BOOL, True),
         # 说明：networkSecurityConfig / fullBackupContent 暂不使用。
         # 前者需要 res/xml 下的二进制 AXML（含 <domain> 文本节点），
         # 本项目的 AXML 写出器还不支持文本节点；后者依赖同一套资源。
@@ -204,10 +205,6 @@ def build_dshandroid_app():
             # Android 14 起前台服务必须声明类型，否则启动即崩
             ('foregroundServiceType', TYPE_INT_HEX, 0x40000000),   # specialUse
         ],
-        children=[
-            ('property', [('name', TYPE_STR, 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE'),
-                          ('value', TYPE_STR, 'screen-automation')], []),
-        ],
     ))
     # 定时任务：闹钟广播 → 前台服务执行
     a.components.append(ComponentDef(
@@ -227,10 +224,6 @@ def build_dshandroid_app():
     a.components.append(ComponentDef(
         'service', '.service.AutoTaskService', False,
         attrs=[('foregroundServiceType', TYPE_INT_HEX, 0x40000000)],
-        children=[
-            ('property', [('name', TYPE_STR, 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE'),
-                          ('value', TYPE_STR, 'screen-automation')], []),
-        ],
     ))
     a.resources.append(ResourceDef('mipmap', 'ic_launcher', 'res/mipmap/ic_launcher.png'))
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用
