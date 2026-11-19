@@ -31,6 +31,10 @@ public final class QqSocket {
     private OutputStream out;
     private volatile boolean open = false;
     private Thread reader;
+    /** 最后一次出错原因，供服务把状态写出来——不然用户只看到「连不上」。 */
+    private volatile String lastError = "";
+
+    public String lastError() { return lastError; }
 
     public boolean isOpen() {
         return open;
@@ -146,11 +150,14 @@ public final class QqSocket {
                     }
                 }
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable e) {
+            lastError = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
         } finally {
             boolean was = open;
             open = false;
-            if (was && listener != null) listener.onClosed("连接已断开");
+            if (was && listener != null) {
+                listener.onClosed(lastError.length() > 0 ? "断开：" + lastError : "连接已断开");
+            }
         }
     }
 

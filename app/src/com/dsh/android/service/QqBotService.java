@@ -114,7 +114,11 @@ public class QqBotService extends Service {
                 backoff = 5;
                 while (running && s.isOpen()) sleep(1000);
             } catch (Throwable e) {
-                status("连接失败：" + (e.getMessage() == null ? "" : e.getMessage()));
+                status("连接失败：" + (e.getMessage() == null
+                        ? e.getClass().getSimpleName() : e.getMessage()));
+            }
+            if (socket != null && socket.lastError().length() > 0) {
+                status("连接异常：" + socket.lastError());
             }
             closeSocket();
             if (!running) break;
@@ -168,7 +172,7 @@ public class QqBotService extends Service {
         if (!seen.contains(in.dedupKey())) {
             seen.add(in.dedupKey());
             if (seen.size() > 500) seen.clear();      // 避免无限增长
-            if (!QqConfig.allowed(this, in.openid)) return;
+            if (!QqConfig.allowed(this, in.kind, in.openid)) return;
             if (in.content.trim().length() == 0) return;
 
             // 先回「处理中」，因为被动回复窗口只有 5 分钟

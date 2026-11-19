@@ -66,13 +66,52 @@ public final class QqConfig {
         sp(ctx).edit().putString("whitelist", sb.toString()).apply();
     }
 
-    public static boolean allowed(Context ctx, String openid) {
+    /** 名单模式：white 只响应名单内，black 只拦截名单内，all 全部响应。 */
+    public static String mode(Context ctx) {
+        return sp(ctx).getString("mode", "white");
+    }
+
+    public static void setMode(Context ctx, String mode) {
+        sp(ctx).edit().putString("mode", mode == null ? "white" : mode).apply();
+    }
+
+    public static boolean allowGroup(Context ctx) {
+        return sp(ctx).getBoolean("allow_group", true);
+    }
+
+    public static boolean allowC2c(Context ctx) {
+        return sp(ctx).getBoolean("allow_c2c", true);
+    }
+
+    public static void setAllowGroup(Context ctx, boolean on) {
+        sp(ctx).edit().putBoolean("allow_group", on).apply();
+    }
+
+    public static void setAllowC2c(Context ctx, boolean on) {
+        sp(ctx).edit().putBoolean("allow_c2c", on).apply();
+    }
+
+    /**
+     * 是否应该响应这条来源。
+     *
+     * @param kind   group / c2c
+     * @param openid 群或用户的 openid
+     */
+    public static boolean allowed(Context ctx, String kind, String openid) {
+        if ("group".equals(kind) && !allowGroup(ctx)) return false;
+        if ("c2c".equals(kind) && !allowC2c(ctx)) return false;
+
+        String m = mode(ctx);
+        boolean inList = false;
         java.util.List<String> list = whitelist(ctx);
-        if (list.isEmpty()) return false;      // 没配名单就不响应
         for (int i = 0; i < list.size(); i++) {
-            if (list.get(i).equals(openid)) return true;
+            if (list.get(i).equals(openid)) { inList = true; break; }
         }
-        return false;
+        if ("all".equals(m)) return true;
+        if ("black".equals(m)) return !inList;
+        // 白名单：名单为空时视为什么都不放开，避免被陌生群白烧额度
+        if (list.isEmpty()) return false;
+        return inList;
     }
 
     /** 最近一次运行状态，设置页展示。 */
