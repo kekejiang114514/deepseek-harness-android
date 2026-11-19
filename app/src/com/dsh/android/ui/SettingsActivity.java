@@ -591,9 +591,30 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
 
         body.addView(sectionLabel("连接"));
         LinearLayout conn = card();
-        boolean on = com.dsh.android.kernel.QqConfig.enabled(this);
-        conn.addView(hintRow("状态：" + com.dsh.android.kernel.QqConfig.status(this)));
+
+        // 状态行与启停按钮都留引用：切换时只改文字，不重建整页
+        final TextView statusText = new TextView(this);
+        statusText.setText("状态：" + com.dsh.android.kernel.QqConfig.status(this));
+        statusText.setTextSize(13);
+        statusText.setTextColor(Theme.text2());
+        statusText.setPadding(dp(14), dp(12), dp(14), dp(12));
+        conn.addView(statusText);
         conn.addView(divider());
+
+        final TextView toggleBtn = new TextView(this);
+        toggleBtn.setText(com.dsh.android.kernel.QqConfig.enabled(this) ? "停用机器人" : "启用机器人");
+        toggleBtn.setTextSize(14);
+        toggleBtn.setTextColor(Theme.link());
+        toggleBtn.setPadding(dp(14), dp(12), dp(14), dp(12));
+        toggleBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                toggleQq(!com.dsh.android.kernel.QqConfig.enabled(SettingsActivity.this),
+                        toggleBtn, statusText);
+            }
+        });
+        conn.addView(toggleBtn);
+        conn.addView(divider());
+
         conn.addView(actionRow("测试连接", new View.OnClickListener() {
             public void onClick(View v) { testQq(); }
         }));
@@ -601,10 +622,6 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
         conn.addView(actionRow("查看连接日志（" + com.dsh.android.kernel.QqConfig.logs(this).size()
                 + " 条）", new View.OnClickListener() {
             public void onClick(View v) { showQqLogs(); }
-        }));
-        conn.addView(divider());
-        conn.addView(actionRow(on ? "停用机器人" : "启用机器人", new View.OnClickListener() {
-            public void onClick(View v) { toggleQq(!com.dsh.android.kernel.QqConfig.enabled(SettingsActivity.this)); }
         }));
         body.addView(conn);
 
@@ -804,7 +821,12 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                 .show();
     }
 
-    /** 测试连接：只验证凭据与网关，不建立长连接。 */
+    /**
+     * 完整连接测试：换 token → 取网关 → 真正建立 WebSocket → 等 READY。
+     *
+     * <p>只测 token 是不够的：token 通过而连接失败，才是「app 说连上了、
+     * QQ 说没连上」这种情形的成因。这里把每一步的结果都记进日志。
+     */
     private void testQq() {
         final String id = com.dsh.android.kernel.QqConfig.appId(this);
         final String secret = com.dsh.android.kernel.QqConfig.secret(this);
@@ -812,50 +834,120 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
             toast("先填写并保存凭据");
             return;
         }
-        toast("测试中…");
+        toast("测试中：换 token → 取网关 → 建连…");
+        com.dsh.android.kernel.QqConfig.clearLogs(this);
         new Thread(new Runnable() {
             public void run() {
-                final StringBuilder sb = new StringBuilder();
+                StringBuilder sb = new StringBuilder();
+                com.dsh.android.kernel.QqSocket sock = null;
                 try {
                     com.dsh.android.kernel.QqApi.Token t =
                             com.dsh.android.kernel.QqApi.fetchToken(id, secret);
                     if (!t.ok()) {
-                        sb.append(t.error);
-                    } else {
-                        sb.append("token 获取成功\n");
-                        String gw = com.dsh.android.kernel.QqApi.gateway(t.value);
-                        sb.append(gw.length() > 0 ? "网关：" + gw : "网关获取失败");
+                        sb.append("token 失败：").append(t.error);
+                        finishTest(sb.toString());
+                        return;
                     }
+                    sb.append("token 成功\n");
+                    com.dsh.android.kernel.QqConfig.log(SettingsActivity.this, "token 成功");
+
+                    String gw = com.dsh.android.kernel.QqApi.gateway(t.value);
+                    if (gw.length() == 0) {
+                        sb.append("网关获取失败");
+                        finishTest(sb.toString());
+                        return;
+                    }
+                    sb.append("网关：").append(gw).append('\n');
+                    com.dsh.android.kernel.QqConfig.log(SettingsActivity.this, "网关 " + gw);
+
+                    final boolean[] ready = {false};
+                    final StringBuilder close = new StringBuilder();
+                    final com.dsh.android.kernel.QqSocket sock2 = new com.dsh.android.kernel.QqSocket();
+                    sock = sock2;
+                    sock2.connect(gw, new com.dsh.android.kernel.QqSocket.Listener() {
+                        public void onOpen() {
+                            com.dsh.android.kernel.QqConfig.log(SettingsActivity.this, "WS 握手成功");
+                        }
+                        public void onText(String text) {
+                            com.dsh.android.kernel.QqProtocol.Frame f =
+                                    com.dsh.android.kernel.QqProtocol.parseFrame(text);
+                            if (f == null) return;
+                            com.dsh.android.kernel.QqConfig.log(SettingsActivity.this,
+                                    "op=" + f.op + (f.type.length() > 0 ? " t=" + f.type : ""));
+                            if (f.op == com.dsh.android.kernel.QqProtocol.OP_HELLO) {
+                                try {
+                                    sock2.send(com.dsh.android.kernel.QqProtocol.identify(
+                                            t.value, com.dsh.android.kernel.QqProtocol.INTENT_GROUP_AND_C2C));
+                                    com.dsh.android.kernel.QqConfig.log(SettingsActivity.this, "已发送 identify");
+                                } catch (Throwable e) {
+                                    com.dsh.android.kernel.QqConfig.log(SettingsActivity.this,
+                                            "identify 发送失败：" + e.getMessage());
+                                }
+                            }
+                            if ("READY".equals(f.type)) ready[0] = true;
+                        }
+                        public void onClosed(String reason) {
+                            close.append(reason);
+                        }
+                    });
+
+                    // 最多等 8 秒
+                    for (int i = 0; i < 16 && !ready[0]; i++) {
+                        Thread.sleep(500);
+                    }
+                    sb.append(ready[0] ? "✅ READY 收到：连接可用"
+                            : "❌ 未收到 READY" + (close.length() > 0 ? "（" + close + "）" : ""));
                 } catch (Throwable e) {
                     sb.append("失败：").append(e.getMessage());
+                } finally {
+                    try { if (sock != null) sock.close(); } catch (Throwable ignored) {}
                 }
-                com.dsh.android.kernel.QqConfig.setStatus(SettingsActivity.this, sb.toString());
-                runOnUiThread(new Runnable() {
-                    public void run() {
-                        toast(sb.toString().replace("\n", " "));
-                        fillBody();
-                    }
-                });
+                finishTest(sb.toString());
             }
         }, "qq-test").start();
     }
 
-    private void toggleQq(boolean on) {
+    private void finishTest(final String result) {
+        com.dsh.android.kernel.QqConfig.setStatus(SettingsActivity.this, result);
+        runOnUiThread(new Runnable() {
+            public void run() {
+                toast(result.replace("\n", " "));
+                fillBody();
+            }
+        });
+    }
+
+    /**
+     * 启用 / 停用机器人。
+     *
+     * <p>只更新按钮与状态两行文字，不调用 fillBody：整页重建在视觉上等同于
+     * 「应用重载了一遍」，用户会以为是崩溃重启。
+     */
+    private void toggleQq(boolean on, TextView toggleBtn, TextView statusText) {
         com.dsh.android.kernel.QqConfig.setEnabled(this, on);
         android.content.Intent svc = new android.content.Intent(this,
                 com.dsh.android.service.QqBotService.class);
+        String result;
         try {
             if (on) {
                 if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(svc);
                 else startService(svc);
+                result = "已启用，正在连接…";
             } else {
                 stopService(svc);
+                result = "已停用";
             }
+            com.dsh.android.kernel.QqConfig.setStatus(this, result);
         } catch (Throwable t) {
-            toast("启动失败：" + t.getMessage());
+            result = "操作失败：" + t.getMessage();
         }
-        toast(on ? "已启用，后台连接中" : "已停用");
-        fillBody();
+        if (toggleBtn != null) {
+            toggleBtn.setText(on ? "停用机器人" : "启用机器人");
+        }
+        if (statusText != null) {
+            statusText.setText("状态：" + com.dsh.android.kernel.QqConfig.status(this));
+        }
+        toast(result);
     }
 
     // ------------------------------------------------------------ 数据管理

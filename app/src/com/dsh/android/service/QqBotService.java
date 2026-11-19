@@ -49,7 +49,7 @@ public class QqBotService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForegroundCompat();
+        if (!startForegroundCompat()) return START_NOT_STICKY;
         status("服务已启动，正在连接…");
         if (!running) {
             running = true;
@@ -60,18 +60,24 @@ public class QqBotService extends Service {
         return START_STICKY;
     }
 
-    private void startForegroundCompat() {
+    /**
+     * 建立前台通知。
+     *
+     * <p>必须成功：startForegroundService 之后如果没在 5 秒内调用
+     * startForeground，系统会直接杀掉进程——用户看到的就是「点启用，
+     * 应用重启了一遍」。所以这里逐级降级，绝不静默失败。
+     */
+    private boolean startForegroundCompat() {
         try {
             NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
+            if (android.os.Build.VERSION.SDK_INT >= 26 && nm != null) {
                 nm.createNotificationChannel(new NotificationChannel(CHANNEL, "QQ 机器人",
                         NotificationManager.IMPORTANCE_LOW));
             }
-            Notification n = new Notification.Builder(this)
-                    .setContentTitle("QQ 机器人运行中")
-                    .setSmallIcon(android.R.drawable.stat_notify_chat)
-                    .setOngoing(true)
-                    .build();
+        } catch (Throwable ignored) {}
+
+        Notification n = buildNotification();
+        try {
             if (android.os.Build.VERSION.SDK_INT >= 34) {
                 startForeground(NOTI_ID, n, 0x40000000);   // specialUse
             } else if (android.os.Build.VERSION.SDK_INT >= 29) {
@@ -79,7 +85,32 @@ public class QqBotService extends Service {
             } else {
                 startForeground(NOTI_ID, n);
             }
-        } catch (Throwable ignored) {}
+            return true;
+        } catch (Throwable e) {
+            QqConfig.setStatus(this, "前台服务启动失败：" + e.getMessage());
+            try {
+                // 再退一步：不声明类型
+                startForeground(NOTI_ID, n);
+                return true;
+            } catch (Throwable e2) {
+                // 彻底不行就自己退出，避免被系统判定超时后杀进程
+                stopSelf();
+                return false;
+            }
+        }
+    }
+
+    /** 通知构建单独兜底：任何一个 API 出问题都退回最简通知。 */
+    private Notification buildNotification() {
+        try {
+            return new Notification.Builder(this)
+                    .setContentTitle("QQ 机器人运行中")
+                    .setSmallIcon(android.R.drawable.stat_notify_chat)
+                    .setOngoing(true)
+                    .build();
+        } catch (Throwable e) {
+            return new Notification();
+        }
     }
 
     /** 主循环：连接 → 断线退避重连。 */
