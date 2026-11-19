@@ -37,6 +37,7 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/com/dsh/android/kernel/SecretCipher.java" \
     "$ROOT/app/src/com/dsh/android/kernel/SecretVault.java" \
     "$ROOT/app/src/com/dsh/android/kernel/MemoryStore.java" \
+    "$ROOT/app/src/com/dsh/android/kernel/CompactionLog.java" \
     "$ROOT/app/src/com/dsh/android/kernel/Schedules.java" \
     "$ROOT/app/src/com/dsh/android/ui/AskLog.java" \
     "$ROOT/app/src/com/dsh/android/kernel/C.java" \
@@ -68,6 +69,7 @@ javac -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$HERE/SecretFormatTest.java" \
     "$HERE/SecretVaultTest.java" \
     "$HERE/MemoryTest.java" \
+    "$HERE/CompactionLogTest.java" \
     "$HERE/SchedulesTest.java" \
     "$HERE/PauseTest.java"
 
@@ -89,5 +91,6 @@ java -cp "$OUT:$JSON_JAR" ProfilesTest
 java -cp "$OUT:$JSON_JAR" SecretFormatTest
 java -cp "$OUT:$JSON_JAR" SecretVaultTest
 java -cp "$OUT:$JSON_JAR" MemoryTest
+java -cp "$OUT:$JSON_JAR" CompactionLogTest
 java -cp "$OUT:$JSON_JAR" SchedulesTest
 java -cp "$OUT:$JSON_JAR" PauseTest

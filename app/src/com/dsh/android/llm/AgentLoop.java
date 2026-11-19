@@ -353,11 +353,30 @@ public final class AgentLoop {
     public void setAutoCompact(boolean on) { autoCompact = on; }
 
     /** 超预算就压缩，并把结果告诉界面。 */
+    /** 压缩日志落在应用私有目录；目录为空时不写（无界面运行也要能记）。 */
+    private java.io.File logDir;
+
+    public void setLogDir(java.io.File dir) {
+        this.logDir = dir;
+    }
+
+    private void logCompaction(String reason, HistoryCompactor.Report rep) {
+        if (logDir == null || rep == null) return;
+        try {
+            new com.dsh.android.kernel.CompactionLog(logDir)
+                    .write(reason, rep.tokensBefore, rep.tokensAfter,
+                            rep.foldedTurns, rep.slimmedMessages, rep.overflow);
+        } catch (Throwable ignored) {}
+    }
+
     private void compact(JSONArray history, int soft, int target, Sink sink) {
         if (!autoCompact) return;
         try {
             HistoryCompactor.Report rep = HistoryCompactor.fit(history, soft, target);
-            if (rep.changed) sink.onCompact(rep);
+            if (rep.changed) {
+                logCompaction("soft-threshold", rep);
+                sink.onCompact(rep);
+            }
         } catch (Throwable ignored) {
             // 压缩本身失败不能影响这次请求，宁可原样发出去
         }
@@ -378,6 +397,7 @@ public final class AgentLoop {
                 if (isContextOverflow(msg)) {
                     HistoryCompactor.Report rep = HistoryCompactor.fit(history, 1, CTX_EMERGENCY);
                     if (!rep.changed) throw e;
+                    logCompaction("context-overflow", rep);
                     sink.onCompact(rep);
                     return client.chatStream(history, toolSchemas, streamSink, stopProbe());
                 }

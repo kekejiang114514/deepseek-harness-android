@@ -3098,6 +3098,7 @@ public final class MainActivity extends Activity {
         client.setReasoningLevel(level);
         com.dsh.android.kernel.UsageStats.addRequest(this);
         loop = new AgentLoop(client, tools, buildSystemPrompt());
+        loop.setLogDir(getFilesDir());
     }
 
     private String buildSystemPrompt() {

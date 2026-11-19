@@ -130,8 +130,8 @@ public final class ApkInstaller {
             view.setDataAndType(uri, "application/vnd.android.package-archive");
             view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
                     | Intent.FLAG_ACTIVITY_NEW_TASK);
-            ctx.startActivity(view);
-            if (cb != null) cb.onDone(null);
+            boolean started = SafeStart.startOrNotify(ctx, view, "安装新版本");
+            if (cb != null) cb.onDone(started ? null : "已推送通知，请点开完成安装");
             return;
         } catch (Throwable first) {
             // 落到兜底方案

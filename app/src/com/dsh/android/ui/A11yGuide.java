@@ -46,24 +46,34 @@ public final class A11yGuide {
             Intent i = new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS");
             i.putExtra(Intent.EXTRA_COMPONENT_NAME,
                     new ComponentName(c, A11yService.class));
+            // 隐式 Intent 在 34 上要求更明确的归属；设置页固定属于这个包
+            i.setPackage("com.android.settings");
             return i;
         }
-        return new Intent("android.settings.ACCESSIBILITY_SETTINGS");
+        return settingsListIntent();
+    }
+
+    /** 系统无障碍列表；指定包名，避免 34 上解析到别的应用或解析失败。 */
+    public static Intent settingsListIntent() {
+        Intent i = new Intent("android.settings.ACCESSIBILITY_SETTINGS");
+        i.setPackage("com.android.settings");
+        return i;
     }
 
     /** 打开系统设置；返回是否成功跳转。 */
     public static boolean openSettings(Activity a) {
-        try {
-            a.startActivity(detailIntent(a));
-            return true;
-        } catch (Throwable t) {
+        // 指定包名后若 ROM 的设置应用不是 com.android.settings（少数定制系统），
+        // 会抛 ActivityNotFound；此时退回不带包名的隐式 Intent。
+        Intent[] tries = new Intent[]{detailIntent(a), settingsListIntent(),
+                new Intent("android.settings.ACCESSIBILITY_SETTINGS")};
+        for (int i = 0; i < tries.length; i++) {
             try {
-                a.startActivity(new Intent("android.settings.ACCESSIBILITY_SETTINGS"));
+                tries[i].addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                a.startActivity(tries[i]);
                 return true;
-            } catch (Throwable t2) {
-                return false;
-            }
+            } catch (Throwable ignored) {}
         }
+        return false;
     }
 
     /**

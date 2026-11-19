@@ -877,9 +877,12 @@ public final class ToolRuntime {
         try {
             android.content.Intent i = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
             if (i == null) return err("未安装或无法启动: " + pkg);
-            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-            ctx.startActivity(i);
-            return "{\"ok\":true}";
+            // 后台起 Activity 在 Android 10+ 受限、14 上更严；
+            // 直接拉起失败就退化成一条通知，由用户点开
+            boolean started = com.dsh.android.kernel.SafeStart.startOrNotify(
+                    ctx, i, "打开应用：" + pkg);
+            return started ? "{\"ok\":true}"
+                    : "{\"ok\":false,\"note\":\"已推送通知，需要用户点开\"}";
         } catch (Exception e) {
             return err(String.valueOf(e.getMessage()));
         }

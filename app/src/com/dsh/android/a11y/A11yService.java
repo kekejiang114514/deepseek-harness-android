@@ -380,11 +380,60 @@ public final class A11yService extends AccessibilityService {
         return r;
     }
 
+    /** 节点是否真的在屏幕上可见。 */
+    private boolean isVisible(AccessibilityNodeInfo n) {
+        try {
+            android.graphics.Rect r = new android.graphics.Rect();
+            n.getBoundsInScreen(r);
+            if (r.width() <= 0 || r.height() <= 0) return false;
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            return r.bottom > 0 && r.top < dm.heightPixels
+                    && r.right > 0 && r.left < dm.widthPixels;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** 沿着父节点往上找可滚动的容器，把它滚到可见区域。 */
+    private void scrollIntoView(AccessibilityNodeInfo node) {
+        try {
+            AccessibilityNodeInfo cur = node;
+            for (int depth = 0; cur != null && depth < 8; depth++) {
+                if ((cur.getActions() & AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) != 0) {
+                    cur.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD);
+                    return;
+                }
+                AccessibilityNodeInfo parent = cur.getParent();
+                if (parent == null) return;
+                cur = parent;
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** 短暂等待，不动 UI 线程。 */
+    private void sleepQuiet(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (Throwable ignored) {}
+    }
+
     // ================= 操作：节点级 =================
 
     public String clickByIndex(int targetIndex) {
         AccessibilityNodeInfo node = nodeAt(targetIndex);
         if (node == null) return "{\"ok\":false,\"error\":\"index not found\"}";
+
+        // 目标不在可视区域内时先滚动：直接点一个屏幕外的节点，
+        // performAction 往往返回 false，用户看到的就是「点了没反应」
+        if (!isVisible(node)) {
+            scrollIntoView(node);
+            sleepQuiet(350);
+            AccessibilityNodeInfo fresh = nodeAt(targetIndex);
+            if (fresh != null) {
+                node.recycle();
+                node = fresh;
+            }
+        }
 
         // 文字节点自己通常不可点，真正响应的是外层容器
         AccessibilityNodeInfo hit = node.isClickable() ? node : clickableAncestor(node);
@@ -395,6 +444,23 @@ public final class A11yService extends AccessibilityService {
             hit.recycle();
             node.recycle();
             return "{\"ok\":true}";
+        }
+
+        // 失败后等界面稳定再试一次：动画、列表加载都会让第一次点击落空
+        sleepQuiet(300);
+        AccessibilityNodeInfo retryNode = nodeAt(targetIndex);
+        if (retryNode != null) {
+            AccessibilityNodeInfo retryHit = retryNode.isClickable()
+                    ? retryNode : clickableAncestor(retryNode);
+            if (retryHit != null && retryHit.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                retryHit.recycle();
+                retryNode.recycle();
+                if (hit != null) hit.recycle();
+                node.recycle();
+                return "{\"ok\":true,\"retried\":true}";
+            }
+            retryNode.recycle();
+            if (retryHit != null) retryHit.recycle();
         }
 
         // 节点级点击被拒：按它自己的可见范围点一下中心

@@ -350,7 +350,7 @@ public final class FloatService extends Service {
         try {
             Intent i = new Intent(this, MainActivity.class);
             i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            startActivity(i);
+            com.dsh.android.kernel.SafeStart.startOrNotify(this, i, "打开 DShAndroid");
         } catch (Throwable ignored) {}
     }
 

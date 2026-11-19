@@ -29,6 +29,15 @@ APKSIGNER_JAR=${APKSIGNER_JAR:-$HERE/deps/apksigner.jar}
 KEYSTORE=${KEYSTORE:-$HERE/keys/release.p12}
 KS_ALIAS=${KS_ALIAS:-dshandroid}
 
+# 依赖先校验：缺件或校验和不符都直接停下，
+# 不要在构建中途报一个莫名其妙的 javac 错误
+if [ "$SKIP_DEPS_CHECK" != "1" ] && [ -x "$TOOLS/deps.sh" ]; then
+  sh "$TOOLS/deps.sh" check || {
+    echo "依赖校验失败：先运行 sh tools/deps.sh fetch，或手动放入 deps/" >&2
+    exit 1
+  }
+fi
+
 for f in "$ANDROID_JAR" "$R8_JAR"; do
   [ -f "$f" ] || { echo "缺少依赖: $f（见 README「构建依赖」）"; exit 1; }
 done

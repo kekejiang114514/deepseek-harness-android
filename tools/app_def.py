@@ -70,8 +70,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 111
-    a.version_name = '1.6-beta5'
+    a.version_code = 112
+    a.version_name = '1.6-beta6'
     a.min_sdk = 23
     a.target_sdk = 34
     a.compile_sdk = 34
