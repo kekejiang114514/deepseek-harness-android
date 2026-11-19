@@ -368,7 +368,7 @@ public final class SessionStore {
         // 档案里的密钥同样是密文，读出来先解密
         for (int i = 0; i < p.items().size(); i++) {
             Profiles.Profile pf = p.items().get(i);
-            pf.apiKey = SecureStore.decrypt(pf.apiKey);
+            pf.apiKey = SecureStore.open(pf.apiKey);
         }
         if (p.items().isEmpty()) {
             p.migrateLegacy(sp.getString(com.dsh.android.kernel.C.KEY_BASE_URL, ""),
@@ -391,7 +391,7 @@ public final class SessionStore {
         Profiles out = Profiles.fromJson(p.toJson().toString());
         for (int i = 0; i < out.items().size(); i++) {
             Profiles.Profile pf = out.items().get(i);
-            pf.apiKey = SecureStore.encrypt(pf.apiKey);
+            pf.apiKey = SecureStore.seal(pf.apiKey);
         }
         e.putString("profiles", out.toJson().toString());
         if (cur != null) {

@@ -19,7 +19,7 @@ import javax.crypto.spec.GCMParameterSpec;
  *
  * <p>没有引入任何第三方库，全部走 framework API。
  */
-public final class SecureStore {
+public final class SecureStore implements SecretCipher {
 
     private static final String KEYSTORE = "AndroidKeyStore";
     private static final String ALIAS = "dsh_api_key_v1";
@@ -27,10 +27,14 @@ public final class SecureStore {
     private static final int IV_LEN = 12;
     private static final int TAG_BITS = 128;
 
-    private SecureStore() {}
+    /** 全局实例；测试里可以替换。 */
+    private static SecretCipher cipher;
+    private static final SecretVault VAULT = new SecretVault(new SecureStore());
+
+    public SecureStore() {}
 
     /** 明文 → 可存字符串；失败时原样返回（宁可存明文，也不能丢配置）。 */
-    public static String encrypt(String plain) {
+    public String encrypt(String plain) {
         if (plain == null || plain.length() == 0) return "";
         try {
             Cipher c = Cipher.getInstance(TRANSFORM);
@@ -42,7 +46,7 @@ public final class SecureStore {
     }
 
     /** 密文 → 明文；非密文（旧数据）原样返回。 */
-    public static String decrypt(String stored) {
+    public String decrypt(String stored) {
         if (!SecretFormat.isEncrypted(stored)) return stored == null ? "" : stored;
         byte[][] parts = SecretFormat.unwrap(stored, IV_LEN);
         if (parts == null) return "";
@@ -58,13 +62,36 @@ public final class SecureStore {
     /** 读 API Key（自动解密）。 */
     public static String readKey(SharedPreferences sp) {
         if (sp == null) return "";
-        return decrypt(sp.getString(com.dsh.android.kernel.C.KEY_API_KEY, ""));
+        return VAULT.open(sp.getString(com.dsh.android.kernel.C.KEY_API_KEY, ""));
+    }
+
+    /** 通用入口：与 readKey 同一套逻辑，供档案等其它地方使用。 */
+    public static String open(String stored) {
+        return VAULT.open(stored);
+    }
+
+    public static String seal(String plain) {
+        return VAULT.seal(plain);
+    }
+
+    /**
+     * 旧明文密鑰一次性迁移：把仍然是明文的密钥加密后写回。
+     *
+     * @return 是否发生了迁移
+     */
+    public static boolean migrateLegacy(SharedPreferences sp) {
+        if (sp == null) return false;
+        String raw = sp.getString(com.dsh.android.kernel.C.KEY_API_KEY, "");
+        String migrated = VAULT.migrate(raw);
+        if (migrated == null) return false;
+        sp.edit().putString(com.dsh.android.kernel.C.KEY_API_KEY, migrated).apply();
+        return true;
     }
 
     /** 把明文加密后放进 editor；调用方负责 commit / apply。 */
     public static void putKey(SharedPreferences.Editor e, String plain) {
         if (e == null) return;
-        e.putString(com.dsh.android.kernel.C.KEY_API_KEY, encrypt(plain == null ? "" : plain));
+        e.putString(com.dsh.android.kernel.C.KEY_API_KEY, VAULT.seal(plain == null ? "" : plain));
     }
 
     private static SecretKey key() throws Exception {

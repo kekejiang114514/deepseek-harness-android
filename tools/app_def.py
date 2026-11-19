@@ -18,7 +18,7 @@ class AppDef(object):
     """一个 Android App 的完整定义。"""
     __slots__ = (
         'package', 'label', 'icon_attr', 'round_icon_attr', 'version_code', 'version_name',
-        'min_sdk', 'target_sdk', 'permissions', 'components', 'resources', 'theme',
+        'min_sdk', 'target_sdk', 'compile_sdk', 'permissions', 'components', 'resources', 'theme',
         'uses_cleartext', 'extra_manifest_roots', 'extra_app_attrs',
     )
 
@@ -31,6 +31,7 @@ class AppDef(object):
         self.version_name = '1.0'
         self.min_sdk = 23
         self.target_sdk = 29
+        self.compile_sdk = 29
         self.permissions = []                # 权限名字符串列表
         self.components = []                 # 组件定义列表（见 ComponentDef）
         self.resources = []                  # 资源定义列表（见 ResourceDef）
@@ -69,10 +70,11 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 110
-    a.version_name = '1.6-beta4'
+    a.version_code = 111
+    a.version_name = '1.6-beta5'
     a.min_sdk = 23
     a.target_sdk = 34
+    a.compile_sdk = 34
     a.uses_cleartext = True  # 便于接入自定义/本地后端调试
     a.permissions = [
         'android.permission.INTERNET',
@@ -96,6 +98,12 @@ def build_dshandroid_app():
     a.extra_app_attrs = [
         # Android 10 及以下的旧式存储；33+ 已忽略，保留以兼容旧机型
         ('requestLegacyExternalStorage', TYPE_BOOL, True),
+        # 默认禁止明文；只有本机回环地址放行（本地推理服务常用 http）
+        ('networkSecurityConfig', TYPE_REF, 0x7F020001),
+        # 备份规则：全部排除（allowBackup 已为 false，这里是第二道保险）
+        ('fullBackupContent', TYPE_REF, 0x7F020002),
+        # dataExtractionRules 是 API 31 的属性，本项目用的 platform-29 属性表里没有；
+        # 不猜 ID，改由 allowBackup=false + fullBackupContent 覆盖。
         # 插件市场要解析约 3MB 的索引 JSON，给大一点的堆更稳
         ('largeHeap', TYPE_BOOL, True),
     ]
@@ -198,6 +206,10 @@ def build_dshandroid_app():
             # Android 14 起前台服务必须声明类型，否则启动即崩
             ('foregroundServiceType', TYPE_INT_HEX, 0x40000000),   # specialUse
         ],
+        children=[
+            ('property', [('name', TYPE_STR, 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE'),
+                          ('value', TYPE_STR, 'screen-automation')], []),
+        ],
     ))
     # 定时任务：闹钟广播 → 前台服务执行
     a.components.append(ComponentDef(
@@ -217,11 +229,20 @@ def build_dshandroid_app():
     a.components.append(ComponentDef(
         'service', '.service.AutoTaskService', False,
         attrs=[('foregroundServiceType', TYPE_INT_HEX, 0x40000000)],
+        children=[
+            ('property', [('name', TYPE_STR, 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE'),
+                          ('value', TYPE_STR, 'screen-automation')], []),
+        ],
     ))
     a.resources.append(ResourceDef('mipmap', 'ic_launcher', 'res/mipmap/ic_launcher.png'))
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用
     a.resources.append(ResourceDef('xml', 'accessibility_service_config',
                                    'res/xml/accessibility_service_config.xml'))
+    a.resources.append(ResourceDef('xml', 'network_security_config',
+                                   'res/xml/network_security_config.xml'))
+    a.resources.append(ResourceDef('xml', 'backup_rules', 'res/xml/backup_rules.xml'))
+    a.resources.append(ResourceDef('xml', 'data_extraction_rules',
+                                   'res/xml/data_extraction_rules.xml'))
 
 
     return a

@@ -54,10 +54,17 @@ public final class PluginStore {
     /** 所有候选目录（不保证存在）。 */
     public List<File> dirs() {
         List<File> out = new ArrayList<File>();
-        File external = new File(Environment.getExternalStorageDirectory(), C.PLUGIN_DIR);
-        out.add(external);
-        File ext2 = ctx.getExternalFilesDir(null);
-        if (ext2 != null) out.add(new File(ext2, "plugins"));
+
+        // 首选应用外部私有目录：Android 11+ 起 /sdcard 根目录已不可写，
+        // 而且它不需要任何存储权限，卸载应用时会一并清掉。
+        File ext = ctx.getExternalFilesDir(null);
+        if (ext != null) out.add(new File(ext, "plugins"));
+
+        // 兼容：旧版本让用户把插件放在 /sdcard/DShAndroid/plugins，
+        // 这里仍然读它（只读，不再作为推荐路径）。
+        out.add(new File(Environment.getExternalStorageDirectory(), C.PLUGIN_DIR));
+
+        // 最后的兜底：内部私有目录，任何设备都能读写
         out.add(new File(ctx.getFilesDir(), "plugins"));
         return out;
     }
@@ -76,12 +83,10 @@ public final class PluginStore {
         return first;
     }
 
-    /** 界面上展示的推荐路径。 */
+    /** 界面上展示的推荐路径（应用外部私有目录）。 */
     public String primaryPath() {
-        File f = dirs().get(0);
-        if (f.isDirectory() && f.canRead()) return f.getAbsolutePath();
-        File e = ctx.getExternalFilesDir(null);
-        if (e != null) return new File(e, "plugins").getAbsolutePath();
+        File ext = ctx.getExternalFilesDir(null);
+        if (ext != null) return new File(ext, "plugins").getAbsolutePath();
         return new File(ctx.getFilesDir(), "plugins").getAbsolutePath();
     }
 

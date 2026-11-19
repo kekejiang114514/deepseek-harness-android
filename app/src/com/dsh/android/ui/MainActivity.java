@@ -420,6 +420,8 @@ public final class MainActivity extends Activity {
         // 悬浮窗开关开着就保证服务在跑（进程被杀后重开应用能自己恢复）
         ensureFloatService();
         requestNotificationPermissionOnce();
+        // 旧版本把密钥以明文存过；这里一次性加密写回
+        try { com.dsh.android.kernel.SecureStore.migrateLegacy(prefs()); } catch (Throwable ignored) {}
         Speaker.init(this);
 
         // 从系统设置或其它应用回来：顺手看看无障碍还在不在

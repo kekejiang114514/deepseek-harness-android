@@ -59,6 +59,9 @@ echo "[4/6] AndroidManifest.xml + 无障碍配置"
 python3 "$TOOLS/manifest_gen.py" "$OUT/AndroidManifest.xml"
 mkdir -p "$OUT/res/xml"
 python3 "$TOOLS/make_a11y_xml.py" "$OUT/res/xml/accessibility_service_config.xml"
+# 网络安全与备份规则：资源表里已登记，这里把文件本体放进包
+cp "$APP/res/xml/network_security_config.xml" "$OUT/res/xml/" 2>/dev/null || true
+cp "$APP/res/xml/backup_rules.xml" "$OUT/res/xml/" 2>/dev/null || true
 
 echo "[5/6] 打包"
 python3 "$TOOLS/pack_apk.py" "$OUT/unsigned.apk" \
@@ -67,6 +70,8 @@ python3 "$TOOLS/pack_apk.py" "$OUT/unsigned.apk" \
   s:resources.arsc="$OUT/resources.arsc" \
   s:res/mipmap/ic_launcher.png="$APP/res/mipmap/ic_launcher.png" \
   z:res/xml/accessibility_service_config.xml="$OUT/res/xml/accessibility_service_config.xml" \
+  z:res/xml/network_security_config.xml="$OUT/res/xml/network_security_config.xml" \
+  s:res/xml/backup_rules.xml="$OUT/res/xml/backup_rules.xml" \
   z:assets/dsh_boot.js="$APP/assets/dsh_boot.js" \
   z:assets/deepseek_logo.png="$APP/assets/deepseek_logo.png"
 
