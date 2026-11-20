@@ -38,6 +38,10 @@ def an(name, vtype, value):
 
 def resolve_app(spec):
     """把 'dshandroid' / 'mod:func' 解析成 AppDef。"""
+    # 探针包：整个应用定义都可能被改写，必须优先走 build_app()
+    import os as _os
+    if _os.environ.get('PROBE_PACKAGE', '').strip():
+        return AD.build_app()
     if spec in (None, ''):
         return AD.build_app()
     if ':' in spec:

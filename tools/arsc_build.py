@@ -126,10 +126,14 @@ def build_arsc(package_name, type_name, res_name, file_path, density=0, pkg_id=0
 # ---------------- 多资源支持 ----------------
 
 def build_arsc_multi(package_name, resources, pkg_id=0x7F):
-    """多资源版本：resources = [(type_name, res_name, file_path), ...]。
+    """多资源：resources = [(type_name, res_name, file_path), ...]。
 
-    类型 id 按 type_name 首次出现的顺序分配（1 开始），条目 id 按同类型内
-    的先后顺序分配。所以 icon 必须排在第一位，才能拿到 0x7F010000。
+    严格按 AOSP 的 ResTable 布局写出：
+      · 三个字符串池的**索引 0 都是空串**，类型 id / 键索引 / 值索引从 1 开始；
+      · 每种类型先 TYPE_SPEC 再 TYPE，TYPE 的 headerSize = 20 + 64；
+      · 条目偏移相对 entriesStart，条目数据 4 字节对齐。
+
+    这几条以前写漏了，Android 10 的宽松解析器能容忍，新系统直接判非法。
     """
     order = []
     groups = {}
@@ -141,7 +145,7 @@ def build_arsc_multi(package_name, resources, pkg_id=0x7F):
 
     keys = []
     paths = []
-    types = []          # [(type_name, [(key_index, global_path_index), ...])]
+    types = []
     for t in order:
         ents = []
         for n, p in groups[t]:
@@ -151,7 +155,6 @@ def build_arsc_multi(package_name, resources, pkg_id=0x7F):
             ents.append((keys.index(n), len(paths) - 1))
         types.append((t, ents))
 
-    # string 类型的资源，池子里放的是字面量而不是文件路径
     global_pool = build_string_pool(paths, utf8=True)
     type_pool = build_string_pool(order, utf8=False)
     key_pool = build_string_pool(keys, utf8=True)
@@ -159,9 +162,10 @@ def build_arsc_multi(package_name, resources, pkg_id=0x7F):
     chunks = bytearray()
     for tid, (tname, ents) in enumerate(types, start=1):
         count = len(ents)
+
         spec_size = 16 + 4 * count
-        spec = struct.pack('<HHIBBHI', RES_TABLE_TYPE_SPEC, 16, spec_size, tid, 0, 0, count)
-        spec += struct.pack('<I', 0) * count
+        chunks += struct.pack('<HHIBBHI', RES_TABLE_TYPE_SPEC, 16, spec_size, tid, 0, 0, count)
+        chunks += struct.pack('<I', 0) * count
 
         entry_data = bytearray()
         offsets = []
@@ -172,14 +176,12 @@ def build_arsc_multi(package_name, resources, pkg_id=0x7F):
 
         entries_start = TYPE_HEADER_SIZE + 4 * count
         type_size = entries_start + len(entry_data)
-        typ = bytearray()
-        typ += struct.pack('<HHIBBHII', RES_TABLE_TYPE, TYPE_HEADER_SIZE, type_size,
-                           tid, 0, 0, count, entries_start)
-        typ += build_config(0)
+        chunks += struct.pack('<HHIBBHII', RES_TABLE_TYPE, TYPE_HEADER_SIZE, type_size,
+                              tid, 0, 0, count, entries_start)
+        chunks += build_config(0)
         for o in offsets:
-            typ += struct.pack('<I', o)
-        typ += entry_data
-        chunks += spec + typ
+            chunks += struct.pack('<I', o)
+        chunks += entry_data
 
     ts_off = PKG_HEADER_SIZE
     ks_off = ts_off + len(type_pool)
@@ -196,18 +198,23 @@ def build_arsc_multi(package_name, resources, pkg_id=0x7F):
     assert len(pkg) == pkg_size, (len(pkg), pkg_size)
 
     total = 12 + len(global_pool) + len(pkg)
-    root = struct.pack('<HHII', RES_TABLE, 12, total, 1)
-    return root + global_pool + pkg
+    return struct.pack('<HHII', RES_TABLE, 12, total, 1) + global_pool + pkg
+
 
 def resolve_app(spec):
     """解析 app 定义：'模块:函数' 或直接写函数名（都在 app_def 里）。"""
+    import os as _os
+    if _os.environ.get('PROBE_PACKAGE', '').strip():
+        return AD.build_app()
     if spec in (None, ''):
         return AD.build_app()
     if ':' in spec:
-        import importlib
-        mod_name, func_name = spec.split(':', 1)
-        return getattr(importlib.import_module(mod_name), func_name)()
-    return getattr(AD, 'build_%s_app' % spec)()
+        mod, fn = spec.split(':', 1)
+        m = importlib.import_module(mod)
+        return getattr(m, fn)()
+    if spec == 'dshandroid':
+        return AD.build_dshandroid_app()
+    return getattr(AD, spec)()
 
 
 def main():

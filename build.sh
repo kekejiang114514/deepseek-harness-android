@@ -62,7 +62,9 @@ java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 23 --lib "$ANDROID_JAR" \
   --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
 
 echo "[3/6] resources.arsc"
-python3 "$TOOLS/arsc_build.py" "$OUT/resources.arsc"
+if [ -z "$PROBE_NO_RES" ] && [ -z "$PROBE_PNG_ONLY" ]; then
+  python3 "$TOOLS/arsc_build.py" "$OUT/resources.arsc"
+fi
 
 echo "[4/6] AndroidManifest.xml + 无障碍配置"
 python3 "$TOOLS/manifest_gen.py" "$OUT/AndroidManifest.xml"
@@ -70,14 +72,37 @@ mkdir -p "$OUT/res/xml"
 python3 "$TOOLS/make_a11y_xml.py" "$OUT/res/xml/accessibility_service_config.xml"
 
 echo "[5/6] 打包"
-python3 "$TOOLS/pack_apk.py" "$OUT/unsigned.apk" \
-  z:AndroidManifest.xml="$OUT/AndroidManifest.xml" \
-  z:classes.dex="$OUT/dex/classes.dex" \
-  s:resources.arsc="$OUT/resources.arsc" \
-  s:res/mipmap/ic_launcher.png="$APP/res/mipmap/ic_launcher.png" \
-  z:res/xml/accessibility_service_config.xml="$OUT/res/xml/accessibility_service_config.xml" \
-  z:assets/dsh_boot.js="$APP/assets/dsh_boot.js" \
-  z:assets/deepseek_logo.png="$APP/assets/deepseek_logo.png"
+if [ -n "$PROBE_PNG_ONLY" ]; then
+  # 只放 res 文件、不放 resources.arsc
+  python3 "$TOOLS/pack_apk.py" "$OUT/unsigned.apk" \
+    z:AndroidManifest.xml="$OUT/AndroidManifest.xml" \
+    z:classes.dex="$OUT/dex/classes.dex" \
+    s:res/mipmap/ic_launcher.png="$APP/res/mipmap/ic_launcher.png" \
+    z:assets/dsh_boot.js="$APP/assets/dsh_boot.js"
+elif [ -n "$PROBE_SIMPLE_RES" ]; then
+  # 仅图标探针：只带 arsc 与 mipmap，不带无障碍 XML
+  python3 "$TOOLS/pack_apk.py" "$OUT/unsigned.apk" \
+    z:AndroidManifest.xml="$OUT/AndroidManifest.xml" \
+    z:classes.dex="$OUT/dex/classes.dex" \
+    s:resources.arsc="$OUT/resources.arsc" \
+    s:res/mipmap/ic_launcher.png="$APP/res/mipmap/ic_launcher.png" \
+    z:assets/dsh_boot.js="$APP/assets/dsh_boot.js"
+elif [ -n "$PROBE_NO_RES" ]; then
+  # 无资源探针：不带 resources.arsc、不带任何 res/ 条目
+  python3 "$TOOLS/pack_apk.py" "$OUT/unsigned.apk" \
+    z:AndroidManifest.xml="$OUT/AndroidManifest.xml" \
+    z:classes.dex="$OUT/dex/classes.dex" \
+    z:assets/dsh_boot.js="$APP/assets/dsh_boot.js"
+else
+  python3 "$TOOLS/pack_apk.py" "$OUT/unsigned.apk" \
+    z:AndroidManifest.xml="$OUT/AndroidManifest.xml" \
+    z:classes.dex="$OUT/dex/classes.dex" \
+    s:resources.arsc="$OUT/resources.arsc" \
+    s:res/mipmap/ic_launcher.png="$APP/res/mipmap/ic_launcher.png" \
+    z:res/xml/accessibility_service_config.xml="$OUT/res/xml/accessibility_service_config.xml" \
+    z:assets/dsh_boot.js="$APP/assets/dsh_boot.js" \
+    z:assets/deepseek_logo.png="$APP/assets/deepseek_logo.png"
+fi
 
 if [ -n "$SKIP_SIGN" ]; then
   echo "跳过签名 -> $OUT/unsigned.apk"

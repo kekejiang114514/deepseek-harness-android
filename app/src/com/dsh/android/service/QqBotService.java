@@ -81,7 +81,7 @@ public class QqBotService extends Service {
         Notification n = buildNotification();
         try {
             if (android.os.Build.VERSION.SDK_INT >= 34) {
-                startForeground(NOTI_ID, n, 0x40000000);   // specialUse
+                startForeground(NOTI_ID, n, 0x00000001);   // dataSync
             } else if (android.os.Build.VERSION.SDK_INT >= 29) {
                 startForeground(NOTI_ID, n, 0);
             } else {

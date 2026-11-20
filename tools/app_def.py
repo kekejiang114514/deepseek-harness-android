@@ -71,8 +71,8 @@ def build_dshandroid_app():
     a.label = 'DShAndroid'
     a.icon_attr = ('icon', 0x7F010000)
     a.round_icon_attr = ('roundIcon', 0x7F010000)
-    a.version_code = 125
-    a.version_name = '1.6-beta19'
+    a.version_code = 132
+    a.version_name = '1.6-beta26'
     a.min_sdk = 23
     a.target_sdk = 34
     a.platform_build_version_code = 34
@@ -92,8 +92,6 @@ def build_dshandroid_app():
         'android.permission.SYSTEM_ALERT_WINDOW',
         # 悬浮窗是个前台服务：常驻通知顺带让进程不那么容易被回收
         'android.permission.FOREGROUND_SERVICE',
-        # Android 14：specialUse 类型的前台服务需要单独声明此权限
-        'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
         # 开机后重新登记定时任务
         'android.permission.RECEIVE_BOOT_COMPLETED',
     ]
@@ -203,7 +201,7 @@ def build_dshandroid_app():
         attrs=[
             ('stopWithTask', TYPE_BOOL, False),
             # Android 14 起前台服务必须声明类型，否则启动即崩
-            ('foregroundServiceType', TYPE_INT_HEX, 0x40000000),   # specialUse
+            ('foregroundServiceType', TYPE_INT_HEX, 0x00000001),   # dataSync：无需 property，且符合同步/执行任务用途
         ],
     ))
     # 定时任务：闹钟广播 → 前台服务执行
@@ -223,11 +221,11 @@ def build_dshandroid_app():
     ))
     a.components.append(ComponentDef(
         'service', '.service.QqBotService', False,
-        attrs=[('foregroundServiceType', TYPE_INT_HEX, 0x40000000)],
+        attrs=[('foregroundServiceType', TYPE_INT_HEX, 0x00000001)],  # dataSync
     ))
     a.components.append(ComponentDef(
         'service', '.service.AutoTaskService', False,
-        attrs=[('foregroundServiceType', TYPE_INT_HEX, 0x40000000)],
+        attrs=[('foregroundServiceType', TYPE_INT_HEX, 0x00000001)],  # dataSync
     ))
     a.resources.append(ResourceDef('mipmap', 'ic_launcher', 'res/mipmap/ic_launcher.png'))
     # 无障碍能力声明（0x7F020000），被上面服务的 meta-data 引用
@@ -239,5 +237,75 @@ def build_dshandroid_app():
 
 
 def build_app():
-    """本仓库唯一的 App 定义。"""
-    return build_dshandroid_app()
+    """App 定义。
+
+    设置环境变量 PROBE_PACKAGE 时，产出的是一个「探针包」：
+    组件、代码、签名完全相同，只把应用身份换成另一个包名。
+    用途：设备上装不上正式包时，用它区分「设备拒绝这套签名/打包链」
+    与「设备上已有同包名的冲突安装」。
+    """
+    import os
+    app = build_dshandroid_app()
+
+    # 无资源探针：把所有自定义资源去掉，图标改用系统资源。
+    # 目的：验证「自定义 resources.arsc 是否被新系统拒绝」这一个假设。
+    # 目标 SDK 覆盖：用于确认「新系统的安装限制是否与 targetSdk 有关」
+    ts = os.environ.get('PROBE_TARGET_SDK', '').strip()
+    if ts.isdigit():
+        app.target_sdk = int(ts)
+
+    # 只留 mipmap 的探针：判断「是资源表坏了」还是「无障碍那份 XML 坏了」
+    # 只放 res 文件、不放 arsc：用于区分「资源表坏了」与「res 文件打包坏了」
+    if os.environ.get('PROBE_PNG_ONLY', '').strip():
+        app.package = os.environ.get('PROBE_PACKAGE', 'com.dsh.probe5').strip()
+        app.version_name = os.environ.get('PROBE_VERSION_NAME', app.version_name)
+        app.version_code = int(os.environ.get('PROBE_VERSION_CODE', str(app.version_code)))
+        app.label = 'DSH Probe5'
+        app.resources = []
+        app.icon_attr = None
+        app.round_icon_attr = None
+        for c in app.components:
+            if c.name == '.a11y.A11yService':
+                c.children = [ch for ch in c.children if ch[0] != 'meta-data']
+
+    if os.environ.get('PROBE_SIMPLE_RES', '').strip():
+        app.package = os.environ.get('PROBE_PACKAGE', 'com.dsh.probe4').strip()
+        app.version_name = os.environ.get('PROBE_VERSION_NAME', app.version_name)
+        app.version_code = int(os.environ.get('PROBE_VERSION_CODE', str(app.version_code)))
+        app.label = 'DSH Probe4'
+        app.resources = [r for r in app.resources if r.type_name == 'mipmap']
+        for c in app.components:
+            if c.name == '.a11y.A11yService':
+                c.children = [ch for ch in c.children if ch[0] != 'meta-data']
+
+    if os.environ.get('PROBE_NO_RES', '').strip():
+        app.package = os.environ.get('PROBE_PACKAGE', 'com.dsh.probe2').strip()
+        app.version_name = os.environ.get('PROBE_VERSION_NAME', app.version_name)
+        app.version_code = int(os.environ.get('PROBE_VERSION_CODE', str(app.version_code)))
+        app.label = os.environ.get('PROBE_LABEL', 'DSH Probe2').strip()
+        app.resources = []
+        # 图标指向系统自带的占位图标（框架资源，不需要我们的 arsc）
+        app.icon_attr = ('icon', 0x0108000B)       # @android:drawable/sym_def_app_icon
+        app.round_icon_attr = None
+        # 去掉指向 @xml/accessibility_service_config 的 meta-data
+        keep = []
+        for c in app.components:
+            if c.name == '.a11y.A11yService':
+                c.children = [ch for ch in c.children if ch[0] != 'meta-data']
+            keep.append(c)
+        app.components = keep
+    # 版本号最后统一覆盖，避免探针分支之间互相覆盖
+    vcode = os.environ.get('PROBE_VERSION_CODE', '').strip()
+    if vcode.isdigit():
+        app.version_code = int(vcode)
+    vname = os.environ.get('PROBE_VERSION_NAME', '').strip()
+    if vname:
+        app.version_name = vname
+
+    probe = os.environ.get('PROBE_PACKAGE', '').strip()
+    if probe:
+        app.package = probe
+        app.version_name = os.environ.get('PROBE_VERSION_NAME', os.environ.get('PROBE_VERSION', 'probe-1'))
+        app.version_code = int(os.environ.get('PROBE_VERSION_CODE', app.version_code))
+        app.label = os.environ.get('PROBE_LABEL', 'DSH Probe').strip()
+    return app

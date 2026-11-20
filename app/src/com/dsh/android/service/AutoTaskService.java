@@ -69,7 +69,7 @@ public class AutoTaskService extends Service {
             if (android.os.Build.VERSION.SDK_INT >= 34) {
                 // 0x40000000 = FOREGROUND_SERVICE_TYPE_SPECIAL_USE；
                 // 精简 android.jar 里没有这个常量，直接写字面值
-                startForeground(NOTI_ID, n, 0x40000000);
+                startForeground(NOTI_ID, n, 0x00000001);   // dataSync
             } else if (android.os.Build.VERSION.SDK_INT >= 29) {
                 startForeground(NOTI_ID, n, 0);
             } else {
