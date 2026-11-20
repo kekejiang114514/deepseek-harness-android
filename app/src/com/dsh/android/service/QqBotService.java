@@ -177,7 +177,7 @@ public class QqBotService extends Service {
             case QqProtocol.OP_HELLO: {
                 int interval = f.d == null ? 30000 : f.d.optInt("heartbeat_interval", 30000);
                 try {
-                    s.send(QqProtocol.identify(token, QqProtocol.INTENT_GROUP_AND_C2C));
+                    s.send(QqProtocol.identify(token, QqProtocol.FULL_INTENTS));
                 } catch (Throwable ignored) {}
                 startHeartbeat(s, interval);
                 return;
@@ -189,6 +189,7 @@ public class QqBotService extends Service {
             case QqProtocol.OP_DISPATCH:
                 if ("READY".equals(f.type)) {
                     QqConfig.log(this, "READY");
+                    startEventProbe();
                     status("已就绪（连接建立，等待消息）");
                     return;
                 }
@@ -342,6 +343,28 @@ public class QqBotService extends Service {
                 } catch (Throwable ignored) {}
             }
         }, "qq-watchdog").start();
+    }
+
+    /** READY 之后 90 秒内有没有收到任何消息事件。 */
+    private volatile long readyAt = 0;
+    private volatile int dispatchCount = 0;
+
+    private void startEventProbe() {
+        readyAt = System.currentTimeMillis();
+        dispatchCount = 0;
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    Thread.sleep(90000);
+                } catch (Throwable ignored) {}
+                if (dispatchCount == 0 && running) {
+                    status("已连接，但 90 秒内没有收到任何消息事件："
+                            + "请在 q.qq.com 检查「沙箱测试成员」是否包含你自己的 QQ，"
+                            + "以及机器人的私聊/群消息事件订阅是否已开通");
+                    QqConfig.log(QqBotService.this, "事件自检：90 秒零事件");
+                }
+            }
+        }, "qq-probe").start();
     }
 
     private static String shorten(String s) {

@@ -16,8 +16,22 @@ import java.net.URL;
  */
 public final class QqApi {
 
-    private static final String TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken";
-    private static final String API_BASE = "https://api.sgroup.qq.com";
+    /**
+     * 域名说明（踩过的坑）：
+     *
+     * <p>官方 Agent 接入用的 SDK 是 {@code @tencent-connect/qqbot-nodejs}，
+     * 它的 baseUrl 与 tokenBaseUrl 都是 {@code https://api.bot.qq.com}。
+     * 旧文档里的 {@code bots.qq.com} + {@code api.sgroup.qq.com} 能换到 token、
+     * 也能建立 WS 并收到 READY，但**不会推送消息事件**——表现就是
+     * 「连上了、也显示已就绪，但发消息没有任何反应」。
+     */
+    private static final String BASE = "https://api.bot.qq.com";
+    private static final String TOKEN_URL = BASE + "/app/getAppAccessToken";
+    private static final String API_BASE = BASE;
+
+    /** 旧平台兜底：新域名不通时再试。 */
+    private static final String TOKEN_URL_OLD = "https://bots.qq.com/app/getAppAccessToken";
+    private static final String API_BASE_OLD = "https://api.sgroup.qq.com";
 
     private QqApi() {}
 
@@ -49,7 +63,12 @@ public final class QqApi {
             body.put("appId", appId);
             body.put("clientSecret", secret);
 
-            JSONObject resp = postJson(TOKEN_URL, body.toString(), null);
+            JSONObject resp;
+            try {
+                resp = postJson(TOKEN_URL, body.toString(), null);
+            } catch (Throwable first) {
+                resp = postJson(TOKEN_URL_OLD, body.toString(), null);
+            }
             String token = resp.optString("access_token", "");
             if (token.length() == 0) {
                 t.error = "换取 token 失败：" + resp.toString();
@@ -97,7 +116,11 @@ public final class QqApi {
         try {
             JSONObject resp = getJson(API_BASE + "/gateway", token);
             String url = resp.optString("url", "");
-            return url.length() > 0 ? url : "";
+            if (url.length() > 0) return url;
+        } catch (Throwable ignored) {}
+        try {
+            JSONObject resp = getJson(API_BASE_OLD + "/gateway", token);
+            return resp.optString("url", "");
         } catch (Throwable t) {
             return "";
         }

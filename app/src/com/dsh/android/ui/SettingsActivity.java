@@ -877,7 +877,7 @@ public final class SettingsActivity extends Activity implements PluginSection.Ho
                             if (f.op == com.dsh.android.kernel.QqProtocol.OP_HELLO) {
                                 try {
                                     sock2.send(com.dsh.android.kernel.QqProtocol.identify(
-                                            t.value, com.dsh.android.kernel.QqProtocol.INTENT_GROUP_AND_C2C));
+                                            t.value, com.dsh.android.kernel.QqProtocol.FULL_INTENTS));
                                     com.dsh.android.kernel.QqConfig.log(SettingsActivity.this, "已发送 identify");
                                 } catch (Throwable e) {
                                     com.dsh.android.kernel.QqConfig.log(SettingsActivity.this,

@@ -13,8 +13,23 @@ import org.json.JSONObject;
  */
 public final class QqProtocol {
 
-    /** 群聊与单聊消息事件。 */
+    // 官方 SDK 默认订阅全部位，只发一部分会导致「连上了但收不到消息」
+    public static final int INTENT_GUILDS = 1 << 0;
+    public static final int INTENT_GUILD_MEMBERS = 1 << 1;
+    public static final int INTENT_PUBLIC_GUILD_MESSAGES = 1 << 30;
+    public static final int INTENT_DIRECT_MESSAGE = 1 << 12;
     public static final int INTENT_GROUP_AND_C2C = 1 << 25;
+    public static final int INTENT_INTERACTION = 1 << 26;
+
+    /**
+     * 与官方 SDK 的 FULL_INTENTS 完全一致。
+     *
+     * <p>之前只发 {@code 1<<25}，理论上够收群/私聊消息，但实测 READY 之后
+     * 零事件；官方 SDK 默认把六个位全发，这里照做。
+     */
+    public static final int FULL_INTENTS = INTENT_GUILDS | INTENT_GUILD_MEMBERS
+            | INTENT_PUBLIC_GUILD_MESSAGES | INTENT_DIRECT_MESSAGE
+            | INTENT_GROUP_AND_C2C | INTENT_INTERACTION;
 
     // ---- op 码 ----
     public static final int OP_DISPATCH = 0;
